@@ -14,7 +14,7 @@ Backend API สำหรับแพลตฟอร์มซื้อขาย�
 | Authentication | มี BCrypt bean และ security boundary; JWT/register/login ยังเป็น SCRUM-9 |
 | Marketplace | entity มีแล้ว; product browse และ seller CRUD ยังเป็น SCRUM-7/SCRUM-10 |
 | Cart/checkout/order | entity มีแล้ว; use cases ยังเป็น SCRUM-11/SCRUM-12/SCRUM-26/SCRUM-38 |
-| Quality gates | GitHub Actions รัน Maven verify; test profile ใช้ H2 เพื่อให้ CI ไม่พึ่ง external DB |
+| Quality gates | GitHub Actions รัน Maven verify และตรวจ PR title ตาม Conventional Commits; test profile ใช้ H2 เพื่อให้ CI ไม่พึ่ง external DB |
 
 > ตารางนี้ตั้งใจแยก “มีโครงสร้างแล้ว” ออกจาก “feature เสร็จแล้ว” เพื่อไม่ให้ frontend เข้าใจว่า endpoint จาก Jira พร้อมใช้งานก่อนเวลา
 

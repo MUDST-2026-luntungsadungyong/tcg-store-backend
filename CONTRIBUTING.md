@@ -23,6 +23,8 @@ fix/scrum-12-stock-race
 docs/scrum-38-order-contract
 ```
 
+PR title ถูกตรวจโดย GitHub Actions ให้ใช้ type เดียวกับ Conventional Commits เช่น `feat`, `fix`, `docs`, `test`, `ci` หรือ `chore` หาก title ไม่ผ่านจะ merge ไม่ได้เมื่อเปิด branch protection ให้ required check นี้
+
 ใช้ Conventional Commits และใส่ Jira keyในข้อความเมื่อเหมาะสม:
 
 ```text
