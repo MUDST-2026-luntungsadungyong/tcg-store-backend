@@ -13,3 +13,6 @@ app:
   cors:
     allowed-origins:
       - http://localhost:5173
+  jwt:
+    secret: test-only-secret-key-that-is-at-least-thirty-two-bytes-long
+    expiration-minutes: 60

@@ -8,9 +8,9 @@
 | --- | --- | --- | --- |
 | Health | `GET /health` | Public | มีแล้ว |
 | Card master search | `GET /cards?page=&size=&search=` | Public | มีแล้ว (internal/catalog API) |
-| Register | `POST /auth/register` | Public | SCRUM-9 |
-| Login | `POST /auth/login` | Public | SCRUM-9 |
-| Current user | `GET /auth/me` | Bearer | SCRUM-9 |
+| Register | `POST /auth/register` | Public | Implemented on `feat/scrum-9-auth-api` |
+| Login | `POST /auth/login` | Public | Implemented on `feat/scrum-9-auth-api` |
+| Current user | `GET /auth/me` | Bearer | Implemented on `feat/scrum-9-auth-api` |
 | Forgot/reset password | `POST /auth/forgot-password`, `POST /auth/reset-password` | Public/token | frontend มี client แต่ Jira backend ยังไม่กำหนด |
 | Update profile | `PUT /users/{userId}` | Bearer/owner | SCRUM-6; ก่อน implement ควรเปลี่ยนเป็น `/users/me` เพื่อลด IDOR risk |
 | Browse products | `GET /products`, `GET /products/{id}` | Public | SCRUM-10 |
