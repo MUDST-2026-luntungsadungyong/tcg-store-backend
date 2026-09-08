@@ -29,3 +29,7 @@ logging:
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  jwt:
+    # Development default only. Set APP_JWT_SECRET in shared and production environments.
+    secret: ${APP_JWT_SECRET:change-this-development-only-secret-key-to-a-secure-32-byte-value}
+    expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:60}
