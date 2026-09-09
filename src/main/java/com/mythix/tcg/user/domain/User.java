@@ -37,6 +37,9 @@ public class User {
     @Column(name = "contact_facebook")
     private String contactFacebook;
 
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
     @Column(nullable = false)
     @Builder.Default
     private String role = "USER";
