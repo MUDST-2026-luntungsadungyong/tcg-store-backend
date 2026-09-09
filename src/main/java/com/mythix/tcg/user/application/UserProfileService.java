@@ -23,11 +23,11 @@ public class UserProfileService {
     @Transactional
     public ProfileResponse updateProfile(Long userId, ProfileRequest request) {
         User user = findUser(userId);
-        user.setFullName(trimToNull(request.name()));
-        user.setPhone(trimToNull(request.phone()));
-        user.setContactLine(trimToNull(request.line()));
-        user.setContactFacebook(trimToNull(request.facebook()));
-        user.setAvatarUrl(trimToNull(request.avatarUrl()));
+        if (request.name() != null) user.setFullName(trimToNull(request.name()));
+        if (request.phone() != null) user.setPhone(trimToNull(request.phone()));
+        if (request.line() != null) user.setContactLine(trimToNull(request.line()));
+        if (request.facebook() != null) user.setContactFacebook(trimToNull(request.facebook()));
+        if (request.avatarUrl() != null) user.setAvatarUrl(trimToNull(request.avatarUrl()));
         String email = trimToNull(request.email());
         if (email != null && !email.equalsIgnoreCase(user.getEmail())) {
             String normalized = email.toLowerCase(Locale.ROOT);
