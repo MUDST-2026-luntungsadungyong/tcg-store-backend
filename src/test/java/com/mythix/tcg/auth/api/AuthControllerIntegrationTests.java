@@ -171,6 +171,26 @@ class AuthControllerIntegrationTests {
     }
 
     @Test
+    void partialContactUpdatePreservesProfileFieldsNotIncludedInRequest() throws Exception {
+        String token = registerAndGetToken();
+        mockMvc.perform(put("/api/users/profile").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Naphat P.\",\"email\":\"profile@example.com\",\"avatarUrl\":\"https://example.com/avatar.png\"}"))
+            .andExpect(status().isOk());
+
+        mockMvc.perform(put("/api/users/profile").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"phone\":\"081-234-5678\",\"line\":\"naphat\",\"facebook\":\"fb.com/naphat\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.name").value("Naphat P."))
+            .andExpect(jsonPath("$.email").value("profile@example.com"))
+            .andExpect(jsonPath("$.avatarUrl").value("https://example.com/avatar.png"))
+            .andExpect(jsonPath("$.phone").value("081-234-5678"))
+            .andExpect(jsonPath("$.line").value("naphat"))
+            .andExpect(jsonPath("$.facebook").value("fb.com/naphat"));
+    }
+
+    @Test
     void sellerVerificationValidatesRequiredShopName() throws Exception {
         mockMvc.perform(post("/api/sellers/verify").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"shopName\":\"\"}"))
