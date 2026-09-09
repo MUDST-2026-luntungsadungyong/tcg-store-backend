@@ -44,7 +44,7 @@ public class SecurityConfig {
                 response.getWriter().write("{\"code\":\"UNAUTHENTICATED\",\"message\":\"Authentication is required\"}");
             }))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/health", "/api/cards/**", "/api/auth/register", "/api/auth/login", "/error").permitAll()
+                .requestMatchers("/api/health", "/api/cards/**", "/api/stores/**", "/api/auth/register", "/api/auth/login", "/error").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

@@ -8,6 +8,7 @@ import com.mythix.tcg.user.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +27,13 @@ public class UserProfileService {
         user.setPhone(trimToNull(request.phone()));
         user.setContactLine(trimToNull(request.line()));
         user.setContactFacebook(trimToNull(request.facebook()));
+        user.setAvatarUrl(trimToNull(request.avatarUrl()));
+        String email = trimToNull(request.email());
+        if (email != null && !email.equalsIgnoreCase(user.getEmail())) {
+            String normalized = email.toLowerCase(Locale.ROOT);
+            if (userRepository.existsByEmail(normalized)) throw new com.mythix.tcg.auth.application.DuplicateEmailException();
+            user.setEmail(normalized);
+        }
         return ProfileResponse.from(user);
     }
 
