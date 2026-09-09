@@ -148,6 +148,29 @@ class AuthControllerIntegrationTests {
     }
 
     @Test
+    void sellerCanUpdateStoreAndGuestsCanReadIt() throws Exception {
+        String token = registerAndGetToken();
+        mockMvc.perform(post("/api/sellers/verify").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"shopName\":\"Original\"}"))
+            .andExpect(status().isCreated());
+        mockMvc.perform(put("/api/sellers/me/store").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"shopName\":\"Mythix Vault\",\"shopDescription\":\"Cards\",\"line\":\"vault\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.shopName").value("Mythix Vault"));
+        Long userId = userRepository.findByEmail("naphat@example.com").orElseThrow().getId();
+        mockMvc.perform(get("/api/stores/{sellerId}", userId))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.line").value("vault"));
+    }
+
+    @Test
+    void profileSupportsEmailAndAvatarUrl() throws Exception {
+        String token = registerAndGetToken();
+        mockMvc.perform(put("/api/users/profile").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"email\":\"new@example.com\",\"avatarUrl\":\"https://example.com/me.png\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.email").value("new@example.com"))
+            .andExpect(jsonPath("$.avatarUrl").value("https://example.com/me.png"));
+    }
+
+    @Test
     void sellerVerificationValidatesRequiredShopName() throws Exception {
         mockMvc.perform(post("/api/sellers/verify").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"shopName\":\"\"}"))
