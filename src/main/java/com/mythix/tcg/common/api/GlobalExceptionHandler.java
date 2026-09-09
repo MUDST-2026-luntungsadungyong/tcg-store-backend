@@ -2,7 +2,6 @@ package com.mythix.tcg.common.api;
 
 import com.mythix.tcg.auth.application.DuplicateEmailException;
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
-import com.mythix.tcg.seller.application.SellerAlreadyVerifiedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -35,11 +34,5 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> invalidCredentials(InvalidCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
             .body(new ApiError("INVALID_CREDENTIALS", exception.getMessage(), Map.of()));
-    }
-
-    @ExceptionHandler(SellerAlreadyVerifiedException.class)
-    public ResponseEntity<ApiError> sellerAlreadyVerified(SellerAlreadyVerifiedException exception) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-            .body(new ApiError("SELLER_ALREADY_VERIFIED", exception.getMessage(), Map.of()));
     }
 }
