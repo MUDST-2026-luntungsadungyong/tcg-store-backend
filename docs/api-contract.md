@@ -13,7 +13,7 @@
 | Current user | `GET /auth/me` | Bearer | Implemented on `feat/scrum-9-auth-api` |
 | Forgot/reset password | `POST /auth/forgot-password`, `POST /auth/reset-password` | Public/token | frontend มี client แต่ Jira backend ยังไม่กำหนด |
 | Update profile | `PUT /users/{userId}` | Bearer/owner | SCRUM-6; ก่อน implement ควรเปลี่ยนเป็น `/users/me` เพื่อลด IDOR risk |
-| Browse products | `GET /products`, `GET /products/{id}` | Public | SCRUM-10 |
+| Browse products | `GET /products`, `GET /products/{id}` | Public | Implemented on `feat/scrum-10-browse-products-api` |
 | Seller inventory | `GET/POST /seller/products` | Bearer/Seller | SCRUM-7 |
 | Seller listing | `PUT/DELETE /seller/products/{id}` | Bearer/owner | SCRUM-7 |
 | Listing visibility | `PATCH /seller/products/{id}/status` | Bearer/owner | SCRUM-7 |
