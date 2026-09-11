@@ -1,6 +1,7 @@
 package com.mythix.tcg.common.config;
 
 import com.mythix.tcg.auth.security.JwtAuthenticationFilter;
+import com.mythix.tcg.seller.api.SellerInventoryAuthorizationManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -24,10 +25,16 @@ public class SecurityConfig {
 
     private final AppProperties appProperties;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final SellerInventoryAuthorizationManager sellerInventoryAuthorizationManager;
 
-    public SecurityConfig(AppProperties appProperties, JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(
+        AppProperties appProperties,
+        JwtAuthenticationFilter jwtAuthenticationFilter,
+        SellerInventoryAuthorizationManager sellerInventoryAuthorizationManager
+    ) {
         this.appProperties = appProperties;
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.sellerInventoryAuthorizationManager = sellerInventoryAuthorizationManager;
     }
 
     @Bean
@@ -38,13 +45,24 @@ public class SecurityConfig {
             .formLogin(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
-                response.setStatus(HttpStatus.UNAUTHORIZED.value());
-                response.setContentType("application/json");
-                response.getWriter().write("{\"code\":\"UNAUTHENTICATED\",\"message\":\"Authentication is required\"}");
-            }))
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint((request, response, exception) -> {
+                    response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"code\":\"UNAUTHENTICATED\",\"message\":\"Authentication is required\",\"fieldErrors\":{}}");
+                })
+                .accessDeniedHandler((request, response, exception) -> {
+                    response.setStatus(HttpStatus.FORBIDDEN.value());
+                    response.setContentType("application/json");
+                    response.getWriter().write("{\"code\":\"FORBIDDEN\",\"message\":\"You do not have permission to access this resource\",\"fieldErrors\":{}}");
+                })
+            )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/health", "/api/cards/**", "/api/stores/**", "/api/auth/register", "/api/auth/login", "/error").permitAll()
+                .requestMatchers("/api/health", "/api/cards/**", "/api/stores/**", "/api/auth/register", "/api/auth/login", "/uploads/products/**", "/error").permitAll()
+                // SellerProductService checks the current database role/status so a token
+                // issued immediately before seller verification does not become stale.
+                .requestMatchers("/api/seller/products/**", "/api/seller/listings/**")
+                    .access(sellerInventoryAuthorizationManager)
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

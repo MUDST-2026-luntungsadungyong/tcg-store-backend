@@ -34,3 +34,9 @@ Thumbs.db
 ### Logs ###
 *.log
 logs/
+
+### Runtime uploads ###
+uploads/
+
+### Compiled artifacts ###
+*.class
