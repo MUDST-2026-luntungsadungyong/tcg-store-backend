@@ -9,6 +9,8 @@ import com.mythix.tcg.seller.application.SellerProductHasActiveOrdersException;
 import com.mythix.tcg.seller.application.SellerProductImageStorageException;
 import com.mythix.tcg.seller.application.SellerProductMustBeHiddenException;
 import com.mythix.tcg.seller.application.SellerProductNotFoundException;
+import com.mythix.tcg.collection.application.CardNotFoundException;
+import com.mythix.tcg.collection.application.CollectionItemNotFoundException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
 import org.springframework.http.HttpStatus;
@@ -70,6 +72,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> productNotFound(SellerProductNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
             .body(new ApiError("PRODUCT_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CollectionItemNotFoundException.class)
+    public ResponseEntity<ApiError> collectionItemNotFound(CollectionItemNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("COLLECTION_ITEM_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CardNotFoundException.class)
+    public ResponseEntity<ApiError> cardNotFound(CardNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("CARD_NOT_FOUND", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(SellerProductMustBeHiddenException.class)
