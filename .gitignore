@@ -37,3 +37,6 @@ logs/
 
 ### Runtime uploads ###
 uploads/
+
+### Compiled artifacts ###
+*.class
