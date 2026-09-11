@@ -9,6 +9,7 @@ import com.mythix.tcg.seller.application.SellerProductHasActiveOrdersException;
 import com.mythix.tcg.seller.application.SellerProductImageStorageException;
 import com.mythix.tcg.seller.application.SellerProductMustBeHiddenException;
 import com.mythix.tcg.seller.application.SellerProductNotFoundException;
+import com.mythix.tcg.order.application.OrderNotFoundException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
 import org.springframework.http.HttpStatus;
@@ -71,6 +72,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
             .body(new ApiError("PRODUCT_NOT_FOUND", exception.getMessage(), Map.of()));
     }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<ApiError> orderNotFound(OrderNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("ORDER_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
 
     @ExceptionHandler(SellerProductMustBeHiddenException.class)
     public ResponseEntity<ApiError> productMustBeHidden(SellerProductMustBeHiddenException exception) {
