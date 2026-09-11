@@ -2008,7 +2008,12 @@ INSERT INTO cards (id, name, supertype, subtypes, hp, types, rarity, set_name, c
 -- 2. Insert Test Users (Password: password123)
 INSERT INTO users (id, email, password, full_name, phone, contact_line, contact_facebook, role, seller_status) VALUES
 (1, 'buyer@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Ash Ketchum', '081-111-2222', 'ash_ketchum', 'facebook.com/ash.ketchum', 'USER', 'NONE'),
-(2, 'seller@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Brock Pewter', '089-999-8888', 'brock_cards', 'facebook.com/brock.pewter', 'USER', 'VERIFIED');
+(2, 'seller@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Brock Pewter', '089-999-8888', 'brock_cards', 'facebook.com/brock.pewter', 'USER', 'VERIFIED'),
+(3, 'red@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Red Champion', '082-222-3333', 'red_champion', 'facebook.com/red.champion', 'USER', 'NONE'),
+(4, 'cynthia@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Cynthia Shirona', '083-333-4444', 'cynthia_sinnoh', 'facebook.com/cynthia.sinnoh', 'USER', 'NONE'),
+(5, 'steven@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Steven Stone', '084-444-5555', 'steven_hoenn', 'facebook.com/steven.stone', 'USER', 'NONE'),
+(6, 'gary@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Gary Oak', '085-555-6666', 'gary_oak', 'facebook.com/gary.oak', 'USER', 'NONE'),
+(7, 'lance@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Lance Dragon', '086-666-7777', 'lance_dragon', 'facebook.com/lance.dragon', 'USER', 'NONE');
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 
 -- 3. Insert Seller Profile
@@ -2040,3 +2045,43 @@ INSERT INTO products (id, seller_id, card_id, custom_image_url, condition, langu
 (20, 2, 'bw8-3', NULL, 'Near Mint', 'EN', 135.0, 60.0, 9, 0, 'SHOW');
 
 SELECT setval('products_id_seq', (SELECT MAX(id) FROM products));
+
+-- 5. Insert User Collection Items
+INSERT INTO collection_items (id, user_id, card_id, condition, language, quantity) VALUES
+-- Red Champion (Rank #1: 2x Promo [60] + 3x GX [60] + 2x V [30] = 150 pts; common cards discarded)
+(1, 3, 'basep-3', 'Mint', 'EN', 2),
+(2, 3, 'sm12-4', 'Near Mint', 'EN', 2),
+(3, 3, 'sm115-6', 'Near Mint', 'EN', 1),
+(4, 3, 'swsh35-5', 'Mint', 'EN', 2),
+(5, 3, 'sm9-6', 'Lightly Played', 'EN', 10),
+
+-- Cynthia Shirona (Rank #2: 2x Promo [60] + 2x GX [40] + 1x V [15] = 115 pts; common discarded)
+(6, 4, 'basep-4', 'Mint', 'EN', 2),
+(7, 4, 'sm12-4', 'Mint', 'EN', 1),
+(8, 4, 'sm115-6', 'Near Mint', 'EN', 1),
+(9, 4, 'swsh35-5', 'Mint', 'EN', 1),
+(10, 4, 'sm8-3', 'Near Mint', 'JP', 5),
+
+-- Steven Stone (Rank #3: 1x Promo [30] + 3x GX [60] = 90 pts; rare discarded)
+(11, 5, 'xyp-XY32', 'Near Mint', 'EN', 1),
+(12, 5, 'sm12-4', 'Near Mint', 'EN', 2),
+(13, 5, 'sm115-6', 'Mint', 'EN', 1),
+(14, 5, 'pop4-4', 'Mint', 'EN', 8),
+
+-- Lance Dragon (Rank #4: 1x Promo [30] + 2x GX [40] = 70 pts; rare holo discarded)
+(15, 7, 'basep-3', 'Near Mint', 'EN', 1),
+(16, 7, 'sm12-4', 'Near Mint', 'EN', 2),
+(17, 7, 'neo3-3', 'Mint', 'EN', 3),
+
+-- Ash Ketchum (Rank #5: 1x Promo [30] + 1x GX [20] = 50 pts; common discarded)
+(18, 1, 'basep-4', 'Near Mint', 'EN', 1),
+(19, 1, 'sm115-6', 'Lightly Played', 'EN', 1),
+(20, 1, 'sm9-6', 'Lightly Played', 'EN', 15),
+
+-- Gary Oak (Rank #6: 1x GX [20] + 1x V [15] = 35 pts; common discarded)
+(21, 6, 'sm115-6', 'Near Mint', 'EN', 1),
+(22, 6, 'swsh35-5', 'Mint', 'EN', 1),
+(23, 6, 'sm8-3', 'Near Mint', 'EN', 6);
+
+SELECT setval('collection_items_id_seq', (SELECT MAX(id) FROM collection_items));
+
