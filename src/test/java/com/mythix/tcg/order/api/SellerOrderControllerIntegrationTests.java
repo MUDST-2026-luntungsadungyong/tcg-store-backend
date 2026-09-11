@@ -11,6 +11,7 @@ import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +61,9 @@ class SellerOrderControllerIntegrationTests {
     @Autowired
     private ProductRepository productRepository;
 
+    @Autowired
+    private SellerProfileRepository sellerProfileRepository;
+
     private String sellerToken;
     private User seller;
     private User otherSeller;
@@ -74,6 +78,7 @@ class SellerOrderControllerIntegrationTests {
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
         productRepository.deleteAll();
+        sellerProfileRepository.deleteAll();
         userRepository.deleteAll();
         cardRepository.deleteAll();
 
