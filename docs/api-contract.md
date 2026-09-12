@@ -22,6 +22,7 @@
 | Buyer order detail | `GET /orders/{id}` | Bearer/owner | SCRUM-38 |
 | Seller orders/profit | `/seller/orders...` | Bearer/Seller | SCRUM-26; endpoint ย่อยยังไม่ล็อก |
 | Cart | `GET /cart`, `POST/PATCH/DELETE /cart/items...` | Bearer | SCRUM-11 |
+| Personal collection | `GET/POST /collection`, `DELETE /collection/{id}` | Bearer | SCRUM-28 |
 
 `/admin/*` มี client placeholder ใน frontend แต่ไม่อยู่ใน Jira backend scope ชุดนี้ จึงยังไม่ถือเป็น committed contract
 
@@ -60,6 +61,18 @@ Cart is scoped to the authenticated user from the JWT/SecurityContext. The API n
 Availability is calculated as `max(0, onHand - reserved)`. Add/update require listing status `SHOW` and enough currently available stock. A cart read does not reserve, decrement, normalize, or otherwise mutate stock or quantity. Checkout, order creation, stock reservation, and cart clearing remain SCRUM-12 scope.
 
 Cart errors use the shared error shape: `CART_NOT_ALLOWED` (403), `LISTING_NOT_FOUND` or `CART_ITEM_NOT_FOUND` (404), and `LISTING_NOT_AVAILABLE` or `INSUFFICIENT_STOCK` (409). Invalid quantities and malformed listing IDs return `VALIDATION_ERROR` (400).
+
+## Personal collection (SCRUM-28)
+
+Collection endpoints always scope records to the authenticated JWT principal; clients do not send a `userId`.
+
+| Method/path | Request | Response |
+| --- | --- | --- |
+| `GET /collection?page=&size=` | none; `page` starts at 0 and `size` is 1–100 | `{ "items": [], "page": { "page": 0, "size": 20, "totalElements": 0, "totalPages": 0 } }` |
+| `POST /collection` | `{ "cardId": "...", "listingId": "42", "condition": "Near Mint", "language": "EN", "quantity": 1 }` | collection item (`201`) |
+| `DELETE /collection/{id}` | none | empty (`204`) |
+
+`cardId` resolves a catalog card directly. `listingId` resolves a product listing and then its card. Adding the same card increments its quantity atomically per user; `(user_id, card_id)` is unique. Missing references, invalid pagination, and invalid quantities return `VALIDATION_ERROR` (400). Missing cards/listings return `CARD_NOT_FOUND`/`LISTING_NOT_FOUND` (404).
 
 ## Error shape
 

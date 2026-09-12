@@ -15,6 +15,12 @@ import com.mythix.tcg.seller.application.SellerProductHasActiveOrdersException;
 import com.mythix.tcg.seller.application.SellerProductImageStorageException;
 import com.mythix.tcg.seller.application.SellerProductMustBeHiddenException;
 import com.mythix.tcg.seller.application.SellerProductNotFoundException;
+import com.mythix.tcg.collection.application.CardNotFoundException;
+import com.mythix.tcg.collection.application.CollectionListingNotFoundException;
+import com.mythix.tcg.collection.application.CollectionItemNotFoundException;
+import com.mythix.tcg.collection.application.CollectionValidationException;
+import com.mythix.tcg.collection.application.CollectionUserNotFoundException;
+import jakarta.validation.ConstraintViolationException;
 import com.mythix.tcg.order.application.OrderNotFoundException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
@@ -27,6 +33,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -42,6 +49,26 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BindException.class)
     public ResponseEntity<ApiError> validation(BindException exception) {
         return validationResponse(exception.getBindingResult().getFieldErrors());
+    }
+
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiError> methodValidation(HandlerMethodValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request validation failed",
+            Map.of("request", "Request parameters are invalid")
+        ));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiError> constraintViolation(ConstraintViolationException exception) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        exception.getConstraintViolations().forEach(violation -> {
+            String path = violation.getPropertyPath().toString();
+            fields.putIfAbsent(path.substring(path.lastIndexOf('.') + 1), violation.getMessage());
+        });
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VALIDATION_ERROR", "Request validation failed", fields));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -128,12 +155,44 @@ public class GlobalExceptionHandler {
             .body(new ApiError("PRODUCT_NOT_FOUND", exception.getMessage(), Map.of()));
     }
 
+    @ExceptionHandler(CollectionItemNotFoundException.class)
+    public ResponseEntity<ApiError> collectionItemNotFound(CollectionItemNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("COLLECTION_ITEM_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CardNotFoundException.class)
+    public ResponseEntity<ApiError> cardNotFound(CardNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("CARD_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CollectionListingNotFoundException.class)
+    public ResponseEntity<ApiError> collectionListingNotFound(CollectionListingNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("LISTING_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CollectionValidationException.class)
+    public ResponseEntity<ApiError> collectionValidation(CollectionValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request validation failed",
+            Map.of(exception.getField(), exception.getMessage())
+        ));
+    }
+
+    @ExceptionHandler(CollectionUserNotFoundException.class)
+    public ResponseEntity<ApiError> collectionUserNotFound(CollectionUserNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(new ApiError("INVALID_CREDENTIALS", "Authenticated user is no longer available", Map.of()));
+    }
+
     @ExceptionHandler(OrderNotFoundException.class)
     public ResponseEntity<ApiError> orderNotFound(OrderNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
             .body(new ApiError("ORDER_NOT_FOUND", exception.getMessage(), Map.of()));
     }
-
 
     @ExceptionHandler(SellerProductMustBeHiddenException.class)
     public ResponseEntity<ApiError> productMustBeHidden(SellerProductMustBeHiddenException exception) {
