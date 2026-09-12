@@ -12,7 +12,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", uniqueConstraints = {
+    @UniqueConstraint(name = "uq_orders_buyer_idempotency", columnNames = {"buyer_id", "idempotency_key"})
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,6 +28,9 @@ public class Order {
 
     @Column(name = "order_number", nullable = false, unique = true, length = 50)
     private String orderNumber;
+
+    @Column(name = "idempotency_key", length = 100)
+    private String idempotencyKey;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "buyer_id", nullable = false)

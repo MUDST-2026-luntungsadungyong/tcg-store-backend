@@ -22,6 +22,11 @@ import com.mythix.tcg.collection.application.CollectionValidationException;
 import com.mythix.tcg.collection.application.CollectionUserNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import com.mythix.tcg.order.application.OrderNotFoundException;
+import com.mythix.tcg.order.application.CheckoutInsufficientStockException;
+import com.mythix.tcg.order.application.CheckoutListingNotAvailableException;
+import com.mythix.tcg.order.application.CheckoutNotAllowedException;
+import com.mythix.tcg.order.application.CheckoutValidationException;
+import com.mythix.tcg.order.application.EmptyCartException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
 import org.springframework.http.HttpStatus;
@@ -198,6 +203,39 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> orderNotFound(OrderNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
             .body(new ApiError("ORDER_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CheckoutNotAllowedException.class)
+    public ResponseEntity<ApiError> checkoutNotAllowed(CheckoutNotAllowedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(new ApiError("CHECKOUT_NOT_ALLOWED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CheckoutValidationException.class)
+    public ResponseEntity<ApiError> checkoutValidation(CheckoutValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request validation failed",
+            Map.of(exception.getField(), exception.getMessage())
+        ));
+    }
+
+    @ExceptionHandler(EmptyCartException.class)
+    public ResponseEntity<ApiError> emptyCart(EmptyCartException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("EMPTY_CART", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CheckoutListingNotAvailableException.class)
+    public ResponseEntity<ApiError> checkoutListingNotAvailable(CheckoutListingNotAvailableException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("LISTING_NOT_AVAILABLE", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CheckoutInsufficientStockException.class)
+    public ResponseEntity<ApiError> checkoutInsufficientStock(CheckoutInsufficientStockException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("INSUFFICIENT_STOCK", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(SellerProductMustBeHiddenException.class)
