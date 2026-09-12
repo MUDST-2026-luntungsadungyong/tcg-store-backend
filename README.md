@@ -48,6 +48,8 @@ cd tcg-store-backend
 Copy-Item .env.example .env
 ```
 
+docker-compose.yml จะหยุดทันทีหากไม่มี APP_JWT_SECRET; ค่าที่อยู่ใน .env.example เป็นค่า development เท่านั้นและต้องเปลี่ยนก่อนใช้ใน shared/production
+
 หรือบน macOS/Linux:
 
 ```bash
@@ -74,10 +76,10 @@ docker compose up -d postgres
 แล้วรัน backend:
 
 ```powershell
-.\mvnw.cmd spring-boot:run
+.\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-macOS/Linux ใช้ `./mvnw spring-boot:run` จากนั้นตรวจ `http://localhost:8080/api/health`
+macOS/Linux ใช้ `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev` จากนั้นตรวจ `http://localhost:8080/api/health`
 
 > PostgreSQL รันไฟล์ใน `infra/postgres/init` เฉพาะครั้งแรกที่สร้าง volume หากแก้ schema แล้วใช้ volume เดิม การเปลี่ยนแปลงจะไม่ถูกรันซ้ำ
 
@@ -107,7 +109,7 @@ backend อนุญาต CORS จาก `http://localhost:5173` เป็น�
 | `POSTGRES_PASSWORD` | `postgres` | local Compose password |
 | `POSTGRES_PORT` | `5432` | host port ของ PostgreSQL |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | comma-separated trusted origins |
-| `APP_JWT_SECRET` | development-only default | HMAC secret for signing JWT; set a unique secret in shared/prod environments |
+| `APP_JWT_SECRET` | required (or explicit `dev` profile) | HMAC secret for signing JWT; startup fails fast when missing outside the local `dev` profile |
 | `APP_JWT_EXPIRATION_MINUTES` | `60` | JWT expiration time in minutes |
 | `APP_LOG_LEVEL` | `INFO` | log level ของ `com.mythix.tcg` |
 | `JPA_SHOW_SQL` | `false` | แสดง SQL สำหรับ debug local |

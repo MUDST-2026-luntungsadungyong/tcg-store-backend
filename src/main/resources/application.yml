@@ -34,8 +34,10 @@ app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174}
   jwt:
-    # Development default only. Set APP_JWT_SECRET in shared and production environments.
-    secret: ${APP_JWT_SECRET:change-this-development-only-secret-key-to-a-secure-32-byte-value}
+    # Deliberately empty by default: JwtProperties fails fast unless a profile or
+    # environment supplies a strong secret. Local development may opt into the
+    # explicitly named dev profile, while test/postgres profiles provide fixtures.
+    secret: ${APP_JWT_SECRET:}
     expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:60}
   seller:
     product-images:

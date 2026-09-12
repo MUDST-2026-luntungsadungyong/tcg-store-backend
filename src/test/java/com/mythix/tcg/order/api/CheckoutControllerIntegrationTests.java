@@ -106,6 +106,21 @@ class CheckoutControllerIntegrationTests {
     }
 
     @Test
+    void checkoutAcceptsNoRequestBodyBecauseAuthenticatedCartIsTheSourceOfTruth() throws Exception {
+        Product product = persistProduct("No Body", new BigDecimal("4.00"), 2, 0, "SHOW");
+        entityManager.persist(CartItem.builder().user(buyer).product(product).quantity(1).build());
+        entityManager.flush();
+
+        mockMvc.perform(post(CHECKOUT_PATH)
+                .header("Authorization", bearer(buyerToken))
+                .header("Idempotency-Key", "no-body-checkout"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").isString())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].listingId").value(product.getId().toString()));
+    }
+
+    @Test
     void emptyCartReturnsConflict() throws Exception {
         mockMvc.perform(post(CHECKOUT_PATH)
                 .header("Authorization", bearer(buyerToken))
