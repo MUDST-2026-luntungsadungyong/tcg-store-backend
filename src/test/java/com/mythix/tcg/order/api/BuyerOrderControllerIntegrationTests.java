@@ -4,6 +4,7 @@ import com.mythix.tcg.auth.api.RegisterRequest;
 import com.mythix.tcg.auth.application.AuthService;
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.catalog.persistence.CardRepository;
+import com.mythix.tcg.collection.persistence.CollectionRepository;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
@@ -55,6 +56,9 @@ class BuyerOrderControllerIntegrationTests {
     private OrderItemRepository orderItemRepository;
 
     @Autowired
+    private CollectionRepository collectionRepository;
+
+    @Autowired
     private SellerProfileRepository sellerProfileRepository;
 
     private String buyerToken;
@@ -69,6 +73,7 @@ class BuyerOrderControllerIntegrationTests {
         orderRepository.deleteAll();
         productRepository.deleteAll();
         sellerProfileRepository.deleteAll();
+        collectionRepository.deleteAll();
         userRepository.deleteAll();
         cardRepository.deleteAll();
 
