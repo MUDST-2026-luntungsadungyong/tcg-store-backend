@@ -74,6 +74,19 @@ Collection endpoints always scope records to the authenticated JWT principal; cl
 
 `cardId` resolves a catalog card directly. `listingId` resolves a product listing and then its card. Adding the same card increments its quantity atomically per user; `(user_id, card_id)` is unique. Missing references, invalid pagination, and invalid quantities return `VALIDATION_ERROR` (400). Missing cards/listings return `CARD_NOT_FOUND`/`LISTING_NOT_FOUND` (404).
 
+## Public collections (Homepage leaderboard)
+
+Public collection reads are intentionally separate from the authenticated collection mutation API. Only these `GET` routes are public; adding and removing collection items still requires the JWT principal.
+
+| Method/path | Request | Response |
+| --- | --- | --- |
+| `GET /collections/leaderboard?limit=10` | `limit` is 1–10 | `{ "items": [LeaderboardEntry] }` |
+| `GET /collections/{userId}?page=0&size=20` | `page` starts at 0; `size` is 1–100 | `{ "owner": PublicCollector, "items": [], "page": {} }` |
+
+`LeaderboardEntry` contains `rank`, string `userId`, public `displayName`/`avatarUrl`, `rareCardCount`, `distinctRareCardCount`, and up to three card `highlights`. `rareCardCount` is the sum of `collection_items.quantity` for cards whose normalized rarity is a rare tier or `Promo`; `Common`, `Uncommon`, and blank rarity are excluded. Ranking is by total quantity descending, distinct rare cards descending, then user ID ascending.
+
+Public responses never include email, password, phone, contact handles, seller cost, or other private profile fields. An existing user with no items returns an empty collection (`200`); an unknown user returns `PUBLIC_COLLECTION_NOT_FOUND` (`404`). Invalid `limit`, `page`, or `size` returns `VALIDATION_ERROR` (`400`).
+
 ## Checkout (SCRUM-12)
 
 `POST /orders` checks out every item in the authenticated buyer's current cart. The request body is optional (an empty JSON object is accepted) and must not contain a client-supplied `userId`, total, price, seller, or stock value. Clients should send an `Idempotency-Key` header (maximum 100 characters) when they may retry a request; repeating the same key for the same buyer returns the original order without reserving stock again.
