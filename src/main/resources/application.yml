@@ -7,6 +7,10 @@ server:
 spring:
   application:
     name: tcg-store-backend
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/tcg_store}
     username: ${DB_USERNAME:postgres}
@@ -28,8 +32,12 @@ logging:
 
 app:
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174}
   jwt:
     # Development default only. Set APP_JWT_SECRET in shared and production environments.
     secret: ${APP_JWT_SECRET:change-this-development-only-secret-key-to-a-secure-32-byte-value}
     expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:60}
+  seller:
+    product-images:
+      storage-directory: ${SELLER_PRODUCT_IMAGE_DIR:uploads/products}
+      public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}

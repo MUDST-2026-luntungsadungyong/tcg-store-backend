@@ -2084,4 +2084,3 @@ INSERT INTO collection_items (id, user_id, card_id, condition, language, quantit
 (23, 6, 'sm8-3', 'Near Mint', 'EN', 6);
 
 SELECT setval('collection_items_id_seq', (SELECT MAX(id) FROM collection_items));
-

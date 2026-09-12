@@ -54,14 +54,24 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-เปิด PostgreSQL:
+รัน backend และ PostgreSQL ด้วย Docker:
 
 ```bash
-docker compose up -d
+docker compose up --build -d
 docker compose ps
 ```
 
-รัน backend:
+จากนั้นตรวจ `http://localhost:8080/api/health` (หรือ port ที่ตั้งใน `SERVER_PORT`)
+
+Compose เก็บ PostgreSQL data และไฟล์รูปสินค้าที่อัปโหลดไว้ใน named volumes `tcg_postgres_data` และ `tcg_backend_uploads`
+
+หากต้องการรัน backend จาก source เพื่อพัฒนา ให้เปิดเฉพาะ PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+แล้วรัน backend:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
@@ -140,7 +150,9 @@ tcg-store-backend/
 | `.\mvnw.cmd spring-boot:run` | รัน application บน Windows |
 | `.\mvnw.cmd test` | รัน unit/integration tests ด้วย test profile |
 | `.\mvnw.cmd verify` | รัน quality gate เดียวกับ CI |
-| `docker compose up -d` | เปิด local PostgreSQL |
+| `docker compose up --build -d` | build และเปิด backend พร้อม PostgreSQL |
+| `docker compose up -d postgres` | เปิดเฉพาะ local PostgreSQL สำหรับรัน backend จาก source |
+| `docker compose logs -f backend` | ดู backend logs |
 | `docker compose logs -f postgres` | ดู database logs |
 | `docker compose down` | หยุด containers โดยเก็บ volume |
 

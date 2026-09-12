@@ -2,6 +2,9 @@ package com.mythix.tcg.product.api;
 
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.catalog.persistence.CardRepository;
+import com.mythix.tcg.cart.persistence.CartItemRepository;
+import com.mythix.tcg.order.persistence.OrderItemRepository;
+import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.user.domain.User;
@@ -33,6 +36,15 @@ class ProductControllerIntegrationTests {
     private ProductRepository productRepository;
 
     @Autowired
+    private CartItemRepository cartItemRepository;
+
+    @Autowired
+    private OrderItemRepository orderItemRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
     private CardRepository cardRepository;
 
     @Autowired
@@ -47,6 +59,9 @@ class ProductControllerIntegrationTests {
 
     @BeforeEach
     void setUp() {
+        cartItemRepository.deleteAll();
+        orderItemRepository.deleteAll();
+        orderRepository.deleteAll();
         productRepository.deleteAll();
         sellerProfileRepository.deleteAll();
         userRepository.deleteAll();
