@@ -86,6 +86,8 @@ The response contains string `id`/listing/seller IDs, `orderNumber`, status `PEN
 
 Checkout errors use `CHECKOUT_NOT_ALLOWED` (403), `EMPTY_CART`, `LISTING_NOT_AVAILABLE`, or `INSUFFICIENT_STOCK` (409), and `VALIDATION_ERROR` (400). Any validation or stock failure rolls back the order, reservation, and cart changes together.
 
+For an existing PostgreSQL Docker volume, run the idempotent migration at `infra/postgres/migrations/001_checkout_idempotency.sql` before starting the backend. The compose service mounts it at `/migrations`; for example: `docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/001_checkout_idempotency.sql`. Fresh databases receive the same column and constraint from the init schema.
+
 ## Error shape
 
 Feature ใหม่ควรตอบรูปแบบเดียวกัน:

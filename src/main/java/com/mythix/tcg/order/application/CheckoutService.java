@@ -54,7 +54,7 @@ public class CheckoutService {
             }
         }
 
-        List<CartItem> cartItems = cartItemRepository.findAllByUserIdWithProduct(buyerId);
+        List<CartItem> cartItems = cartItemRepository.findAllByUserIdWithProductForUpdate(buyerId);
         if (cartItems.isEmpty()) {
             throw new EmptyCartException();
         }
@@ -63,7 +63,10 @@ public class CheckoutService {
             .map(item -> item.getProduct().getId())
             .sorted()
             .toList();
-        List<Product> lockedProducts = productRepository.findAllByIdInForUpdate(productIds);
+        List<Product> lockedProducts = productIds.stream()
+            .map(productId -> productRepository.findByIdForUpdate(productId).orElse(null))
+            .filter(product -> product != null)
+            .toList();
         Map<Long, Product> productsById = new HashMap<>();
         lockedProducts.forEach(product -> productsById.put(product.getId(), product));
         if (productsById.size() != productIds.size()) {

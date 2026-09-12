@@ -25,6 +25,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.test.annotation.Commit;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -86,7 +87,7 @@ class CheckoutControllerIntegrationTests {
                 .header("Authorization", bearer(buyerToken))
                 .header("Idempotency-Key", "checkout-happy-1")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(new CheckoutDto.CheckoutRequest())))
+                .content("{}"))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.id").isString())
             .andExpect(jsonPath("$.orderNumber").value(org.hamcrest.Matchers.startsWith("ORD-")))
@@ -130,6 +131,92 @@ class CheckoutControllerIntegrationTests {
         assertThat(orderRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId())).isEmpty();
         assertThat(cartItemRepository.findAllByUserIdWithProduct(buyer.getId())).hasSize(1);
         assertThat(productRepository.findById(product.getId()).orElseThrow().getReserved()).isZero();
+    }
+
+    @Test
+    void insufficientStockRollsBackEveryLineAndLeavesCartUntouched() throws Exception {
+        Product available = persistProduct("Available", new BigDecimal("10.00"), 5, 0, "SHOW");
+        Product insufficient = persistProduct("Insufficient", new BigDecimal("11.00"), 1, 1, "SHOW");
+        entityManager.persist(CartItem.builder().user(buyer).product(available).quantity(2).build());
+        entityManager.persist(CartItem.builder().user(buyer).product(insufficient).quantity(1).build());
+        entityManager.flush();
+
+        mockMvc.perform(post(CHECKOUT_PATH)
+                .header("Authorization", bearer(buyerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("INSUFFICIENT_STOCK"));
+
+        assertThat(orderRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId())).isEmpty();
+        assertThat(cartItemRepository.findAllByUserIdWithProduct(buyer.getId())).hasSize(2);
+        assertThat(productRepository.findById(available.getId()).orElseThrow().getReserved()).isZero();
+        assertThat(productRepository.findById(insufficient.getId()).orElseThrow().getReserved()).isEqualTo(1);
+    }
+
+    @Test
+    void checkoutSupportsMultipleItemsFromMultipleSellers() throws Exception {
+        User secondSeller = persistUser("checkout-second-seller");
+        secondSeller.setRole("SELLER");
+        secondSeller.setSellerStatus("VERIFIED");
+        Product first = persistProduct(seller, "First", new BigDecimal("10.00"), 4, 0, "SHOW");
+        Product second = persistProduct(secondSeller, "Second", new BigDecimal("7.25"), 3, 0, "SHOW");
+        entityManager.persist(CartItem.builder().user(buyer).product(first).quantity(2).build());
+        entityManager.persist(CartItem.builder().user(buyer).product(second).quantity(1).build());
+        entityManager.flush();
+
+        mockMvc.perform(post(CHECKOUT_PATH)
+                .header("Authorization", bearer(buyerToken))
+                .header("Idempotency-Key", "multi-seller")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.totalAmount").value(27.25));
+
+        assertThat(productRepository.findById(first.getId()).orElseThrow().getReserved()).isEqualTo(2);
+        assertThat(productRepository.findById(second.getId()).orElseThrow().getReserved()).isEqualTo(1);
+    }
+
+    @Test
+    void clientSuppliedUserIdIsRejected() throws Exception {
+        Product product = persistProduct("Protected", new BigDecimal("9.00"), 2, 0, "SHOW");
+        entityManager.persist(CartItem.builder().user(buyer).product(product).quantity(1).build());
+        entityManager.flush();
+
+        mockMvc.perform(post(CHECKOUT_PATH)
+                .header("Authorization", bearer(buyerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"userId\":999999}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        assertThat(orderRepository.findByBuyerIdOrderByCreatedAtDesc(buyer.getId())).isEmpty();
+        assertThat(cartItemRepository.findAllByUserIdWithProduct(buyer.getId())).hasSize(1);
+    }
+
+    @Test
+    @Commit
+    void checkoutPersistsCommittedOrderAndReservation() throws Exception {
+        Product product = persistProduct("Committed", new BigDecimal("6.00"), 2, 0, "SHOW");
+        entityManager.persist(CartItem.builder().user(buyer).product(product).quantity(1).build());
+        entityManager.flush();
+
+        mockMvc.perform(post(CHECKOUT_PATH)
+                .header("Authorization", bearer(buyerToken))
+                .header("Idempotency-Key", "committed-checkout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isCreated());
+
+        entityManager.clear();
+        assertThat(orderRepository.findByBuyerIdAndIdempotencyKey(buyer.getId(), "committed-checkout"))
+            .isPresent()
+            .get()
+            .extracting(Order::getStatus)
+            .isEqualTo("PENDING");
+        assertThat(productRepository.findById(product.getId()).orElseThrow().getReserved()).isEqualTo(1);
+        assertThat(cartItemRepository.findAllByUserIdWithProduct(buyer.getId())).isEmpty();
     }
 
     @Test
@@ -181,6 +268,10 @@ class CheckoutControllerIntegrationTests {
     }
 
     private Product persistProduct(String name, BigDecimal price, int onHand, int reserved, String status) {
+        return persistProduct(seller, name, price, onHand, reserved, status);
+    }
+
+    private Product persistProduct(User productSeller, String name, BigDecimal price, int onHand, int reserved, String status) {
         Card card = Card.builder()
             .id("checkout-card-" + UUID.randomUUID())
             .name(name)
@@ -189,7 +280,7 @@ class CheckoutControllerIntegrationTests {
             .build();
         entityManager.persist(card);
         Product product = Product.builder()
-            .seller(seller)
+            .seller(productSeller)
             .card(card)
             .condition("Near Mint")
             .language("EN")

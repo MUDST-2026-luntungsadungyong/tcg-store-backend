@@ -33,7 +33,7 @@ public class CartService {
 
     @Transactional
     public CartResponse addItem(Long userId, AddCartItemRequest request) {
-        User user = requireUser(userId);
+        User user = requireMutationUser(userId);
         Long listingId = parseListingId(request.listingId());
         Product product = findListing(listingId);
         validatePurchasable(product, listingId);
@@ -49,7 +49,7 @@ public class CartService {
 
     @Transactional
     public CartResponse updateItem(Long userId, String listingIdValue, UpdateCartItemRequest request) {
-        requireUser(userId);
+        requireMutationUser(userId);
         Long listingId = parseListingId(listingIdValue);
         CartItem item = cartItemRepository.findByUserIdAndProductIdWithProduct(userId, listingId)
             .orElseThrow(() -> new CartItemNotFoundException(listingId));
@@ -62,7 +62,7 @@ public class CartService {
 
     @Transactional
     public void deleteItem(Long userId, String listingIdValue) {
-        requireUser(userId);
+        requireMutationUser(userId);
         Long listingId = parseListingId(listingIdValue);
         CartItem item = cartItemRepository.findByUserIdAndProductIdWithProduct(userId, listingId)
             .orElseThrow(() -> new CartItemNotFoundException(listingId));
@@ -71,6 +71,10 @@ public class CartService {
 
     private User requireUser(Long userId) {
         return userRepository.findById(userId).orElseThrow(CartNotAllowedException::new);
+    }
+
+    private User requireMutationUser(Long userId) {
+        return userRepository.findByIdForUpdate(userId).orElseThrow(CartNotAllowedException::new);
     }
 
     private Product findListing(Long listingId) {

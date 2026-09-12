@@ -27,6 +27,9 @@ public class CheckoutController {
         @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
         @Valid @RequestBody(required = false) CheckoutRequest request
     ) {
+        if (request != null) {
+            request.validate();
+        }
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(checkoutService.checkout(user.userId(), idempotencyKey));
     }
