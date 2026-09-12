@@ -135,11 +135,11 @@ class CollectionControllerIntegrationTests {
         mockMvc.perform(get("/api/collection")
                         .header("Authorization", "Bearer " + user1Token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$.length()").value(1))
-                .andExpect(jsonPath("$[0].cardName").value("Pikachu"))
-                .andExpect(jsonPath("$[0].quantity").value(1))
-                .andExpect(jsonPath("$[0].listing.name").value("Pikachu"));
+                .andExpect(jsonPath("$.items").isArray())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].cardName").value("Pikachu"))
+                .andExpect(jsonPath("$.items[0].quantity").value(1))
+                .andExpect(jsonPath("$.items[0].listing.name").value("Pikachu"));
     }
 
     @Test
@@ -179,6 +179,28 @@ class CollectionControllerIntegrationTests {
     }
 
     @Test
+    @DisplayName("POST /api/collection should return 400 when card reference is missing")
+    void addToCollection_missingCardReference_returns400() throws Exception {
+        mockMvc.perform(post("/api/collection")
+                        .header("Authorization", "Bearer " + user1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors.cardId").value("cardId or listingId is required"));
+    }
+
+    @Test
+    @DisplayName("GET /api/collection should return 400 for invalid pagination")
+    void getCollection_invalidPagination_returns400() throws Exception {
+        mockMvc.perform(get("/api/collection")
+                        .queryParam("page", "-1")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
     @DisplayName("DELETE /api/collection/{id} should delete owned item and return 204")
     void removeFromCollection_ownedItem_returns204() throws Exception {
         CollectionItem item = CollectionItem.builder()
@@ -198,7 +220,7 @@ class CollectionControllerIntegrationTests {
         mockMvc.perform(get("/api/collection")
                         .header("Authorization", "Bearer " + user1Token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(0));
+                .andExpect(jsonPath("$.items.length()").value(0));
     }
 
     @Test

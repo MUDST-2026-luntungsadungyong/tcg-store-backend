@@ -2,6 +2,12 @@ package com.mythix.tcg.common.api;
 
 import com.mythix.tcg.auth.application.DuplicateEmailException;
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
+import com.mythix.tcg.cart.application.CartItemNotFoundException;
+import com.mythix.tcg.cart.application.CartListingNotAvailableException;
+import com.mythix.tcg.cart.application.CartListingNotFoundException;
+import com.mythix.tcg.cart.application.CartNotAllowedException;
+import com.mythix.tcg.cart.application.CartValidationException;
+import com.mythix.tcg.cart.application.InsufficientStockException;
 import com.mythix.tcg.seller.application.InvalidSellerProductImageException;
 import com.mythix.tcg.seller.application.SellerAlreadyVerifiedException;
 import com.mythix.tcg.seller.application.SellerProductForbiddenException;
@@ -10,7 +16,12 @@ import com.mythix.tcg.seller.application.SellerProductImageStorageException;
 import com.mythix.tcg.seller.application.SellerProductMustBeHiddenException;
 import com.mythix.tcg.seller.application.SellerProductNotFoundException;
 import com.mythix.tcg.collection.application.CardNotFoundException;
+import com.mythix.tcg.collection.application.CollectionListingNotFoundException;
 import com.mythix.tcg.collection.application.CollectionItemNotFoundException;
+import com.mythix.tcg.collection.application.CollectionValidationException;
+import com.mythix.tcg.collection.application.CollectionUserNotFoundException;
+import jakarta.validation.ConstraintViolationException;
+import com.mythix.tcg.order.application.OrderNotFoundException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
 import org.springframework.http.HttpStatus;
@@ -20,7 +31,9 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -38,6 +51,35 @@ public class GlobalExceptionHandler {
         return validationResponse(exception.getBindingResult().getFieldErrors());
     }
 
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ApiError> methodValidation(HandlerMethodValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request validation failed",
+            Map.of("request", "Request parameters are invalid")
+        ));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiError> constraintViolation(ConstraintViolationException exception) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        exception.getConstraintViolations().forEach(violation -> {
+            String path = violation.getPropertyPath().toString();
+            fields.putIfAbsent(path.substring(path.lastIndexOf('.') + 1), violation.getMessage());
+        });
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VALIDATION_ERROR", "Request validation failed", fields));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> unreadableRequest(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request body is invalid",
+            Map.of("request", "Request body is invalid")
+        ));
+    }
+
     @ExceptionHandler(DuplicateEmailException.class)
     public ResponseEntity<ApiError> duplicateEmail(DuplicateEmailException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -48,6 +90,45 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> invalidCredentials(InvalidCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
             .body(new ApiError("INVALID_CREDENTIALS", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartNotAllowedException.class)
+    public ResponseEntity<ApiError> cartNotAllowed(CartNotAllowedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(new ApiError("CART_NOT_ALLOWED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartValidationException.class)
+    public ResponseEntity<ApiError> cartValidation(CartValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request validation failed",
+            Map.of(exception.getField(), exception.getMessage())
+        ));
+    }
+
+    @ExceptionHandler(CartListingNotFoundException.class)
+    public ResponseEntity<ApiError> cartListingNotFound(CartListingNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("LISTING_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartItemNotFoundException.class)
+    public ResponseEntity<ApiError> cartItemNotFound(CartItemNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("CART_ITEM_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartListingNotAvailableException.class)
+    public ResponseEntity<ApiError> cartListingNotAvailable(CartListingNotAvailableException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("LISTING_NOT_AVAILABLE", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    public ResponseEntity<ApiError> insufficientStock(InsufficientStockException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("INSUFFICIENT_STOCK", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(SellerAlreadyVerifiedException.class)
@@ -84,6 +165,33 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> cardNotFound(CardNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
             .body(new ApiError("CARD_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CollectionListingNotFoundException.class)
+    public ResponseEntity<ApiError> collectionListingNotFound(CollectionListingNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("LISTING_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CollectionValidationException.class)
+    public ResponseEntity<ApiError> collectionValidation(CollectionValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request validation failed",
+            Map.of(exception.getField(), exception.getMessage())
+        ));
+    }
+
+    @ExceptionHandler(CollectionUserNotFoundException.class)
+    public ResponseEntity<ApiError> collectionUserNotFound(CollectionUserNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+            .body(new ApiError("INVALID_CREDENTIALS", "Authenticated user is no longer available", Map.of()));
+    }
+
+    @ExceptionHandler(OrderNotFoundException.class)
+    public ResponseEntity<ApiError> orderNotFound(OrderNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("ORDER_NOT_FOUND", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(SellerProductMustBeHiddenException.class)

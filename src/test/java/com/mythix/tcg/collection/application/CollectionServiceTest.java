@@ -6,6 +6,8 @@ import com.mythix.tcg.collection.api.CollectionDto.AddToCollectionRequest;
 import com.mythix.tcg.collection.api.CollectionDto.CollectionItemResponse;
 import com.mythix.tcg.collection.domain.CollectionItem;
 import com.mythix.tcg.collection.persistence.CollectionRepository;
+import com.mythix.tcg.product.domain.Product;
+import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +35,9 @@ class CollectionServiceTest {
 
     @Mock
     private CardRepository cardRepository;
+
+    @Mock
+    private ProductRepository productRepository;
 
     @Mock
     private UserRepository userRepository;
@@ -97,7 +102,7 @@ class CollectionServiceTest {
                 .quantity(1)
                 .build();
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(cardRepository.findById("card-100")).thenReturn(Optional.of(card));
         when(collectionRepository.findByUserIdAndCardId(1L, "card-100")).thenReturn(Optional.empty());
 
@@ -139,7 +144,7 @@ class CollectionServiceTest {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(cardRepository.findById("card-100")).thenReturn(Optional.of(card));
         when(collectionRepository.findByUserIdAndCardId(1L, "card-100")).thenReturn(Optional.of(existingItem));
         when(collectionRepository.save(existingItem)).thenReturn(existingItem);
@@ -158,12 +163,46 @@ class CollectionServiceTest {
                 .quantity(1)
                 .build();
 
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(cardRepository.findById("unknown-card")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> collectionService.addToCollection(1L, request))
                 .isInstanceOf(CardNotFoundException.class)
                 .hasMessageContaining("unknown-card");
+
+        verify(collectionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("addToCollection should resolve a numeric listingId to its card")
+    void addToCollection_listingId_resolvesProductCard() {
+        AddToCollectionRequest request = AddToCollectionRequest.builder()
+                .listingId("42")
+                .quantity(1)
+                .build();
+        Product product = Product.builder().id(42L).card(card).build();
+        CollectionItem savedItem = CollectionItem.builder()
+                .id(13L).user(user).card(card).quantity(1).createdAt(LocalDateTime.now()).build();
+
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
+        when(productRepository.findById(42L)).thenReturn(Optional.of(product));
+        when(collectionRepository.findByUserIdAndCardId(1L, "card-100")).thenReturn(Optional.empty());
+        when(collectionRepository.save(any(CollectionItem.class))).thenReturn(savedItem);
+
+        CollectionItemResponse response = collectionService.addToCollection(1L, request);
+
+        assertThat(response.getCardId()).isEqualTo("card-100");
+        verify(cardRepository, never()).findById(any());
+    }
+
+    @Test
+    @DisplayName("addToCollection should reject a request without cardId or listingId")
+    void addToCollection_missingCardReference_throwsValidationException() {
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> collectionService.addToCollection(1L, new AddToCollectionRequest()))
+                .isInstanceOf(CollectionValidationException.class)
+                .hasMessageContaining("cardId or listingId is required");
 
         verify(collectionRepository, never()).save(any());
     }

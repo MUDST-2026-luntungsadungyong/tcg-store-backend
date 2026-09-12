@@ -111,10 +111,11 @@ CREATE TABLE IF NOT EXISTS collection_items (
     card_id VARCHAR(100) NOT NULL REFERENCES cards(id),
     condition VARCHAR(50),
     language VARCHAR(50) DEFAULT 'EN',
-    quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
+      quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      CONSTRAINT uq_collection_user_card UNIQUE (user_id, card_id)
+    );
 
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_cards_name ON cards(name);

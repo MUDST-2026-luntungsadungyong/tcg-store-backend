@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 public class CollectionDto {
 
     @Data
@@ -75,5 +77,26 @@ public class CollectionDto {
         private String createdAt;
         private String acquiredAt;
         private CardListingDto listing;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class CollectionResponse {
+        private List<CollectionItemResponse> items;
+        private PageMetadata page;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class PageMetadata {
+        private int page;
+        private int size;
+        private long totalElements;
+        private int totalPages;
     }
 }

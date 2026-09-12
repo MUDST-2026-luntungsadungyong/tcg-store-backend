@@ -7,6 +7,8 @@ import com.mythix.tcg.collection.api.CollectionDto.CardListingDto;
 import com.mythix.tcg.collection.api.CollectionDto.CollectionItemResponse;
 import com.mythix.tcg.collection.domain.CollectionItem;
 import com.mythix.tcg.collection.persistence.CollectionRepository;
+import com.mythix.tcg.product.domain.Product;
+import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ public class CollectionService {
 
     private final CollectionRepository collectionRepository;
     private final CardRepository cardRepository;
+    private final ProductRepository productRepository;
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
@@ -42,20 +45,19 @@ public class CollectionService {
 
     @Transactional
     public CollectionItemResponse addToCollection(Long userId, AddToCollectionRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalStateException("User not found: " + userId));
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new CollectionUserNotFoundException(userId));
 
-        String cardId = request.resolveCardId();
-        if (cardId == null) {
-            throw new IllegalArgumentException("cardId or listingId is required");
-        }
-
-        Card card = cardRepository.findById(cardId)
-                .orElseThrow(() -> new CardNotFoundException(cardId));
+        Card card = resolveCard(request);
+        int quantity = request.getQuantity() != null ? request.getQuantity() : 1;
 
         CollectionItem item = collectionRepository.findByUserIdAndCardId(userId, card.getId())
                 .map(existing -> {
-                    existing.setQuantity(existing.getQuantity() + (request.getQuantity() != null ? request.getQuantity() : 1));
+                    try {
+                        existing.setQuantity(Math.addExact(existing.getQuantity(), quantity));
+                    } catch (ArithmeticException exception) {
+                        throw new CollectionValidationException("quantity", "quantity is too large");
+                    }
                     if (request.getCondition() != null) {
                         existing.setCondition(request.getCondition());
                     }
@@ -69,12 +71,41 @@ public class CollectionService {
                         .card(card)
                         .condition(request.getCondition() != null ? request.getCondition() : "Near Mint")
                         .language(request.getLanguage() != null ? request.getLanguage() : "EN")
-                        .quantity(request.getQuantity() != null ? request.getQuantity() : 1)
+                        .quantity(quantity)
                         .build()
                 );
 
         CollectionItem saved = collectionRepository.save(item);
         return mapToResponse(saved);
+    }
+
+    private Card resolveCard(AddToCollectionRequest request) {
+        if (request.getCardId() != null && !request.getCardId().isBlank()) {
+            String cardId = request.getCardId().trim();
+            return cardRepository.findById(cardId)
+                    .orElseThrow(() -> new CardNotFoundException(cardId));
+        }
+
+        if (request.getListingId() == null || request.getListingId().isBlank()) {
+            throw new CollectionValidationException("cardId", "cardId or listingId is required");
+        }
+
+        final long listingId;
+        try {
+            listingId = Long.parseLong(request.getListingId().trim());
+            if (listingId <= 0) {
+                throw new NumberFormatException();
+            }
+        } catch (NumberFormatException exception) {
+            throw new CollectionValidationException("listingId", "listingId must be a positive number");
+        }
+
+        Product product = productRepository.findById(listingId)
+                .orElseThrow(() -> new CollectionListingNotFoundException(listingId));
+        if (product.getCard() == null) {
+            throw new CardNotFoundException("listing " + listingId);
+        }
+        return product.getCard();
     }
 
     @Transactional

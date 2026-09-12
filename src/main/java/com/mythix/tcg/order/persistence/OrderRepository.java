@@ -27,4 +27,14 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @Query("SELECT DISTINCT o FROM Order o JOIN o.items item WHERE item.seller.id = :sellerId AND o.id = :orderId")
     Optional<Order> findOrderForSeller(@Param("sellerId") Long sellerId, @Param("orderId") Long orderId);
+
+    List<Order> findByBuyerIdOrderByCreatedAtDesc(Long buyerId);
+
+    List<Order> findByBuyerIdAndStatusOrderByCreatedAtDesc(Long buyerId, String status);
+
+    Page<Order> findByBuyerIdOrderByCreatedAtDesc(Long buyerId, Pageable pageable);
+
+    Page<Order> findByBuyerIdAndStatusOrderByCreatedAtDesc(Long buyerId, String status, Pageable pageable);
+
+    Optional<Order> findByIdAndBuyerId(Long id, Long buyerId);
 }
