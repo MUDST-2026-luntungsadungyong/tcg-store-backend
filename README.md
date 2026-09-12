@@ -107,7 +107,7 @@ backend อนุญาต CORS จาก `http://localhost:5173` เป็น�
 | `POSTGRES_PASSWORD` | `postgres` | local Compose password |
 | `POSTGRES_PORT` | `5432` | host port ของ PostgreSQL |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | comma-separated trusted origins |
-| `APP_JWT_SECRET` | development-only default | HMAC secret for signing JWT; set a unique secret in shared/prod environments |
+| `APP_JWT_SECRET` | required (or explicit `dev` profile) | HMAC secret for signing JWT; startup fails fast when missing outside the local `dev` profile |
 | `APP_JWT_EXPIRATION_MINUTES` | `60` | JWT expiration time in minutes |
 | `APP_LOG_LEVEL` | `INFO` | log level ของ `com.mythix.tcg` |
 | `JPA_SHOW_SQL` | `false` | แสดง SQL สำหรับ debug local |

@@ -214,6 +214,16 @@ class SellerOrderControllerIntegrationTests {
     }
 
     @Test
+    void updateOrderStatusRejectsFrontendOnlyStatusValues() throws Exception {
+        mockMvc.perform(patch("/api/seller/orders/{orderId}/status", sellerOrder.getId())
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"SENT\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
     void getProfitSummary_ComputesMetricsAccurately() throws Exception {
         mockMvc.perform(get("/api/seller/orders/profit")
                 .header("Authorization", "Bearer " + sellerToken))

@@ -139,7 +139,10 @@ class CollectionControllerIntegrationTests {
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].cardName").value("Pikachu"))
                 .andExpect(jsonPath("$.items[0].quantity").value(1))
-                .andExpect(jsonPath("$.items[0].listing.name").value("Pikachu"));
+                .andExpect(jsonPath("$.items[0].listing.name").value("Pikachu"))
+                .andExpect(jsonPath("$.page.page").value(0))
+                .andExpect(jsonPath("$.page.totalElements").value(1))
+                .andExpect(jsonPath("$.page.totalPages").value(1));
     }
 
     @Test
