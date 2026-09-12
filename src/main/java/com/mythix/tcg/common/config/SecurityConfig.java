@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -59,6 +60,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/health", "/api/cards/**", "/api/products/**", "/api/stores/**", "/api/auth/register", "/api/auth/login", "/uploads/products/**", "/error").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/collections/**").permitAll()
                 // SellerProductService checks the current database role/status so a token
                 // issued immediately before seller verification does not become stale.
                 .requestMatchers("/api/seller/products/**", "/api/seller/listings/**")

@@ -116,7 +116,7 @@ public class CollectionService {
         collectionRepository.delete(item);
     }
 
-    private CollectionItemResponse mapToResponse(CollectionItem item) {
+    CollectionItemResponse mapToResponse(CollectionItem item) {
         Card card = item.getCard();
         String imageUrl = card != null ? (card.getImageLarge() != null ? card.getImageLarge() : card.getImageSmall()) : null;
 
