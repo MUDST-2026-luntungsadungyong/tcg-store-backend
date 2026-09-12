@@ -137,6 +137,12 @@ public class GlobalExceptionHandler {
             .body(new ApiError("SELLER_ALREADY_VERIFIED", exception.getMessage(), Map.of()));
     }
 
+    @ExceptionHandler(com.mythix.tcg.product.application.ProductNotFoundException.class)
+    public ResponseEntity<ApiError> productNotFound(com.mythix.tcg.product.application.ProductNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("RESOURCE_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
     @ExceptionHandler(SellerRequiredException.class)
     public ResponseEntity<ApiError> sellerRequired(SellerRequiredException exception) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
