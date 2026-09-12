@@ -63,11 +63,12 @@ class CartServiceTests {
             .reserved(1)
             .status("SHOW")
             .build();
-        when(userRepository.findById(7L)).thenReturn(Optional.of(buyer));
     }
 
     @Test
     void addIncrementsExistingLineWithoutChangingStock() {
+        when(userRepository.findById(7L)).thenReturn(Optional.of(buyer));
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(buyer));
         CartItem existing = CartItem.builder().id(1L).user(buyer).product(product).quantity(1).build();
         when(productRepository.findById(42L)).thenReturn(Optional.of(product));
         when(cartItemRepository.findByUserIdAndProductIdWithProduct(7L, 42L))
@@ -87,6 +88,7 @@ class CartServiceTests {
 
     @Test
     void addRejectsQuantityAboveAvailableStock() {
+        when(userRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(buyer));
         when(productRepository.findById(42L)).thenReturn(Optional.of(product));
         when(cartItemRepository.findByUserIdAndProductIdWithProduct(7L, 42L))
             .thenReturn(Optional.empty());
@@ -97,6 +99,7 @@ class CartServiceTests {
 
     @Test
     void getCartMarksStaleLineUnavailableAndKeepsQuantity() {
+        when(userRepository.findById(7L)).thenReturn(Optional.of(buyer));
         CartItem existing = CartItem.builder().id(1L).user(buyer).product(product).quantity(5).build();
         product.setOnHand(2);
         when(cartItemRepository.findAllByUserIdWithProduct(7L)).thenReturn(List.of(existing));

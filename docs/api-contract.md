@@ -74,6 +74,20 @@ Collection endpoints always scope records to the authenticated JWT principal; cl
 
 `cardId` resolves a catalog card directly. `listingId` resolves a product listing and then its card. Adding the same card increments its quantity atomically per user; `(user_id, card_id)` is unique. Missing references, invalid pagination, and invalid quantities return `VALIDATION_ERROR` (400). Missing cards/listings return `CARD_NOT_FOUND`/`LISTING_NOT_FOUND` (404).
 
+## Checkout (SCRUM-12)
+
+`POST /orders` checks out every item in the authenticated buyer's current cart. The request body is optional (an empty JSON object is accepted) and must not contain a client-supplied `userId`, total, price, seller, or stock value. Clients should send an `Idempotency-Key` header (maximum 100 characters) when they may retry a request; repeating the same key for the same buyer returns the original order without reserving stock again.
+
+| Method/path | Request | Response |
+| --- | --- | --- |
+| `POST /orders` | optional `{}` and optional `Idempotency-Key` header | `201 CheckoutResponse` |
+
+The response contains string `id`/listing/seller IDs, `orderNumber`, status `PENDING`, the current cart prices and quantities, `totalAmount`, and an ISO-8601 UTC `createdAt`. Seller cost is persisted in the order-item snapshot for seller/profit flows but is never returned to the buyer. Checkout validates every line after acquiring deterministic pessimistic product locks, increments `reserved`, creates the order and snapshots, then clears the cart in one transaction.
+
+Checkout errors use `CHECKOUT_NOT_ALLOWED` (403), `EMPTY_CART`, `LISTING_NOT_AVAILABLE`, or `INSUFFICIENT_STOCK` (409), and `VALIDATION_ERROR` (400). Any validation or stock failure rolls back the order, reservation, and cart changes together.
+
+For an existing PostgreSQL Docker volume, run the idempotent migration at `infra/postgres/migrations/001_checkout_idempotency.sql` before starting the backend. The compose service mounts it at `/migrations`; for example: `docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /migrations/001_checkout_idempotency.sql`. Fresh databases receive the same column and constraint from the init schema.
+
 ## Error shape
 
 Feature ใหม่ควรตอบรูปแบบเดียวกัน:

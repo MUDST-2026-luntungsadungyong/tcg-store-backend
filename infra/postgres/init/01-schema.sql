@@ -85,10 +85,12 @@ CREATE TABLE IF NOT EXISTS orders (
     id BIGSERIAL PRIMARY KEY,
     buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     order_number VARCHAR(50) UNIQUE NOT NULL,
+    idempotency_key VARCHAR(100),
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     total_amount DECIMAL(12, 2) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_orders_buyer_idempotency UNIQUE (buyer_id, idempotency_key)
 );
 
 -- 7. Table: order_items (Snapshot pattern)
