@@ -2,6 +2,12 @@ package com.mythix.tcg.common.api;
 
 import com.mythix.tcg.auth.application.DuplicateEmailException;
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
+import com.mythix.tcg.cart.application.CartItemNotFoundException;
+import com.mythix.tcg.cart.application.CartListingNotAvailableException;
+import com.mythix.tcg.cart.application.CartListingNotFoundException;
+import com.mythix.tcg.cart.application.CartNotAllowedException;
+import com.mythix.tcg.cart.application.CartValidationException;
+import com.mythix.tcg.cart.application.InsufficientStockException;
 import com.mythix.tcg.seller.application.InvalidSellerProductImageException;
 import com.mythix.tcg.seller.application.SellerAlreadyVerifiedException;
 import com.mythix.tcg.seller.application.SellerProductForbiddenException;
@@ -18,6 +24,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.util.LinkedHashMap;
@@ -36,6 +43,15 @@ public class GlobalExceptionHandler {
         return validationResponse(exception.getBindingResult().getFieldErrors());
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> unreadableRequest(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request body is invalid",
+            Map.of("request", "Request body is invalid")
+        ));
+    }
+
     @ExceptionHandler(DuplicateEmailException.class)
     public ResponseEntity<ApiError> duplicateEmail(DuplicateEmailException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -46,6 +62,45 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> invalidCredentials(InvalidCredentialsException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
             .body(new ApiError("INVALID_CREDENTIALS", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartNotAllowedException.class)
+    public ResponseEntity<ApiError> cartNotAllowed(CartNotAllowedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(new ApiError("CART_NOT_ALLOWED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartValidationException.class)
+    public ResponseEntity<ApiError> cartValidation(CartValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR",
+            "Request validation failed",
+            Map.of(exception.getField(), exception.getMessage())
+        ));
+    }
+
+    @ExceptionHandler(CartListingNotFoundException.class)
+    public ResponseEntity<ApiError> cartListingNotFound(CartListingNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("LISTING_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartItemNotFoundException.class)
+    public ResponseEntity<ApiError> cartItemNotFound(CartItemNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("CART_ITEM_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(CartListingNotAvailableException.class)
+    public ResponseEntity<ApiError> cartListingNotAvailable(CartListingNotAvailableException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("LISTING_NOT_AVAILABLE", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    public ResponseEntity<ApiError> insufficientStock(InsufficientStockException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("INSUFFICIENT_STOCK", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(SellerAlreadyVerifiedException.class)
