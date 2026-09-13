@@ -3,8 +3,13 @@ package com.mythix.tcg.collection.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.catalog.persistence.CardRepository;
+import com.mythix.tcg.cart.persistence.CartItemRepository;
 import com.mythix.tcg.collection.domain.CollectionItem;
 import com.mythix.tcg.collection.persistence.CollectionRepository;
+import com.mythix.tcg.order.persistence.OrderItemRepository;
+import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,9 +43,29 @@ class PublicCollectionControllerIntegrationTests {
     @Autowired
     private CollectionRepository collectionRepository;
 
+    @Autowired
+    private CartItemRepository cartItemRepository;
+
+    @Autowired
+    private OrderItemRepository orderItemRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private SellerProfileRepository sellerProfileRepository;
+
     @BeforeEach
     void setUp() {
         collectionRepository.deleteAll();
+        cartItemRepository.deleteAll();
+        orderItemRepository.deleteAll();
+        orderRepository.deleteAll();
+        productRepository.deleteAll();
+        sellerProfileRepository.deleteAll();
         userRepository.deleteAll();
         cardRepository.deleteAll();
     }
