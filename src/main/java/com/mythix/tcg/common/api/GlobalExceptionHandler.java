@@ -20,6 +20,7 @@ import com.mythix.tcg.collection.application.CollectionListingNotFoundException;
 import com.mythix.tcg.collection.application.CollectionItemNotFoundException;
 import com.mythix.tcg.collection.application.CollectionValidationException;
 import com.mythix.tcg.collection.application.CollectionUserNotFoundException;
+import com.mythix.tcg.collection.application.PublicCollectionUserNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import com.mythix.tcg.order.application.OrderNotFoundException;
 import com.mythix.tcg.order.application.CheckoutInsufficientStockException;
@@ -197,6 +198,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> collectionUserNotFound(CollectionUserNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
             .body(new ApiError("INVALID_CREDENTIALS", "Authenticated user is no longer available", Map.of()));
+    }
+
+    @ExceptionHandler(PublicCollectionUserNotFoundException.class)
+    public ResponseEntity<ApiError> publicCollectionUserNotFound(PublicCollectionUserNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("PUBLIC_COLLECTION_NOT_FOUND", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(OrderNotFoundException.class)
