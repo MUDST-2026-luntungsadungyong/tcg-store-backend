@@ -71,6 +71,37 @@ class PublicCollectionControllerIntegrationTests {
     }
 
     @Test
+    void leaderboardReturnsTopTenMockCollectorsOrderedByRareQuantity() throws Exception {
+        Card rare = saveCard("top-ten-rare", "Rare Holo");
+        Card common = saveCard("top-ten-common", "Common");
+
+        for (int quantity = 1; quantity <= 12; quantity++) {
+            User collector = saveUser(
+                    String.format("Mock Collector %02d", quantity),
+                    String.format("mock-collector-%02d@example.com", quantity));
+            saveItem(collector, rare, quantity);
+            if (quantity == 12) {
+                // A large common-card quantity must not affect the rare-card ranking.
+                saveItem(collector, common, 999);
+            }
+        }
+
+        mockMvc.perform(get("/api/collections/leaderboard")
+                        .param("limit", "10")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(10)))
+                .andExpect(jsonPath("$.items[0].rank").value(1))
+                .andExpect(jsonPath("$.items[0].displayName").value("Mock Collector 12"))
+                .andExpect(jsonPath("$.items[0].rareCardCount").value(12))
+                .andExpect(jsonPath("$.items[0].distinctRareCardCount").value(1))
+                .andExpect(jsonPath("$.items[0].highlights", hasSize(1)))
+                .andExpect(jsonPath("$.items[9].rank").value(10))
+                .andExpect(jsonPath("$.items[9].displayName").value("Mock Collector 03"))
+                .andExpect(jsonPath("$.items[9].rareCardCount").value(3));
+    }
+
+    @Test
     void publicCollectionIsReadableWithoutAuthentication() throws Exception {
         User owner = saveUser("Public Collector", "public@example.com");
         Card rare = saveCard("public-rare", "Rare Holo");
