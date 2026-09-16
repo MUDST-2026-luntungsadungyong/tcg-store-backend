@@ -1,9 +1,12 @@
 -- =============================================================================
--- Mythix TCG Platform — Seed Data Initialization (2,000 Cards + Mock Users)
+-- Mythix TCG Platform — Seed Data Initialization (Revision 5)
+-- Target DBMS: PostgreSQL 16
+-- Contains: 2,000 Global Cards, Users (Admin, Buyer, Sellers), Seller KYC,
+--           Local Cards Inventory, Cart, Orders, Order Timeline Logs, Audit Trail
 -- =============================================================================
 
--- 1. Insert 2,000 Pokémon Cards
-INSERT INTO cards (id, name, supertype, subtypes, hp, types, rarity, set_name, card_number, artist, image_small, image_large, market_price) VALUES
+-- 1. Insert 2,000 Global Pokémon Cards (Master Catalog - Ownerless)
+INSERT INTO global_cards (id, name, supertype, subtypes, hp, types, rarity, set_name, card_number, artist, image_small, image_large, market_price) VALUES
 ('pop4-4', 'Mew', 'Pokémon', 'Basic', '70', 'Psychic', 'Rare', 'POP Series 4', '4', 'Nakaoka', 'https://images.pokemontcg.io/pop4/4.png', 'https://images.pokemontcg.io/pop4/4_hires.png', 3500.0),
 ('neo3-3', 'Celebi', 'Pokémon', 'Basic', '50', 'Psychic', 'Rare Holo', 'Neo Revelation', '3', 'Hironobu Yoshida', 'https://images.pokemontcg.io/neo3/3.png', 'https://images.pokemontcg.io/neo3/3_hires.png', 220.0),
 ('sm9-6', 'Paras', 'Pokémon', 'Basic', '70', 'Grass', 'Common', 'Team Up', '6', 'Naoyo Kimura', 'https://images.pokemontcg.io/sm9/6.png', 'https://images.pokemontcg.io/sm9/6_hires.png', 7.35),
@@ -2005,82 +2008,141 @@ INSERT INTO cards (id, name, supertype, subtypes, hp, types, rarity, set_name, c
 ('xyp-XY32', 'Yveltal', 'Pokémon', 'Basic', '130', 'Darkness', 'Promo', 'XY Black Star Promos', 'XY32', 'Masakazu Fukuda', 'https://images.pokemontcg.io/xyp/XY32.png', 'https://images.pokemontcg.io/xyp/XY32_hires.png', 217.0),
 ('base3-45', 'Weezing', 'Pokémon', 'Stage 1', '60', 'Grass', 'Uncommon', 'Fossil', '45', 'Mitsuhiro Arita', 'https://images.pokemontcg.io/base3/45.png', 'https://images.pokemontcg.io/base3/45_hires.png', 35.0);
 
--- 2. Insert Test Users (Password: password123)
-INSERT INTO users (id, email, password, full_name, phone, contact_line, contact_facebook, role, seller_status) VALUES
-(1, 'buyer@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Ash Ketchum', '081-111-2222', 'ash_ketchum', 'facebook.com/ash.ketchum', 'USER', 'NONE'),
-(2, 'seller@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Brock Pewter', '089-999-8888', 'brock_cards', 'facebook.com/brock.pewter', 'USER', 'VERIFIED'),
-(3, 'red@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Red Champion', '082-222-3333', 'red_champion', 'facebook.com/red.champion', 'USER', 'NONE'),
-(4, 'cynthia@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Cynthia Shirona', '083-333-4444', 'cynthia_sinnoh', 'facebook.com/cynthia.sinnoh', 'USER', 'NONE'),
-(5, 'steven@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Steven Stone', '084-444-5555', 'steven_hoenn', 'facebook.com/steven.stone', 'USER', 'NONE'),
-(6, 'gary@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Gary Oak', '085-555-6666', 'gary_oak', 'facebook.com/gary.oak', 'USER', 'NONE'),
-(7, 'lance@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Lance Dragon', '086-666-7777', 'lance_dragon', 'facebook.com/lance.dragon', 'USER', 'NONE');
+-- 2. Insert Test Users (Password: password123 for all accounts)
+-- BCrypt hash for 'password123': $2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O
+INSERT INTO users (id, email, password, full_name, phone, contact_line, contact_facebook, avatar_url, role, seller_status) VALUES
+(1, 'buyer@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Ash Ketchum', '081-111-2222', 'ash_ketchum', 'facebook.com/ash.ketchum', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb', 'USER', 'NONE'),
+(2, 'seller@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Brock Pewter', '089-999-8888', 'brock_cards', 'facebook.com/brock.pewter', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d', 'USER', 'APPROVED'),
+(3, 'red@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Red Champion', '082-222-3333', 'red_champion', 'facebook.com/red.champion', NULL, 'USER', 'NONE'),
+(4, 'cynthia@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Cynthia Shirona', '083-333-4444', 'cynthia_sinnoh', 'facebook.com/cynthia.sinnoh', NULL, 'USER', 'NONE'),
+(5, 'steven@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Steven Stone', '084-444-5555', 'steven_hoenn', 'facebook.com/steven.stone', NULL, 'USER', 'NONE'),
+(6, 'gary@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Gary Oak', '085-555-6666', 'gary_oak', 'facebook.com/gary.oak', NULL, 'USER', 'NONE'),
+(7, 'lance@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Lance Dragon', '086-666-7777', 'lance_dragon', 'facebook.com/lance.dragon', NULL, 'USER', 'NONE'),
+(8, 'admin@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Platform Administrator', '080-000-9999', 'mythix_admin', 'facebook.com/mythix.admin', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde', 'ADMIN', 'NONE'),
+(9, 'misty@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Misty Cerulean', '081-333-7777', 'misty_water', 'facebook.com/misty.water', NULL, 'USER', 'PENDING');
+
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 
--- 3. Insert Seller Profile
-INSERT INTO seller_profiles (id, user_id, shop_name, shop_description, contact_phone, contact_line, contact_facebook) VALUES
-(1, 2, 'Pewter City Card Vault', 'ร้านการ์ดแท้ 100% สภาพเยี่ยม จัดส่งไว มีบริการตอบแชทตลอดเวลาครับ', '089-999-8888', 'brock_cards', 'facebook.com/brock.pewter');
+-- 3. Insert Seller Profiles (KYC Data: Verified Seller & Pending Approval for Admin)
+INSERT INTO seller_profiles (
+    id, user_id, shop_name, shop_description, 
+    id_card_number, id_card_image_url, 
+    bank_name, bank_account_number, bank_account_name, 
+    requested_at, verified_at, approved_by, 
+    rejected_at, rejected_by, rejection_reason
+) VALUES
+(1, 2, 'Pewter City Card Vault', 'ร้านการ์ดแท้ 100% สภาพเยี่ยม จัดส่งไว มีบริการตอบแชทตลอดเวลาครับ', 
+ '1100500123456', 'https://images.unsplash.com/photo-1544717305-2782549b5136', 
+ 'Kasikorn Bank (KBANK)', '012-3-45678-9', 'Brock Pewter', 
+ NOW() - INTERVAL '10 days', NOW() - INTERVAL '9 days', 8, 
+ NULL, NULL, NULL),
+(2, 9, 'Cerulean Water Gym Cards', 'จำหน่ายการ์ดประเภท Water และ Trainer สภาพสะสม พร้อมส่งทุกวัน', 
+ '1100500987654', 'https://images.unsplash.com/photo-1544717305-2782549b5136', 
+ 'Siam Commercial Bank (SCB)', '987-6-54321-0', 'Misty Cerulean', 
+ NOW() - INTERVAL '1 day', NULL, NULL, 
+ NULL, NULL, NULL);
+
 SELECT setval('seller_profiles_id_seq', (SELECT MAX(id) FROM seller_profiles));
 
--- 4. Insert Initial Product Listings
-INSERT INTO products (id, seller_id, card_id, custom_image_url, condition, language, price, cost, on_hand, reserved, status) VALUES
-(1, 2, 'pop4-4', NULL, 'Near Mint', 'EN', 1250.0, 800.0, 5, 0, 'SHOW'),
-(2, 2, 'neo3-3', NULL, 'Mint', 'EN', 450.0, 250.0, 8, 0, 'SHOW'),
-(3, 2, 'sm9-6', NULL, 'Lightly Played', 'EN', 85.0, 40.0, 12, 0, 'SHOW'),
-(4, 2, 'sm8-3', NULL, 'Near Mint', 'JP', 2400.0, 1600.0, 3, 0, 'SHOW'),
-(5, 2, 'hgss2-3', NULL, 'Mint', 'EN', 150.0, 75.0, 10, 0, 'SHOW'),
-(6, 2, 'base5-3', NULL, 'Near Mint', 'EN', 320.0, 180.0, 6, 0, 'SHOW'),
-(7, 2, 'dp1-4', NULL, 'Mint', 'EN', 990.0, 600.0, 4, 0, 'SHOW'),
-(8, 2, 'base3-6', NULL, 'Lightly Played', 'EN', 45.0, 20.0, 15, 0, 'SHOW'),
-(9, 2, 'neo4-4', NULL, 'Near Mint', 'EN', 1750.0, 1100.0, 2, 0, 'SHOW'),
-(10, 2, 'sm2-3', NULL, 'Mint', 'JP', 280.0, 140.0, 7, 0, 'SHOW'),
-(11, 2, 'bw10-5', NULL, 'Near Mint', 'EN', 550.0, 300.0, 5, 0, 'SHOW'),
-(12, 2, 'pop9-4', NULL, 'Mint', 'EN', 75.0, 30.0, 20, 0, 'SHOW'),
-(13, 2, 'ex11-6', NULL, 'Near Mint', 'EN', 3200.0, 2200.0, 2, 0, 'SHOW'),
-(14, 2, 'hgss4-6', NULL, 'Mint', 'EN', 180.0, 90.0, 8, 0, 'SHOW'),
-(15, 2, 'ex10-3', NULL, 'Near Mint', 'EN', 650.0, 380.0, 4, 0, 'SHOW'),
-(16, 2, 'si1-5', NULL, 'Mint', 'EN', 420.0, 200.0, 6, 0, 'SHOW'),
-(17, 2, 'bw11-4', NULL, 'Lightly Played', 'EN', 110.0, 50.0, 10, 0, 'SHOW'),
-(18, 2, 'swsh1-4', NULL, 'Near Mint', 'JP', 890.0, 500.0, 3, 0, 'SHOW'),
-(19, 2, 'bw7-4', NULL, 'Mint', 'EN', 2100.0, 1400.0, 2, 0, 'SHOW'),
-(20, 2, 'bw8-3', NULL, 'Near Mint', 'EN', 135.0, 60.0, 9, 0, 'SHOW');
+-- 4. Insert Security Audit Logs (Platform Admin Actions)
+INSERT INTO audit_logs (id, actor_id, action, target_type, target_id, details, ip_address, created_at) VALUES
+(1, 8, 'APPROVE_SELLER', 'SELLER_PROFILE', '1', '{"shop_name": "Pewter City Card Vault", "decision": "APPROVED", "approver_email": "admin@mythix.com"}'::jsonb, '127.0.0.1', NOW() - INTERVAL '9 days'),
+(2, 8, 'UPDATE_GLOBAL_CARD', 'GLOBAL_CARD', 'base1-4', '{"action": "sync_market_price", "old_price": 3200.0, "new_price": 3500.0}'::jsonb, '127.0.0.1', NOW() - INTERVAL '5 days'),
+(3, 2, 'UPDATE_STOCK', 'LOCAL_CARD', '1', '{"card_name": "Mew", "on_hand": 5, "price": 1250.0}'::jsonb, '171.96.12.34', NOW() - INTERVAL '4 days');
 
-SELECT setval('products_id_seq', (SELECT MAX(id) FROM products));
+SELECT setval('audit_logs_id_seq', (SELECT MAX(id) FROM audit_logs));
 
--- 5. Insert User Collection Items
-INSERT INTO collection_items (id, user_id, card_id, condition, language, quantity) VALUES
--- Red Champion (Rank #1: 2x Promo [60] + 3x GX [60] + 2x V [30] = 150 pts; common cards discarded)
-(1, 3, 'basep-3', 'Mint', 'EN', 2),
-(2, 3, 'sm12-4', 'Near Mint', 'EN', 2),
-(3, 3, 'sm115-6', 'Near Mint', 'EN', 1),
-(4, 3, 'swsh35-5', 'Mint', 'EN', 2),
-(5, 3, 'sm9-6', 'Lightly Played', 'EN', 10),
+-- 5. Insert Local Cards (Seller Marketplace Listings - Owned by Seller)
+INSERT INTO local_cards (id, seller_id, global_card_id, custom_image_url, condition, language, price, cost, on_hand, reserved, status) VALUES
+(1, 2, 'pop4-4', 'https://images.pokemontcg.io/pop4/4_hires.png', 'NM', 'EN', 1250.0, 800.0, 5, 0, 'SHOW'),
+(2, 2, 'neo3-3', 'https://images.pokemontcg.io/neo3/3_hires.png', 'NM', 'EN', 450.0, 250.0, 8, 0, 'SHOW'),
+(3, 2, 'sm9-6', 'https://images.pokemontcg.io/sm9/6_hires.png', 'LP', 'EN', 85.0, 40.0, 12, 0, 'SHOW'),
+(4, 2, 'sm8-3', 'https://images.pokemontcg.io/sm8/3_hires.png', 'NM', 'JP', 2400.0, 1600.0, 3, 0, 'SHOW'),
+(5, 2, 'hgss2-3', 'https://images.pokemontcg.io/hgss2/3_hires.png', 'NM', 'EN', 150.0, 75.0, 10, 0, 'SHOW'),
+(6, 2, 'base5-3', 'https://images.pokemontcg.io/base5/3_hires.png', 'NM', 'EN', 320.0, 180.0, 6, 0, 'SHOW'),
+(7, 2, 'dp1-4', 'https://images.pokemontcg.io/dp1/4_hires.png', 'NM', 'EN', 990.0, 600.0, 4, 0, 'SHOW'),
+(8, 2, 'base3-6', 'https://images.pokemontcg.io/base3/6_hires.png', 'LP', 'EN', 45.0, 20.0, 15, 0, 'SHOW'),
+(9, 2, 'neo4-4', 'https://images.pokemontcg.io/neo4/4_hires.png', 'NM', 'EN', 1750.0, 1100.0, 2, 0, 'SHOW'),
+(10, 2, 'sm2-3', 'https://images.pokemontcg.io/sm2/3_hires.png', 'NM', 'JP', 280.0, 140.0, 7, 0, 'SHOW'),
+(11, 2, 'bw10-5', 'https://images.pokemontcg.io/bw10/5_hires.png', 'NM', 'EN', 550.0, 300.0, 5, 0, 'SHOW'),
+(12, 2, 'pop9-4', 'https://images.pokemontcg.io/pop9/4_hires.png', 'NM', 'EN', 75.0, 30.0, 20, 0, 'SHOW'),
+(13, 2, 'ex11-6', 'https://images.pokemontcg.io/ex11/6_hires.png', 'NM', 'EN', 3200.0, 2200.0, 2, 0, 'SHOW'),
+(14, 2, 'hgss4-6', 'https://images.pokemontcg.io/hgss4/6_hires.png', 'NM', 'EN', 180.0, 90.0, 8, 0, 'SHOW'),
+(15, 2, 'ex10-3', 'https://images.pokemontcg.io/ex10/3_hires.png', 'NM', 'EN', 650.0, 380.0, 4, 0, 'SHOW'),
+(16, 2, 'si1-5', 'https://images.pokemontcg.io/si1/5_hires.png', 'NM', 'EN', 420.0, 200.0, 6, 0, 'SHOW'),
+(17, 2, 'bw11-4', 'https://images.pokemontcg.io/bw11/4_hires.png', 'LP', 'EN', 110.0, 50.0, 10, 0, 'SHOW'),
+(18, 2, 'swsh1-4', 'https://images.pokemontcg.io/swsh1/4_hires.png', 'NM', 'JP', 890.0, 500.0, 3, 0, 'SHOW'),
+(19, 2, 'bw7-4', 'https://images.pokemontcg.io/bw7/4_hires.png', 'NM', 'EN', 2100.0, 1400.0, 2, 0, 'SHOW'),
+(20, 2, 'bw8-3', 'https://images.pokemontcg.io/bw8/3_hires.png', 'NM', 'EN', 135.0, 60.0, 9, 0, 'SHOW');
 
--- Cynthia Shirona (Rank #2: 2x Promo [60] + 2x GX [40] + 1x V [15] = 115 pts; common discarded)
-(6, 4, 'basep-4', 'Mint', 'EN', 2),
-(7, 4, 'sm12-4', 'Mint', 'EN', 1),
-(8, 4, 'sm115-6', 'Near Mint', 'EN', 1),
-(9, 4, 'swsh35-5', 'Mint', 'EN', 1),
-(10, 4, 'sm8-3', 'Near Mint', 'JP', 5),
+SELECT setval('local_cards_id_seq', (SELECT MAX(id) FROM local_cards));
 
--- Steven Stone (Rank #3: 1x Promo [30] + 3x GX [60] = 90 pts; rare discarded)
-(11, 5, 'xyp-XY32', 'Near Mint', 'EN', 1),
-(12, 5, 'sm12-4', 'Near Mint', 'EN', 2),
-(13, 5, 'sm115-6', 'Mint', 'EN', 1),
-(14, 5, 'pop4-4', 'Mint', 'EN', 8),
+-- 6. Insert Cart Items (Shopping Cart for Buyer Ash)
+INSERT INTO cart_items (id, user_id, local_card_id, quantity) VALUES
+(1, 1, 1, 1);
 
--- Lance Dragon (Rank #4: 1x Promo [30] + 2x GX [40] = 70 pts; rare holo discarded)
-(15, 7, 'basep-3', 'Near Mint', 'EN', 1),
-(16, 7, 'sm12-4', 'Near Mint', 'EN', 2),
-(17, 7, 'neo3-3', 'Mint', 'EN', 3),
+SELECT setval('cart_items_id_seq', (SELECT MAX(id) FROM cart_items));
 
--- Ash Ketchum (Rank #5: 1x Promo [30] + 1x GX [20] = 50 pts; common discarded)
-(18, 1, 'basep-4', 'Near Mint', 'EN', 1),
-(19, 1, 'sm115-6', 'Lightly Played', 'EN', 1),
-(20, 1, 'sm9-6', 'Lightly Played', 'EN', 15),
+-- 7. Insert Sample Orders (With Idempotency & Financial Revenue Breakdown)
+INSERT INTO orders (id, buyer_id, order_number, idempotency_key, status, total_amount, platform_fee, seller_net_amount, created_at, updated_at) VALUES
+(1, 1, 'ORD-2026-001', 'idemp-mythix-001-abc', 'FULFILLED', 1700.00, 85.00, 1615.00, NOW() - INTERVAL '3 days', NOW() - INTERVAL '1 day'),
+(2, 6, 'ORD-2026-002', 'idemp-mythix-002-def', 'PAID', 990.00, 49.50, 940.50, NOW() - INTERVAL '5 hours', NOW() - INTERVAL '4 hours');
 
--- Gary Oak (Rank #6: 1x GX [20] + 1x V [15] = 35 pts; common discarded)
-(21, 6, 'sm115-6', 'Near Mint', 'EN', 1),
-(22, 6, 'swsh35-5', 'Mint', 'EN', 1),
-(23, 6, 'sm8-3', 'Near Mint', 'EN', 6);
+SELECT setval('orders_id_seq', (SELECT MAX(id) FROM orders));
+
+-- 8. Insert Order Items (Immutable Purchase Snapshot)
+INSERT INTO order_items (id, order_id, local_card_id, seller_id, global_card_id, card_name_snapshot, shop_name_snapshot, price_at_purchase, cost_at_purchase, quantity) VALUES
+(1, 1, 1, 2, 'pop4-4', 'Mew', 'Pewter City Card Vault', 1250.00, 800.00, 1),
+(2, 1, 2, 2, 'neo3-3', 'Celebi', 'Pewter City Card Vault', 450.00, 250.00, 1),
+(3, 2, 7, 2, 'dp1-4', 'Empoleon', 'Pewter City Card Vault', 990.00, 600.00, 1);
+
+SELECT setval('order_items_id_seq', (SELECT MAX(id) FROM order_items));
+
+-- 9. Insert Order Status Logs (Timeline History & Fulfillment Display)
+INSERT INTO order_status_logs (id, order_id, from_status, to_status, changed_by, changed_by_role, note, created_at) VALUES
+(1, 1, NULL, 'PENDING', 1, 'BUYER', 'Created order via Cart Checkout', NOW() - INTERVAL '3 days'),
+(2, 1, 'PENDING', 'PAID', NULL, 'SYSTEM', 'Payment confirmed via PromptPay QR THB 1,700.00', NOW() - INTERVAL '3 days' + INTERVAL '3 minutes'),
+(3, 1, 'PAID', 'FULFILLED', 2, 'SELLER', 'Order shipped via Kerry Express Track: KERRY99887766', NOW() - INTERVAL '1 day'),
+(4, 2, NULL, 'PENDING', 6, 'BUYER', 'Placed order via Direct Buy Now', NOW() - INTERVAL '5 hours'),
+(5, 2, 'PENDING', 'PAID', NULL, 'SYSTEM', 'Credit card transaction authorized THB 990.00', NOW() - INTERVAL '4 hours');
+
+SELECT setval('order_status_logs_id_seq', (SELECT MAX(id) FROM order_status_logs));
+
+-- 10. Insert User Collection Items (Personal Collector Binder)
+INSERT INTO collection_items (id, user_id, global_card_id, condition, language, quantity) VALUES
+-- Red Champion (Rank #1)
+(1, 3, 'basep-3', 'NM', 'EN', 2),
+(2, 3, 'sm12-4', 'NM', 'EN', 2),
+(3, 3, 'sm115-6', 'NM', 'EN', 1),
+(4, 3, 'swsh35-5', 'NM', 'EN', 2),
+(5, 3, 'sm9-6', 'LP', 'EN', 10),
+
+-- Cynthia Shirona (Rank #2)
+(6, 4, 'basep-4', 'NM', 'EN', 2),
+(7, 4, 'sm12-4', 'NM', 'EN', 1),
+(8, 4, 'sm115-6', 'NM', 'EN', 1),
+(9, 4, 'swsh35-5', 'NM', 'EN', 1),
+(10, 4, 'sm8-3', 'NM', 'JP', 5),
+
+-- Steven Stone (Rank #3)
+(11, 5, 'xyp-XY32', 'NM', 'EN', 1),
+(12, 5, 'sm12-4', 'NM', 'EN', 2),
+(13, 5, 'sm115-6', 'NM', 'EN', 1),
+(14, 5, 'pop4-4', 'NM', 'EN', 8),
+
+-- Lance Dragon (Rank #4)
+(15, 7, 'basep-3', 'NM', 'EN', 1),
+(16, 7, 'sm12-4', 'NM', 'EN', 2),
+(17, 7, 'neo3-3', 'NM', 'EN', 3),
+
+-- Ash Ketchum (Rank #5)
+(18, 1, 'basep-4', 'NM', 'EN', 1),
+(19, 1, 'sm115-6', 'LP', 'EN', 1),
+(20, 1, 'sm9-6', 'LP', 'EN', 15),
+
+-- Gary Oak (Rank #6)
+(21, 6, 'sm115-6', 'NM', 'EN', 1),
+(22, 6, 'swsh35-5', 'NM', 'EN', 1),
+(23, 6, 'sm8-3', 'NM', 'EN', 6);
 
 SELECT setval('collection_items_id_seq', (SELECT MAX(id) FROM collection_items));
