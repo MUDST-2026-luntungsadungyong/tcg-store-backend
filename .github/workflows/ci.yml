@@ -1,4 +1,4 @@
-name: CI
+name: CI Pipeline
 
 on:
   pull_request:
@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   test:
+    name: Java Unit & Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -23,7 +24,7 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Verify
+      - name: Verify Maven build & tests
         run: ./mvnw --batch-mode verify
 
   postgres-concurrency:
@@ -57,3 +58,115 @@ jobs:
 
       - name: Verify PostgreSQL concurrency
         run: ./mvnw --batch-mode -Dspring.profiles.active=postgres -Dtest=CheckoutConcurrencyPostgresTests verify
+
+  db-schema-validation:
+    name: Database Schema & Seed Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: tcg_store_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d tcg_store_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Execute schema and migrations
+        env:
+          PGPASSWORD: postgres
+        run: |
+          echo "Applying 01-schema.sql..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/01-schema.sql
+          echo "Applying 02-data.sql..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/02-data.sql
+          echo "Applying 03-profile-avatar.sql..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/03-profile-avatar.sql
+          echo "Applying migrations..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/migrations/001_checkout_idempotency.sql
+
+      - name: Validate Table and Seed Record Integrity
+        env:
+          PGPASSWORD: postgres
+        run: |
+          echo "Verifying database integrity..."
+          TABLE_COUNT=$(psql -h localhost -U postgres -d tcg_store_test -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
+          echo "Total public tables created: $TABLE_COUNT"
+          if [ "$TABLE_COUNT" -lt 10 ]; then
+            echo "ERROR: Expected at least 10 tables, found $TABLE_COUNT"
+            exit 1
+          fi
+
+          CARD_COUNT=$(psql -h localhost -U postgres -d tcg_store_test -t -A -c "SELECT COUNT(*) FROM global_cards;")
+          echo "Total global cards seeded: $CARD_COUNT"
+          if [ "$CARD_COUNT" -lt 2000 ]; then
+            echo "ERROR: Expected at least 2000 global cards, found $CARD_COUNT"
+            exit 1
+          fi
+
+          USER_COUNT=$(psql -h localhost -U postgres -d tcg_store_test -t -A -c "SELECT COUNT(*) FROM users;")
+          echo "Total users seeded: $USER_COUNT"
+          if [ "$USER_COUNT" -lt 9 ]; then
+            echo "ERROR: Expected at least 9 users, found $USER_COUNT"
+            exit 1
+          fi
+          echo "Database schema and seed validation passed successfully!"
+
+  docker-build-verify:
+    name: Docker Build Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (dry-run test)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: tcg-store-backend:ci-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  security-scan:
+    name: Security & Secret Scan (Gitleaks & Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Secret Detection
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Run Trivy Vulnerability Scanner (Filesystem)
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'

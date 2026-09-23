@@ -70,6 +70,11 @@ class PublicCollectionControllerIntegrationTests {
         cardRepository.deleteAll();
     }
 
+    @org.junit.jupiter.api.AfterEach
+    void tearDown() {
+        collectionRepository.deleteAll();
+    }
+
     @Test
     void leaderboardRanksByRareQuantityAndDoesNotExposePrivateFields() throws Exception {
         User first = saveUser("First Collector", "first@example.com");

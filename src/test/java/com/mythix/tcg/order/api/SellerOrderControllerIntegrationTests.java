@@ -64,6 +64,9 @@ class SellerOrderControllerIntegrationTests {
     @Autowired
     private SellerProfileRepository sellerProfileRepository;
 
+    @Autowired
+    private com.mythix.tcg.collection.persistence.CollectionRepository collectionRepository;
+
     private String sellerToken;
     private User seller;
     private User otherSeller;
@@ -75,6 +78,7 @@ class SellerOrderControllerIntegrationTests {
 
     @BeforeEach
     void setUp() {
+        collectionRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
         productRepository.deleteAll();
