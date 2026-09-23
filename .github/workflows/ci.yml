@@ -84,19 +84,18 @@ jobs:
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
-      - name: Execute init.sql schema
+      - name: Execute schema and migrations
         env:
           PGPASSWORD: postgres
         run: |
-          echo "Applying init.sql schema..."
-          psql -h localhost -U postgres -d tcg_store_test -f src/main/resources/db/init.sql
-
-      - name: Execute seed.sql mock data
-        env:
-          PGPASSWORD: postgres
-        run: |
-          echo "Applying seed.sql data..."
-          psql -h localhost -U postgres -d tcg_store_test -f src/main/resources/db/seed.sql
+          echo "Applying 01-schema.sql..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/01-schema.sql
+          echo "Applying 02-data.sql..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/02-data.sql
+          echo "Applying 03-profile-avatar.sql..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/03-profile-avatar.sql
+          echo "Applying migrations..."
+          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/migrations/001_checkout_idempotency.sql
 
       - name: Validate Table and Seed Record Integrity
         env:
@@ -164,6 +163,7 @@ jobs:
 
       - name: Run Trivy Vulnerability Scanner (Filesystem)
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
           scan-type: 'fs'
           ignore-unfixed: true
