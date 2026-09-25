@@ -13,6 +13,18 @@ TiDB speaks the MySQL protocol, not PostgreSQL. Moving this application therefor
 - At the free quota, new connections can be denied and existing connections throttled until the next monthly reset. Do not treat this tier as production availability.
 - Start with a Hikari pool of 5 connections per backend instance. Keep Cloud Run/container max instances low enough that total possible connections remain bounded.
 
+## Provisioned test resource
+
+- Instance: `mythix-tcg-test` (`10023880819699183600`)
+- Status: Active
+- Plan: Starter, spending currently `Free`, monthly spending limit `0`
+- Provider/region: AWS Singapore (`ap-southeast-1`)
+- TiDB version: `v8.5.3`, MySQL-compatible, zonal availability
+- Public endpoint: `gateway01.ap-southeast-1.prod.aws.tidbcloud.com:4000`
+- Username: `4HLdVEiiZKqbH4V.root`
+- Database: `tcg_store_test`
+- SQL Editor verification: 2 users, 1 seller profile, 3 cards, and 3 products
+
 ## Files prepared in this repository
 
 - `.env.tidb.example`: required environment variables, without secrets.
@@ -66,9 +78,9 @@ The Starter plan requires TLS. Java can normally verify the Let's Encrypt certif
 
 ## Acceptance checklist
 
-- [ ] Starter instance exists in Singapore with spending limit 0.
+- [x] Starter instance exists in Singapore with spending limit 0.
 - [ ] Credentials exist only in the deployment secret store.
-- [ ] Schema and seed scripts complete without warnings that change semantics.
+- [x] Schema and seed scripts complete without warnings that change semantics.
 - [ ] Backend starts with `SPRING_PROFILES_ACTIVE=tidb` and `/api/health` returns 200.
 - [ ] Full TiDB integration suite passes, including concurrent checkout.
 - [ ] Frontend test environment uses the TiDB-backed API and its exact origin is in CORS.
