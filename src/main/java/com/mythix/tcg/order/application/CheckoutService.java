@@ -9,6 +9,7 @@ import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +37,7 @@ public class CheckoutService {
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
+    private final SellerProfileRepository sellerProfileRepository;
 
     /**
      * The buyer row is locked before reading idempotency or cart state. This serializes
@@ -48,8 +50,11 @@ public class CheckoutService {
             .orElseThrow(CheckoutNotAllowedException::new);
 
         if (normalizedKey != null) {
-            var previousOrder = orderRepository.findByBuyerIdAndIdempotencyKey(buyerId, normalizedKey);
+            var previousOrder = orderRepository.findByIdempotencyKey(normalizedKey);
             if (previousOrder.isPresent()) {
+                if (!previousOrder.get().getBuyer().getId().equals(buyerId)) {
+                    throw new CheckoutValidationException("Idempotency-Key", "Idempotency-Key is already used");
+                }
                 return toResponse(previousOrder.get());
             }
         }
@@ -75,6 +80,13 @@ public class CheckoutService {
 
         BigDecimal total = BigDecimal.ZERO;
         List<OrderItem> orderItems = new ArrayList<>();
+        Map<Long, String> shopNames = new HashMap<>();
+        List<Long> sellerIds = cartItems.stream()
+            .map(item -> productsById.get(item.getProduct().getId()).getSeller().getId())
+            .distinct()
+            .toList();
+        sellerProfileRepository.findByUserIdIn(sellerIds)
+            .forEach(profile -> shopNames.put(profile.getUser().getId(), profile.getShopName()));
         for (CartItem cartItem : cartItems) {
             Product product = productsById.get(cartItem.getProduct().getId());
             validateLine(cartItem, product);
@@ -90,6 +102,9 @@ public class CheckoutService {
                 .seller(product.getSeller())
                 .cardId(product.getCard().getId())
                 .productNameSnapshot(product.getCard().getName())
+                .shopNameSnapshot(shopNames.getOrDefault(
+                    product.getSeller().getId(),
+                    product.getSeller().getFullName() == null ? "" : product.getSeller().getFullName()))
                 .priceAtPurchase(price)
                 .costAtPurchase(cost)
                 .quantity(quantity)
@@ -102,6 +117,8 @@ public class CheckoutService {
             .buyer(buyer)
             .status("PENDING")
             .totalAmount(total)
+            .platformFee(BigDecimal.ZERO)
+            .sellerNetAmount(total)
             .items(orderItems)
             .build();
         orderItems.forEach(item -> item.setOrder(order));
@@ -126,7 +143,7 @@ public class CheckoutService {
 
     private String normalizeIdempotencyKey(String idempotencyKey) {
         if (idempotencyKey == null) {
-            return null;
+            return "checkout-" + UUID.randomUUID();
         }
         String normalized = idempotencyKey.trim();
         if (normalized.isEmpty()) {

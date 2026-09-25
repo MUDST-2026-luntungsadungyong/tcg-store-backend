@@ -60,7 +60,7 @@ class CartControllerIntegrationTests {
     void setUp() {
         buyer = persistUser("cart-buyer@example.com", "USER", "NONE");
         otherBuyer = persistUser("cart-other@example.com", "USER", "NONE");
-        seller = persistUser("cart-seller@example.com", "SELLER", "APPROVED");
+        seller = persistUser("cart-seller@example.com", "USER", "APPROVED");
         entityManager.flush();
         buyerToken = jwtService.generateToken(buyer);
         otherBuyerToken = jwtService.generateToken(otherBuyer);
@@ -296,6 +296,7 @@ class CartControllerIntegrationTests {
             .name(name)
             .supertype("Pokemon")
             .setName("Cart Test Set")
+            .cardNumber("001")
             .rarity("Rare")
             .imageSmall("https://example.com/" + name + ".webp")
             .imageLarge("https://example.com/" + name + ".webp")

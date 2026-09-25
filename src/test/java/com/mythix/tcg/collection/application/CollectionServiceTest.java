@@ -104,7 +104,8 @@ class CollectionServiceTest {
 
         when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(cardRepository.findById("card-100")).thenReturn(Optional.of(card));
-        when(collectionRepository.findByUserIdAndCardId(1L, "card-100")).thenReturn(Optional.empty());
+        when(collectionRepository.findByUserIdAndCardIdAndConditionAndLanguage(1L, "card-100", "NM", "EN"))
+                .thenReturn(Optional.empty());
 
         CollectionItem savedItem = CollectionItem.builder()
                 .id(11L)
@@ -146,7 +147,8 @@ class CollectionServiceTest {
 
         when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(cardRepository.findById("card-100")).thenReturn(Optional.of(card));
-        when(collectionRepository.findByUserIdAndCardId(1L, "card-100")).thenReturn(Optional.of(existingItem));
+        when(collectionRepository.findByUserIdAndCardIdAndConditionAndLanguage(1L, "card-100", "NM", "EN"))
+                .thenReturn(Optional.of(existingItem));
         when(collectionRepository.save(existingItem)).thenReturn(existingItem);
 
         CollectionItemResponse response = collectionService.addToCollection(1L, request);
@@ -186,7 +188,8 @@ class CollectionServiceTest {
 
         when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(productRepository.findById(42L)).thenReturn(Optional.of(product));
-        when(collectionRepository.findByUserIdAndCardId(1L, "card-100")).thenReturn(Optional.empty());
+        when(collectionRepository.findByUserIdAndCardIdAndConditionAndLanguage(1L, "card-100", "NM", "EN"))
+                .thenReturn(Optional.empty());
         when(collectionRepository.save(any(CollectionItem.class))).thenReturn(savedItem);
 
         CollectionItemResponse response = collectionService.addToCollection(1L, request);

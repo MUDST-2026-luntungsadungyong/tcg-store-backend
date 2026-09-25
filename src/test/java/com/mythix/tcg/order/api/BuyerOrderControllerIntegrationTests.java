@@ -96,8 +96,11 @@ class BuyerOrderControllerIntegrationTests {
         Card card = Card.builder()
                 .id("card-test-001")
                 .name("Mewtwo")
+                .supertype("Pokemon")
                 .setName("Base Set")
+                .cardNumber("001")
                 .rarity("Rare Holo")
+                .imageSmall("https://example.com/mewtwo-small.png")
                 .imageLarge("https://example.com/mewtwo.png")
                 .build();
         cardRepository.save(card);
@@ -120,7 +123,7 @@ class BuyerOrderControllerIntegrationTests {
         buyerOrder = Order.builder()
                 .orderNumber("ORD-BUYER-001")
                 .buyer(buyer)
-                .status("RESERVED")
+                .status("PAID")
                 .totalAmount(new BigDecimal("999.00"))
                 .items(new ArrayList<>())
                 .build();
@@ -155,7 +158,7 @@ class BuyerOrderControllerIntegrationTests {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(buyerOrder.getId().toString()))
-                .andExpect(jsonPath("$[0].status").value("RESERVED"))
+                .andExpect(jsonPath("$[0].status").value("PAID"))
                 .andExpect(jsonPath("$[0].totalAmount").value(999.00));
     }
 
@@ -170,11 +173,11 @@ class BuyerOrderControllerIntegrationTests {
     }
 
     @Test
-    @DisplayName("GET /api/orders/me with status=RESERVED should return filtered results")
+    @DisplayName("GET /api/orders/me with status=PAID should return filtered results")
     void getOrders_withStatusFilter_returnsFiltered() throws Exception {
         mockMvc.perform(get("/api/orders/me")
                         .header("Authorization", "Bearer " + buyerToken)
-                        .param("status", "RESERVED"))
+                        .param("status", "PAID"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1));
@@ -198,7 +201,7 @@ class BuyerOrderControllerIntegrationTests {
                         .header("Authorization", "Bearer " + buyerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.orderNumber").value("ORD-BUYER-001"))
-                .andExpect(jsonPath("$.status").value("RESERVED"))
+                .andExpect(jsonPath("$.status").value("PAID"))
                 .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].productName").value("Mewtwo NM"));

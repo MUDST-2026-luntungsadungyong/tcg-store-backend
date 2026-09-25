@@ -10,10 +10,12 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "orders", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_orders_buyer_idempotency", columnNames = {"buyer_id", "idempotency_key"})
+    @UniqueConstraint(name = "uq_orders_order_number", columnNames = {"order_number"}),
+    @UniqueConstraint(name = "uq_orders_idempotency_key", columnNames = {"idempotency_key"})
 })
 @Getter
 @Setter
@@ -26,11 +28,12 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "order_number", nullable = false, unique = true, length = 50)
+    @Column(name = "order_number", nullable = false, length = 50)
     private String orderNumber;
 
-    @Column(name = "idempotency_key", length = 100)
-    private String idempotencyKey;
+    @Column(name = "idempotency_key", nullable = false, length = 100)
+    @Builder.Default
+    private String idempotencyKey = generateIdempotencyKey();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "buyer_id", nullable = false)
@@ -43,6 +46,14 @@ public class Order {
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
+    @Column(name = "platform_fee", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal platformFee = BigDecimal.ZERO;
+
+    @Column(name = "seller_net_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal sellerNetAmount = BigDecimal.ZERO;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();
@@ -54,4 +65,8 @@ public class Order {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    private static String generateIdempotencyKey() {
+        return "server-" + UUID.randomUUID();
+    }
 }

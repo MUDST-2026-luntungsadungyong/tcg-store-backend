@@ -65,7 +65,7 @@ class AdminSellerControllerIntegrationTests {
         entityManager.refresh(application);
         org.assertj.core.api.Assertions.assertThat(applicant.getRole()).isEqualTo("USER");
         org.assertj.core.api.Assertions.assertThat(applicant.getSellerStatus()).isEqualTo("APPROVED");
-        org.assertj.core.api.Assertions.assertThat(application.getApprovedBy().getId()).isEqualTo(admin.getId());
+        org.assertj.core.api.Assertions.assertThat(application.getApprovedBy()).isEqualTo(admin.getId());
     }
 
     private User persistUser(String email, String role, String sellerStatus) {

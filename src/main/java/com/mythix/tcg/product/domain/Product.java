@@ -11,7 +11,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "products")
+@Table(name = "local_cards")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -28,13 +28,13 @@ public class Product {
     private User seller;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "card_id", nullable = false)
+    @JoinColumn(name = "global_card_id", nullable = false)
     private Card card;
 
-    @Column(name = "custom_image_url", length = 500)
+    @Column(name = "custom_image_url", nullable = false, length = 500)
     private String customImageUrl;
 
-    @Column(nullable = false, length = 50)
+    @Column(name = "`condition`", nullable = false, length = 50)
     private String condition;
 
     @Column(nullable = false, length = 50)
@@ -44,8 +44,9 @@ public class Product {
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal price;
 
-    @Column(precision = 12, scale = 2)
-    private BigDecimal cost;
+    @Column(nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal cost = BigDecimal.ZERO;
 
     @Column(name = "on_hand", nullable = false)
     @Builder.Default
@@ -66,4 +67,21 @@ public class Product {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @PrePersist
+    @PreUpdate
+    private void applyRevision5Defaults() {
+        if (customImageUrl == null || customImageUrl.isBlank()) {
+            customImageUrl = card == null ? "" : firstNonBlank(card.getImageLarge(), card.getImageSmall());
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return "";
+    }
 }

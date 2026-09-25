@@ -51,7 +51,7 @@ public class AdminSellerService {
         User admin = userRepository.findById(adminUserId).orElseThrow(SellerApplicationNotFoundException::new);
 
         applicant.setSellerStatus("APPROVED");
-        profile.setApprovedBy(admin);
+        profile.setApprovedBy(admin.getId());
         profile.setVerifiedAt(LocalDateTime.now());
         auditLogRepository.save(AuditLog.builder().actor(admin).action("APPROVE_SELLER").targetType("SELLER_PROFILE").targetId(String.valueOf(profile.getId())).details("Approved seller application").build());
         return AdminSellerApplicationResponse.from(profile);
@@ -63,7 +63,7 @@ public class AdminSellerService {
         if (!"PENDING".equalsIgnoreCase(profile.getUser().getSellerStatus())) throw new SellerApplicationStateException();
         User admin = userRepository.findById(adminUserId).orElseThrow(SellerApplicationNotFoundException::new);
         profile.getUser().setSellerStatus("REJECTED");
-        profile.setRejectedBy(admin); profile.setRejectedAt(LocalDateTime.now()); profile.setRejectionReason(reason.trim());
+        profile.setRejectedBy(admin.getId()); profile.setRejectedAt(LocalDateTime.now()); profile.setRejectionReason(reason.trim());
         auditLogRepository.save(AuditLog.builder().actor(admin).action("REJECT_SELLER").targetType("SELLER_PROFILE").targetId(String.valueOf(profile.getId())).details(reason.trim()).build());
         return AdminSellerApplicationResponse.from(profile);
     }

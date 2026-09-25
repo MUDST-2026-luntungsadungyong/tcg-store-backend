@@ -69,9 +69,6 @@ class SellerVerificationServiceUnitTest {
             .user(sampleUser)
             .shopName("Pewter City Cards")
             .shopDescription("Authentic Pokémon Cards")
-            .contactPhone("089-999-8888")
-            .contactLine("brock_line")
-            .contactFacebook("brock_fb")
             .requestedAt(LocalDateTime.now())
             .build();
         when(sellerProfileRepository.save(any(SellerProfile.class))).thenReturn(savedProfile);
@@ -86,6 +83,9 @@ class SellerVerificationServiceUnitTest {
 
         assertThat(sampleUser.getRole()).isEqualTo("USER");
         assertThat(sampleUser.getSellerStatus()).isEqualTo("PENDING");
+        assertThat(sampleUser.getPhone()).isEqualTo("089-999-8888");
+        assertThat(sampleUser.getContactLine()).isEqualTo("brock_line");
+        assertThat(sampleUser.getContactFacebook()).isEqualTo("brock_fb");
 
         ArgumentCaptor<SellerProfile> profileCaptor = ArgumentCaptor.forClass(SellerProfile.class);
         verify(sellerProfileRepository).save(profileCaptor.capture());
@@ -95,7 +95,7 @@ class SellerVerificationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("verify() - ปฏิเสธและโยน SellerAlreadyVerifiedException เมื่อผู้ใช้เป็นผู้ขายอยู่แล้ว")
+    @DisplayName("verify() - ปฏิเสธและโยน SellerAlreadyApprovedException เมื่อผู้ใช้เป็นผู้ขายอยู่แล้ว")
     void verify_alreadyVerified_throwsException() {
         // Arrange
         when(userRepository.findById(2L)).thenReturn(Optional.of(sampleUser));
@@ -104,7 +104,7 @@ class SellerVerificationServiceUnitTest {
 
         // Act & Assert
         assertThatThrownBy(() -> sellerVerificationService.verify(2L, request))
-            .isInstanceOf(SellerAlreadyVerifiedException.class);
+            .isInstanceOf(SellerAlreadyApprovedException.class);
 
         verify(sellerProfileRepository, never()).save(any());
     }

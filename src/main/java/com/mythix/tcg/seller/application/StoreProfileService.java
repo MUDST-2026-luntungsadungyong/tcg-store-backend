@@ -17,7 +17,9 @@ public class StoreProfileService {
     @Transactional public StoreProfileResponse update(Long userId, StoreProfileRequest request) {
         SellerProfile profile = find(userId);
         profile.setShopName(request.shopName().trim()); profile.setShopDescription(trim(request.shopDescription()));
-        profile.setContactPhone(trim(request.phone())); profile.setContactLine(trim(request.line())); profile.setContactFacebook(trim(request.facebook()));
+        profile.getUser().setPhone(trim(request.phone()));
+        profile.getUser().setContactLine(trim(request.line()));
+        profile.getUser().setContactFacebook(trim(request.facebook()));
         return StoreProfileResponse.from(profile);
     }
     private SellerProfile find(Long userId) { return repository.findByUserId(userId).orElseThrow(InvalidCredentialsException::new); }

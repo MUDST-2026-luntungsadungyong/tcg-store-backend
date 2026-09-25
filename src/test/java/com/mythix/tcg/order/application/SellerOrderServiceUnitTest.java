@@ -48,9 +48,12 @@ class SellerOrderServiceUnitTest {
     @BeforeEach
     void setUp() {
         buyer = User.builder().id(1L).email("buyer@mythix.com").fullName("Ash").phone("081-111-1111").build();
-        seller = User.builder().id(2L).email("seller@mythix.com").fullName("Brock").phone("089-999-9999").role("SELLER").sellerStatus("APPROVED").build();
+        seller = User.builder().id(2L).email("seller@mythix.com").fullName("Brock").phone("089-999-9999").role("USER").sellerStatus("APPROVED").build();
 
-        Card card = Card.builder().id("pop4-4").name("Mew").build();
+        Card card = Card.builder().id("pop4-4").name("Mew").supertype("Pokemon")
+            .setName("Pop Series 4").cardNumber("004")
+            .imageSmall("https://example.com/mew-small.png")
+            .imageLarge("https://example.com/mew.png").build();
         Product product = Product.builder().id(10L).seller(seller).card(card).price(new BigDecimal("1250.00")).cost(new BigDecimal("800.00")).build();
 
         sampleOrder = Order.builder()
@@ -147,11 +150,11 @@ class SellerOrderServiceUnitTest {
         when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder);
 
         // Act
-        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "CONFIRMED");
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "FULFILLED");
 
         // Assert
         assertThat(response).isNotNull();
-        assertThat(sampleOrder.getStatus()).isEqualTo("CONFIRMED");
+        assertThat(sampleOrder.getStatus()).isEqualTo("FULFILLED");
         verify(orderRepository).save(sampleOrder);
     }
 

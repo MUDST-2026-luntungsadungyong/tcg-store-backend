@@ -8,7 +8,7 @@ public record SellerVerificationResponse(String id, String shopName, String shop
                                          String facebook, String sellerStatus, LocalDateTime verifiedAt) {
     public static SellerVerificationResponse from(SellerProfile profile) {
         return new SellerVerificationResponse(String.valueOf(profile.getId()), profile.getShopName(),
-            profile.getShopDescription(), profile.getContactPhone(), profile.getContactLine(),
-            profile.getContactFacebook(), profile.getUser().getSellerStatus(), profile.getVerifiedAt());
+            profile.getShopDescription(), profile.getUser().getPhone(), profile.getUser().getContactLine(),
+            profile.getUser().getContactFacebook(), profile.getUser().getSellerStatus(), profile.getVerifiedAt());
     }
 }

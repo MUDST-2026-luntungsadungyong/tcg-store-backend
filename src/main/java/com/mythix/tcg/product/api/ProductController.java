@@ -27,6 +27,7 @@ public class ProductController {
             @RequestParam(required = false) String rarity,
             @RequestParam(required = false) String stage,
             @RequestParam(required = false) String condition,
+            @RequestParam(required = false) String language,
             @RequestParam(required = false) String cardId,
             @RequestParam(required = false) Long sellerId,
             @RequestParam(required = false) BigDecimal minPrice,
@@ -40,7 +41,7 @@ public class ProductController {
         Pageable pageable = PageRequest.of(page, size, sort);
 
         ProductPageResponse response = productService.browseProducts(
-                search, rarity, stage, condition, cardId, sellerId, minPrice, maxPrice, pageable);
+                search, rarity, stage, condition, language, cardId, sellerId, minPrice, maxPrice, pageable);
         return ResponseEntity.ok(response);
     }
 

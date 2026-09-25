@@ -20,6 +20,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     Optional<Order> findByBuyerIdAndIdempotencyKey(Long buyerId, String idempotencyKey);
 
+    Optional<Order> findByIdempotencyKey(String idempotencyKey);
+
     @Query("SELECT DISTINCT o FROM Order o JOIN o.items item WHERE item.seller.id = :sellerId ORDER BY o.createdAt DESC")
     Page<Order> findOrdersBySellerId(@Param("sellerId") Long sellerId, Pageable pageable);
 

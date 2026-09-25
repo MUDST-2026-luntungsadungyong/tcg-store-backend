@@ -71,7 +71,7 @@ class CheckoutControllerIntegrationTests {
 
         buyer = persistUser("checkout-buyer");
         seller = persistUser("checkout-seller");
-        seller.setRole("SELLER");
+        seller.setRole("USER");
         seller.setSellerStatus("APPROVED");
         entityManager.flush();
         buyerToken = jwtService.generateToken(buyer);
@@ -172,7 +172,7 @@ class CheckoutControllerIntegrationTests {
     @Test
     void checkoutSupportsMultipleItemsFromMultipleSellers() throws Exception {
         User secondSeller = persistUser("checkout-second-seller");
-        secondSeller.setRole("SELLER");
+        secondSeller.setRole("USER");
         secondSeller.setSellerStatus("APPROVED");
         Product first = persistProduct(seller, "First", new BigDecimal("10.00"), 4, 0, "SHOW");
         Product second = persistProduct(secondSeller, "Second", new BigDecimal("7.25"), 3, 0, "SHOW");
@@ -290,8 +290,12 @@ class CheckoutControllerIntegrationTests {
         Card card = Card.builder()
             .id("checkout-card-" + UUID.randomUUID())
             .name(name)
+            .supertype("Pokemon")
             .setName("Checkout Set")
+            .cardNumber("001")
             .rarity("Rare")
+            .imageSmall("https://example.com/checkout-small.png")
+            .imageLarge("https://example.com/checkout.png")
             .build();
         entityManager.persist(card);
         Product product = Product.builder()

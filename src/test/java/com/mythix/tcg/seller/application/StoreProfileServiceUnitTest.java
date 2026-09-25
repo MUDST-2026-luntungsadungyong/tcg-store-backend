@@ -39,8 +39,11 @@ class StoreProfileServiceUnitTest {
             .id(2L)
             .email("brock@mythix.com")
             .fullName("Brock")
-            .role("SELLER")
+            .role("USER")
             .sellerStatus("APPROVED")
+            .phone("081-222-3333")
+            .contactLine("pewter_line")
+            .contactFacebook("pewter_fb")
             .build();
 
         sampleProfile = SellerProfile.builder()
@@ -48,9 +51,6 @@ class StoreProfileServiceUnitTest {
             .user(seller)
             .shopName("Pewter Gym Cards")
             .shopDescription("Rock solid card vault")
-            .contactPhone("081-222-3333")
-            .contactLine("pewter_line")
-            .contactFacebook("pewter_fb")
             .verifiedAt(LocalDateTime.now())
             .build();
     }
@@ -96,6 +96,6 @@ class StoreProfileServiceUnitTest {
         assertThat(response).isNotNull();
         assertThat(sampleProfile.getShopName()).isEqualTo("New Shop Name");
         assertThat(sampleProfile.getShopDescription()).isEqualTo("New Description");
-        assertThat(sampleProfile.getContactPhone()).isEqualTo("089-000-1111");
+        assertThat(sampleProfile.getUser().getPhone()).isEqualTo("089-000-1111");
     }
 }

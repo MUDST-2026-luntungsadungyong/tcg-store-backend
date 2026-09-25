@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "cart_items", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_user_product", columnNames = {"user_id", "product_id"})
+    @UniqueConstraint(name = "uq_cart_user_local_card", columnNames = {"user_id", "local_card_id"})
 })
 @Getter
 @Setter
@@ -29,7 +29,7 @@ public class CartItem {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false)
+    @JoinColumn(name = "local_card_id", nullable = false)
     private Product product;
 
     @Column(nullable = false)

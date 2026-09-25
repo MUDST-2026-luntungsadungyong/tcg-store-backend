@@ -40,7 +40,7 @@ public class SellerOrderDto {
 
     public record UpdateOrderStatusRequest(
         @NotBlank(message = "Status is required")
-        @Pattern(regexp = "PENDING|FULFILLED|CANCELLED", message = "Status must be PENDING, FULFILLED, or CANCELLED")
+        @Pattern(regexp = "(?i)PENDING|PAID|FULFILLED|CANCELLED", message = "Status must be PENDING, PAID, FULFILLED, or CANCELLED")
         String status
     ) {}
 

@@ -168,8 +168,12 @@ class PublicCollectionControllerIntegrationTests {
         return cardRepository.save(Card.builder()
                 .id(id)
                 .name(id)
+                .supertype("Pokemon")
+                .setName("Public Collection Set")
+                .cardNumber(id)
                 .rarity(rarity)
                 .imageSmall("https://example.test/" + id + ".png")
+                .imageLarge("https://example.test/" + id + "-large.png")
                 .build());
     }
 
@@ -177,7 +181,7 @@ class PublicCollectionControllerIntegrationTests {
         collectionRepository.save(CollectionItem.builder()
                 .user(user)
                 .card(card)
-                .condition("Near Mint")
+                .condition("NM")
                 .language("EN")
                 .quantity(quantity)
                 .build());

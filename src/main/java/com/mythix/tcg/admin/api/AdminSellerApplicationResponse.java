@@ -20,8 +20,8 @@ public record AdminSellerApplicationResponse(
     public static AdminSellerApplicationResponse from(SellerProfile profile) {
         return new AdminSellerApplicationResponse(
             String.valueOf(profile.getId()), String.valueOf(profile.getUser().getId()), profile.getUser().getFullName(),
-            profile.getUser().getEmail(), profile.getShopName(), profile.getShopDescription(), profile.getContactPhone(),
-            profile.getContactLine(), profile.getContactFacebook(), profile.getUser().getSellerStatus(), profile.getRequestedAt()
+            profile.getUser().getEmail(), profile.getShopName(), profile.getShopDescription(), profile.getUser().getPhone(),
+            profile.getUser().getContactLine(), profile.getUser().getContactFacebook(), profile.getUser().getSellerStatus(), profile.getRequestedAt()
         );
     }
 }

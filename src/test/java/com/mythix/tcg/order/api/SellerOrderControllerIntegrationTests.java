@@ -108,7 +108,11 @@ class SellerOrderControllerIntegrationTests {
         card = Card.builder()
                 .id("card-001")
                 .name("Blue-Eyes White Dragon")
+                .supertype("YGO")
+                .setName("Legend of Blue Eyes")
+                .cardNumber("001")
                 .rarity("Ultra Rare")
+                .imageSmall("https://example.com/blueeyes-small.png")
                 .imageLarge("https://example.com/blueeyes.png")
                 .build();
         card = cardRepository.save(card);

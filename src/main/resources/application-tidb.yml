@@ -1,3 +1,7 @@
+# The TiDB profile must connect to the migrated Revision 5 database. Keep the
+# full JDBC URL in an environment variable so hostnames and credentials never
+# become part of the repository.
+# Expected catalog: tcg_store_revision5 (not the legacy tcg_store_test).
 spring:
   datasource:
     url: ${TIDB_JDBC_URL}

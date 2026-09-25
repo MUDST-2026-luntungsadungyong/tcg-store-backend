@@ -20,7 +20,7 @@ public interface SellerProductRepository extends JpaRepository<Product, Long> {
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @EntityGraph(attributePaths = "card")
-    @Query("select p from Product p where p.id = :productId and p.status <> 'DELETED'")
+    @Query("select p from Product p where p.id = :productId")
     Optional<Product> findActiveByIdForUpdate(@Param("productId") Long productId);
 
     boolean existsByCustomImageUrlAndIdNot(String customImageUrl, Long productId);

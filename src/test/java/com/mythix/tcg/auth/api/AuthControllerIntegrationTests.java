@@ -144,7 +144,7 @@ class AuthControllerIntegrationTests {
         mockMvc.perform(post("/api/sellers/verify").header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content(request))
             .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.code").value("SELLER_ALREADY_VERIFIED"));
+            .andExpect(jsonPath("$.code").value("SELLER_ALREADY_APPROVED"));
     }
 
     @Test

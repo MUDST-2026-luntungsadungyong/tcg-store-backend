@@ -92,6 +92,7 @@ class CollectionControllerIntegrationTests {
         card = Card.builder()
                 .id("card-pikachu")
                 .name("Pikachu")
+                .supertype("Pokemon")
                 .setName("Jungle")
                 .cardNumber("60/64")
                 .rarity("Common")
