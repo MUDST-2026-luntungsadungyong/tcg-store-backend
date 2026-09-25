@@ -25,6 +25,7 @@ target/
 .env
 .env.*
 !.env.example
+!.env.tidb.example
 application-local.yml
 
 ### Operating systems ###

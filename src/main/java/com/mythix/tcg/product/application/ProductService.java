@@ -4,6 +4,7 @@ import com.mythix.tcg.product.api.ProductPageResponse;
 import com.mythix.tcg.product.api.ProductResponse;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -15,16 +16,20 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final SellerProfileRepository sellerProfileRepository;
 
     @Transactional(readOnly = true)
     public ProductPageResponse browseProducts(String search, String rarity, String stage, String condition,
-                                             BigDecimal minPrice, BigDecimal maxPrice, Pageable pageable) {
+                                             String cardId, Long sellerId, BigDecimal minPrice,
+                                             BigDecimal maxPrice, Pageable pageable) {
         Specification<Product> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -51,6 +56,14 @@ public class ProductService {
                 predicates.add(cb.equal(cb.lower(root.get("condition")), condition.trim().toLowerCase()));
             }
 
+            if (cardId != null && !cardId.isBlank()) {
+                predicates.add(cb.equal(root.get("card").get("id"), cardId.trim()));
+            }
+
+            if (sellerId != null) {
+                predicates.add(cb.equal(root.get("seller").get("id"), sellerId));
+            }
+
             // Filter by price range
             if (minPrice != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("price"), minPrice));
@@ -63,7 +76,17 @@ public class ProductService {
         };
 
         Page<Product> page = productRepository.findAll(spec, pageable);
-        Page<ProductResponse> dtoPage = page.map(ProductResponse::fromEntity);
+        List<Long> sellerIds = page.getContent().stream()
+                .map(Product::getSeller)
+                .filter(seller -> seller != null && seller.getId() != null)
+                .map(seller -> seller.getId())
+                .distinct()
+                .toList();
+        Map<Long, String> shopNames = sellerProfileRepository.findByUserIdIn(sellerIds).stream()
+                .collect(Collectors.toMap(profile -> profile.getUser().getId(), profile -> profile.getShopName()));
+        Page<ProductResponse> dtoPage = page.map(product -> ProductResponse.fromEntity(
+                product,
+                product.getSeller() == null ? null : shopNames.get(product.getSeller().getId())));
         return ProductPageResponse.fromPage(dtoPage);
     }
 
@@ -71,6 +94,15 @@ public class ProductService {
     public ProductResponse getProductById(Long id) {
         Product product = productRepository.findByIdAndStatus(id, "SHOW")
                 .orElseThrow(() -> new ProductNotFoundException("Product with ID " + id + " not found or is not publicly visible"));
-        return ProductResponse.fromEntity(product);
+        return toResponse(product);
+    }
+
+    private ProductResponse toResponse(Product product) {
+        String shopName = product.getSeller() == null || product.getSeller().getId() == null
+                ? null
+                : sellerProfileRepository.findByUserId(product.getSeller().getId())
+                    .map(profile -> profile.getShopName())
+                    .orElse(null);
+        return ProductResponse.fromEntity(product, shopName);
     }
 }

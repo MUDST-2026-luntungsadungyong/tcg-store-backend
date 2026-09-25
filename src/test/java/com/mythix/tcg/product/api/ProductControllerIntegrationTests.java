@@ -7,6 +7,7 @@ import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.seller.domain.SellerProfile;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -170,6 +171,43 @@ class ProductControllerIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items", hasSize(1)))
                 .andExpect(jsonPath("$.items[0].name").value("Charizard VMAX"));
+    }
+
+    @Test
+    void browseProducts_ShouldFilterByCardAndSellerAndExposeStoreIdentity() throws Exception {
+        sellerProfileRepository.save(SellerProfile.builder()
+                .user(seller)
+                .shopName("Ash Vault")
+                .build());
+
+        productRepository.save(Product.builder()
+                .seller(seller)
+                .card(pikachuCard)
+                .price(new BigDecimal("1200.00"))
+                .condition("Near Mint")
+                .status("SHOW")
+                .onHand(3)
+                .reserved(0)
+                .build());
+
+        productRepository.save(Product.builder()
+                .seller(seller)
+                .card(charizardCard)
+                .price(new BigDecimal("300.00"))
+                .condition("Mint")
+                .status("SHOW")
+                .onHand(2)
+                .reserved(0)
+                .build());
+
+        mockMvc.perform(get("/api/products")
+                        .param("cardId", pikachuCard.getId())
+                        .param("sellerId", String.valueOf(seller.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].cardId").value(pikachuCard.getId()))
+                .andExpect(jsonPath("$.items[0].sellerId").value(String.valueOf(seller.getId())))
+                .andExpect(jsonPath("$.items[0].sellerName").value("Ash Vault"));
     }
 
     @Test
