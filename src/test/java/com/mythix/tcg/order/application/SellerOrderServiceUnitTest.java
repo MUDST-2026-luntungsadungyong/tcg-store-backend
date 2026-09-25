@@ -48,7 +48,7 @@ class SellerOrderServiceUnitTest {
     @BeforeEach
     void setUp() {
         buyer = User.builder().id(1L).email("buyer@mythix.com").fullName("Ash").phone("081-111-1111").build();
-        seller = User.builder().id(2L).email("seller@mythix.com").fullName("Brock").phone("089-999-9999").role("SELLER").sellerStatus("VERIFIED").build();
+        seller = User.builder().id(2L).email("seller@mythix.com").fullName("Brock").phone("089-999-9999").role("SELLER").sellerStatus("APPROVED").build();
 
         Card card = Card.builder().id("pop4-4").name("Mew").build();
         Product product = Product.builder().id(10L).seller(seller).card(card).price(new BigDecimal("1250.00")).cost(new BigDecimal("800.00")).build();

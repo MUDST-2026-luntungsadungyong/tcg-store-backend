@@ -2,6 +2,8 @@ package com.mythix.tcg.common.api;
 
 import com.mythix.tcg.auth.application.DuplicateEmailException;
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
+import com.mythix.tcg.admin.application.SellerApplicationNotFoundException;
+import com.mythix.tcg.admin.application.SellerApplicationStateException;
 import com.mythix.tcg.cart.application.CartItemNotFoundException;
 import com.mythix.tcg.cart.application.CartListingNotAvailableException;
 import com.mythix.tcg.cart.application.CartListingNotFoundException;
@@ -141,6 +143,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> sellerAlreadyVerified(SellerAlreadyVerifiedException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(new ApiError("SELLER_ALREADY_VERIFIED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(SellerApplicationNotFoundException.class)
+    public ResponseEntity<ApiError> sellerApplicationNotFound(SellerApplicationNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("SELLER_APPLICATION_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(SellerApplicationStateException.class)
+    public ResponseEntity<ApiError> sellerApplicationState(SellerApplicationStateException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("SELLER_APPLICATION_NOT_PENDING", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(com.mythix.tcg.product.application.ProductNotFoundException.class)

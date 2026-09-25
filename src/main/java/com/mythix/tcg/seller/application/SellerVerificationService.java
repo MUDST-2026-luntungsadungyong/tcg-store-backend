@@ -24,12 +24,11 @@ public class SellerVerificationService {
         User user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
         if (sellerProfileRepository.existsByUserId(userId)) throw new SellerAlreadyVerifiedException();
 
-        user.setRole("SELLER");
-        user.setSellerStatus("VERIFIED");
+        user.setSellerStatus("PENDING");
         SellerProfile profile = sellerProfileRepository.save(SellerProfile.builder()
             .user(user).shopName(request.shopName().trim()).shopDescription(trimToNull(request.shopDescription()))
             .contactPhone(trimToNull(request.phone())).contactLine(trimToNull(request.line()))
-            .contactFacebook(trimToNull(request.facebook())).verifiedAt(LocalDateTime.now()).build());
+            .contactFacebook(trimToNull(request.facebook())).requestedAt(LocalDateTime.now()).build());
         return SellerVerificationResponse.from(profile);
     }
 

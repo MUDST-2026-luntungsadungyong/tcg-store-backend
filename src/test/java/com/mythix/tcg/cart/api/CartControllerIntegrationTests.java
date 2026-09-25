@@ -60,7 +60,7 @@ class CartControllerIntegrationTests {
     void setUp() {
         buyer = persistUser("cart-buyer@example.com", "USER", "NONE");
         otherBuyer = persistUser("cart-other@example.com", "USER", "NONE");
-        seller = persistUser("cart-seller@example.com", "SELLER", "VERIFIED");
+        seller = persistUser("cart-seller@example.com", "SELLER", "APPROVED");
         entityManager.flush();
         buyerToken = jwtService.generateToken(buyer);
         otherBuyerToken = jwtService.generateToken(otherBuyer);

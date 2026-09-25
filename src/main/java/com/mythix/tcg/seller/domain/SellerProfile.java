@@ -43,6 +43,23 @@ public class SellerProfile {
     @Column(name = "verified_at")
     private LocalDateTime verifiedAt;
 
+    @Column(name = "requested_at")
+    private LocalDateTime requestedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approved_by")
+    private User approvedBy;
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "rejected_by")
+    private User rejectedBy;
+
+    @Column(name = "rejection_reason")
+    private String rejectionReason;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
