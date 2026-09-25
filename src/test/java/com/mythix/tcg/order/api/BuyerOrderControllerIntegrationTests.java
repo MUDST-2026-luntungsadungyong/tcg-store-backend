@@ -80,7 +80,7 @@ class BuyerOrderControllerIntegrationTests {
         // Seller
         var sellerAuth = authService.register(new RegisterRequest("Seller A", "seller_a@example.com", "password123"));
         seller = userRepository.findById(Long.valueOf(sellerAuth.user().id())).orElseThrow();
-        seller.setSellerStatus("VERIFIED");
+        seller.setSellerStatus("APPROVED");
         userRepository.save(seller);
 
         // Buyer

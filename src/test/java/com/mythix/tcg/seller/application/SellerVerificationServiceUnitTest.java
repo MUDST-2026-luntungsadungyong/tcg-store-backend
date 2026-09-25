@@ -51,7 +51,7 @@ class SellerVerificationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("verify() - ผู้ใช้ทั่วไปยื่นขอเป็นผู้ขายสำเร็จ ระบบอัปเดต Role เป็น SELLER และบันทึก Profile")
+    @DisplayName("verify() - ผู้ใช้ทั่วไปยื่นคำขอเป็นผู้ขายสำเร็จและอยู่ในสถานะรออนุมัติ")
     void verify_success() {
         // Arrange
         SellerVerificationRequest request = new SellerVerificationRequest(
@@ -72,7 +72,7 @@ class SellerVerificationServiceUnitTest {
             .contactPhone("089-999-8888")
             .contactLine("brock_line")
             .contactFacebook("brock_fb")
-            .verifiedAt(LocalDateTime.now())
+            .requestedAt(LocalDateTime.now())
             .build();
         when(sellerProfileRepository.save(any(SellerProfile.class))).thenReturn(savedProfile);
 
@@ -82,10 +82,10 @@ class SellerVerificationServiceUnitTest {
         // Assert
         assertThat(response).isNotNull();
         assertThat(response.shopName()).isEqualTo("Pewter City Cards");
-        assertThat(response.sellerStatus()).isEqualTo("VERIFIED");
+        assertThat(response.sellerStatus()).isEqualTo("PENDING");
 
-        assertThat(sampleUser.getRole()).isEqualTo("SELLER");
-        assertThat(sampleUser.getSellerStatus()).isEqualTo("VERIFIED");
+        assertThat(sampleUser.getRole()).isEqualTo("USER");
+        assertThat(sampleUser.getSellerStatus()).isEqualTo("PENDING");
 
         ArgumentCaptor<SellerProfile> profileCaptor = ArgumentCaptor.forClass(SellerProfile.class);
         verify(sellerProfileRepository).save(profileCaptor.capture());

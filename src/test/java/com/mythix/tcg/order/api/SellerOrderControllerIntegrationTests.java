@@ -90,7 +90,7 @@ class SellerOrderControllerIntegrationTests {
         var sellerAuth = authService.register(new RegisterRequest("Seller John", "seller@example.com", "password123"));
         sellerToken = sellerAuth.token();
         seller = userRepository.findById(Long.valueOf(sellerAuth.user().id())).orElseThrow();
-        seller.setSellerStatus("VERIFIED");
+        seller.setSellerStatus("APPROVED");
         userRepository.save(seller);
 
         // 2. Create other seller

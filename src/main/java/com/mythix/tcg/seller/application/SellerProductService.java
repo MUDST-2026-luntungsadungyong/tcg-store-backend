@@ -160,8 +160,8 @@ public class SellerProductService {
 
     private User requireSeller(Long sellerId) {
         User seller = userRepository.findById(sellerId).orElseThrow(SellerRequiredException::new);
-        boolean verifiedSeller = "VERIFIED".equalsIgnoreCase(seller.getSellerStatus());
-        if (!verifiedSeller) {
+        boolean approvedSeller = "APPROVED".equalsIgnoreCase(seller.getSellerStatus());
+        if (!approvedSeller) {
             throw new SellerRequiredException();
         }
         return seller;

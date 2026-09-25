@@ -38,6 +38,6 @@ public class SellerInventoryAuthorizationManager
     }
 
     private boolean isSeller(User user) {
-        return "VERIFIED".equalsIgnoreCase(user.getSellerStatus());
+        return "APPROVED".equalsIgnoreCase(user.getSellerStatus());
     }
 }

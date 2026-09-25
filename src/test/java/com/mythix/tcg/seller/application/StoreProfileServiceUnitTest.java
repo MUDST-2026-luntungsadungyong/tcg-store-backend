@@ -40,7 +40,7 @@ class StoreProfileServiceUnitTest {
             .email("brock@mythix.com")
             .fullName("Brock")
             .role("SELLER")
-            .sellerStatus("VERIFIED")
+            .sellerStatus("APPROVED")
             .build();
 
         sampleProfile = SellerProfile.builder()

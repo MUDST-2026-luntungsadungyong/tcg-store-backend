@@ -67,7 +67,7 @@ class CheckoutConcurrencyPostgresTests {
                 .password("hash").fullName("Buyer B").role("USER").sellerStatus("NONE").build());
             User seller = userRepository.save(User.builder()
                 .email("concurrency-seller-" + UUID.randomUUID() + "@example.com")
-                .password("hash").fullName("Seller").role("SELLER").sellerStatus("VERIFIED").build());
+                .password("hash").fullName("Seller").role("SELLER").sellerStatus("APPROVED").build());
             Card card = cardRepository.save(Card.builder()
                 .id("concurrency-card-" + UUID.randomUUID()).name("Rare Card").build());
             Product product = productRepository.save(Product.builder()

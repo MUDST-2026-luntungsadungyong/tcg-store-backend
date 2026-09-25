@@ -83,8 +83,8 @@ class SellerProductControllerIntegrationTests {
 
     @BeforeEach
     void seedUsers() {
-        seller = persistUser("seller-one@example.com", "SELLER", "VERIFIED");
-        otherSeller = persistUser("seller-two@example.com", "SELLER", "VERIFIED");
+        seller = persistUser("seller-one@example.com", "SELLER", "APPROVED");
+        otherSeller = persistUser("seller-two@example.com", "SELLER", "APPROVED");
         customer = persistUser("customer@example.com", "USER", "NONE");
         persistSellerProfile(seller, "Seller One");
         persistSellerProfile(otherSeller, "Seller Two");
@@ -112,8 +112,8 @@ class SellerProductControllerIntegrationTests {
     }
 
     @Test
-    void verifiedSellerStatusAllowsAStaleUserRoleToken() throws Exception {
-        User verifiedSeller = persistUser("verified-user-role@example.com", "USER", "VERIFIED");
+    void approvedSellerStatusAllowsAStaleUserRoleToken() throws Exception {
+        User verifiedSeller = persistUser("verified-user-role@example.com", "USER", "APPROVED");
         persistSellerProfile(verifiedSeller, "Verified Legacy Seller");
         entityManager.flush();
 
