@@ -31,6 +31,13 @@ TiDB speaks the MySQL protocol, not PostgreSQL. Moving this application therefor
 - `src/main/resources/application-tidb.yml`: MySQL driver, TiDB Hibernate dialect, TLS connection, UTC, and a small pool.
 - `infra/tidb/init/01-schema.sql`: TiDB-compatible schema matching the current JPA entities.
 - `infra/tidb/init/02-test-data.sql`: two test accounts and three sample listings.
+- `infra/tidb/migrations/001_revision5_schema.sql`: TiDB-compatible Revision 5 DDL
+  derived from `tcg-store-document/docs/DATABASE_DESIGN.md`.
+- `infra/tidb/migrations/002_revision5_data.sql`: idempotent copy from the legacy
+  `tcg_store_test` fixtures into `tcg_store_revision5`; the source database is not
+  modified.
+- `docs/tidb-revision5-schema-reconciliation.md`: source-of-truth comparison,
+  mapping decisions, and TiDB verification evidence.
 
 ## One-time console setup
 
@@ -68,6 +75,28 @@ The Starter plan requires TLS. Java can normally verify the Let's Encrypt certif
 5. Export real PostgreSQL data to normalized CSV and import in parent-to-child order. For a small test data set, CSV is simpler than AWS DMS.
 6. Compare row counts and money totals per table before switching the shared test backend.
 7. Keep rollback as a configuration change back to the PostgreSQL profile until the TiDB soak test is complete.
+
+### Revision 5 reconciliation
+
+The database design document defines ten tables using `global_cards` and
+`local_cards`, plus KYC, audit-log, financial-order, and order-timeline fields.
+The original TiDB test schema created the legacy `cards` and `products` model
+used by the current backend. The reconciliation is therefore an expand migration:
+
+1. Run `001_revision5_schema.sql` in TiDB.
+2. Run `002_revision5_data.sql` in TiDB.
+3. Compare row counts and key totals between `tcg_store_test` and
+   `tcg_store_revision5`.
+4. Keep the legacy database available until the application entities and runtime
+   profile are cut over in a separately reviewed change.
+
+Current migration verification: all ten target tables exist, mapped row counts
+match the legacy fixtures, order totals reconcile to `0.00`, and all checked
+foreign-key orphan counts are `0`.
+
+The migration intentionally does not drop or rename objects in `tcg_store_test`.
+Rollback is a configuration change back to the existing test database; removal of
+`tcg_store_revision5` requires a separate, explicitly approved destructive action.
 
 ## Known blockers before cutover
 
