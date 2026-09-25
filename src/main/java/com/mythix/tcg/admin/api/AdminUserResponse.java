@@ -1,0 +1,1 @@
+package com.mythix.tcg.admin.api; import com.mythix.tcg.user.domain.User; public record AdminUserResponse(String id,String name,String email,String role,String sellerStatus){public static AdminUserResponse from(User u){return new AdminUserResponse(String.valueOf(u.getId()),u.getFullName(),u.getEmail(),u.getRole(),u.getSellerStatus());}}

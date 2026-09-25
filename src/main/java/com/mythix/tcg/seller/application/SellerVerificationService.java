@@ -22,18 +22,18 @@ public class SellerVerificationService {
     @Transactional
     public SellerVerificationResponse verify(Long userId, SellerVerificationRequest request) {
         User user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
-        if (sellerProfileRepository.existsByUserId(userId)) throw new SellerAlreadyApprovedException();
+        if (sellerProfileRepository.existsByUserId(userId)) throw new SellerAlreadyVerifiedException();
 
-        // Revision 5 keeps seller capability separate from the two-value user role.
+        // Seller applications require admin approval before listing inventory.
         user.setRole("USER");
-        user.setSellerStatus("APPROVED");
+        user.setSellerStatus("PENDING");
         user.setPhone(trimToNull(request.phone()));
         user.setContactLine(trimToNull(request.line()));
         user.setContactFacebook(trimToNull(request.facebook()));
         LocalDateTime now = LocalDateTime.now();
         SellerProfile profile = sellerProfileRepository.save(SellerProfile.builder()
             .user(user).shopName(request.shopName().trim()).shopDescription(trimToNull(request.shopDescription()))
-            .requestedAt(now).verifiedAt(now).build());
+            .requestedAt(now).build());
         return SellerVerificationResponse.from(profile);
     }
 

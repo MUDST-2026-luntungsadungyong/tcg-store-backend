@@ -112,7 +112,7 @@ class SellerProductControllerIntegrationTests {
     }
 
     @Test
-    void verifiedSellerStatusAllowsAStaleUserRoleToken() throws Exception {
+    void approvedSellerStatusAllowsAStaleUserRoleToken() throws Exception {
         User verifiedSeller = persistUser("verified-user-role@example.com", "USER", "APPROVED");
         persistSellerProfile(verifiedSeller, "Verified Legacy Seller");
         entityManager.flush();

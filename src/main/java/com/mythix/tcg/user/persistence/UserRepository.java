@@ -9,11 +9,16 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
+import java.util.List;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
+    long countByRole(String role);
+    long countBySellerStatus(String sellerStatus);
+    long countByRoleAndSellerStatus(String role, String sellerStatus);
+    List<User> findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCaseOrderByCreatedAtDesc(String email, String name);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :id")

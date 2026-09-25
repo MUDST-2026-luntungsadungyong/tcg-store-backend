@@ -51,7 +51,7 @@ class SellerVerificationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("verify() - ผู้ใช้ทั่วไปยื่นขอเป็นผู้ขายสำเร็จ ระบบอัปเดตสถานะ APPROVED และบันทึก Profile")
+    @DisplayName("verify() - ผู้ใช้ทั่วไปยื่นคำขอเป็นผู้ขายสำเร็จและอยู่ในสถานะรออนุมัติ")
     void verify_success() {
         // Arrange
         SellerVerificationRequest request = new SellerVerificationRequest(
@@ -69,7 +69,7 @@ class SellerVerificationServiceUnitTest {
             .user(sampleUser)
             .shopName("Pewter City Cards")
             .shopDescription("Authentic Pokémon Cards")
-            .verifiedAt(LocalDateTime.now())
+            .requestedAt(LocalDateTime.now())
             .build();
         when(sellerProfileRepository.save(any(SellerProfile.class))).thenReturn(savedProfile);
 
@@ -79,10 +79,10 @@ class SellerVerificationServiceUnitTest {
         // Assert
         assertThat(response).isNotNull();
         assertThat(response.shopName()).isEqualTo("Pewter City Cards");
-        assertThat(response.sellerStatus()).isEqualTo("APPROVED");
+        assertThat(response.sellerStatus()).isEqualTo("PENDING");
 
         assertThat(sampleUser.getRole()).isEqualTo("USER");
-        assertThat(sampleUser.getSellerStatus()).isEqualTo("APPROVED");
+        assertThat(sampleUser.getSellerStatus()).isEqualTo("PENDING");
         assertThat(sampleUser.getPhone()).isEqualTo("089-999-8888");
         assertThat(sampleUser.getContactLine()).isEqualTo("brock_line");
         assertThat(sampleUser.getContactFacebook()).isEqualTo("brock_fb");

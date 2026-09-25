@@ -7,9 +7,11 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.EntityGraph;
 
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
 
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
@@ -41,4 +43,13 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<Order> findByBuyerIdAndStatusOrderByCreatedAtDesc(Long buyerId, String status, Pageable pageable);
 
     Optional<Order> findByIdAndBuyerId(Long id, Long buyerId);
+
+    @Query("select coalesce(sum(o.totalAmount), 0) from Order o")
+    BigDecimal totalOrderAmount();
+    @Query("select coalesce(sum(o.totalAmount), 0) from Order o where o.status in ('PAID','FULFILLED')") BigDecimal paidOrFulfilledGmv();
+    @EntityGraph(attributePaths = "buyer")
+    Page<Order> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    @EntityGraph(attributePaths = "buyer")
+    Page<Order> findAllByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
 }
