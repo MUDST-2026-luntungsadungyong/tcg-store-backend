@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: ${TIDB_JDBC_URL}
+    username: ${TIDB_USER}
+    password: ${TIDB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${TIDB_POOL_MAX_SIZE:5}
+      minimum-idle: ${TIDB_POOL_MIN_IDLE:0}
+      connection-timeout: 10000
+      validation-timeout: 5000
+  jpa:
+    database-platform: org.hibernate.dialect.TiDBDialect
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+logging:
+  level:
+    org.hibernate.SQL: ${TIDB_SQL_LOG_LEVEL:WARN}
