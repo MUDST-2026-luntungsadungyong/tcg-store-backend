@@ -15,7 +15,9 @@ import java.math.BigDecimal;
 public class ProductResponse {
 
     private String id;
+    private String cardId;
     private String sellerId;
+    private String sellerName;
     private String name;
     private String game;
     private String image;
@@ -35,6 +37,10 @@ public class ProductResponse {
     private String types;
 
     public static ProductResponse fromEntity(Product product) {
+        return fromEntity(product, null);
+    }
+
+    public static ProductResponse fromEntity(Product product, String sellerName) {
         if (product == null) {
             return null;
         }
@@ -54,8 +60,10 @@ public class ProductResponse {
 
         return ProductResponse.builder()
                 .id(product.getId() != null ? String.valueOf(product.getId()) : null)
+                .cardId(product.getCard() != null ? product.getCard().getId() : null)
                 .sellerId(product.getSeller() != null && product.getSeller().getId() != null
                         ? String.valueOf(product.getSeller().getId()) : null)
+                .sellerName(sellerName)
                 .name(product.getCard() != null ? product.getCard().getName() : null)
                 .game("Pokemon")
                 .image(image)
