@@ -133,18 +133,18 @@ class AuthControllerIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON).content(request))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.shopName").value("Mythix Vault"))
-            .andExpect(jsonPath("$.sellerStatus").value("VERIFIED"))
+            .andExpect(jsonPath("$.sellerStatus").value("APPROVED"))
             .andExpect(jsonPath("$.verifiedAt").isNotEmpty());
 
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.role").value("SELLER"))
-            .andExpect(jsonPath("$.sellerStatus").value("VERIFIED"));
+            .andExpect(jsonPath("$.role").value("USER"))
+            .andExpect(jsonPath("$.sellerStatus").value("APPROVED"));
 
         mockMvc.perform(post("/api/sellers/verify").header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content(request))
             .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.code").value("SELLER_ALREADY_VERIFIED"));
+            .andExpect(jsonPath("$.code").value("SELLER_ALREADY_APPROVED"));
     }
 
     @Test

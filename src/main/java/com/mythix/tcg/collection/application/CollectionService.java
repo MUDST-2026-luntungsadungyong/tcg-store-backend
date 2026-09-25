@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -50,27 +51,24 @@ public class CollectionService {
 
         Card card = resolveCard(request);
         int quantity = request.getQuantity() != null ? request.getQuantity() : 1;
+        String condition = normalizeCondition(request.getCondition());
+        String language = normalizeLanguage(request.getLanguage());
 
-        CollectionItem item = collectionRepository.findByUserIdAndCardId(userId, card.getId())
+        CollectionItem item = collectionRepository.findByUserIdAndCardIdAndConditionAndLanguage(
+                    userId, card.getId(), condition, language)
                 .map(existing -> {
                     try {
                         existing.setQuantity(Math.addExact(existing.getQuantity(), quantity));
                     } catch (ArithmeticException exception) {
                         throw new CollectionValidationException("quantity", "quantity is too large");
                     }
-                    if (request.getCondition() != null) {
-                        existing.setCondition(request.getCondition());
-                    }
-                    if (request.getLanguage() != null) {
-                        existing.setLanguage(request.getLanguage());
-                    }
                     return existing;
                 })
                 .orElseGet(() -> CollectionItem.builder()
                         .user(user)
                         .card(card)
-                        .condition(request.getCondition() != null ? request.getCondition() : "Near Mint")
-                        .language(request.getLanguage() != null ? request.getLanguage() : "EN")
+                        .condition(condition)
+                        .language(language)
                         .quantity(quantity)
                         .build()
                 );
@@ -151,5 +149,29 @@ public class CollectionService {
                 .acquiredAt(formattedDate)
                 .listing(listingDto)
                 .build();
+    }
+
+    private String normalizeCondition(String condition) {
+        String value = condition == null ? "" : condition.trim();
+        if (value.isEmpty()) {
+            return "NM";
+        }
+        return switch (value.toUpperCase(Locale.ROOT).replace('-', ' ').replace('_', ' ')) {
+            case "NM", "NEAR MINT" -> "NM";
+            case "LP", "LIGHTLY PLAYED" -> "LP";
+            case "MP", "MODERATELY PLAYED" -> "MP";
+            case "HP", "HEAVILY PLAYED" -> "HP";
+            case "DMG", "DAMAGED" -> "DMG";
+            default -> throw new CollectionValidationException(
+                    "condition", "Condition must be NM, LP, MP, HP, or DMG");
+        };
+    }
+
+    private String normalizeLanguage(String language) {
+        String value = language == null ? "EN" : language.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("EN", "JP", "TH").contains(value)) {
+            throw new CollectionValidationException("language", "Language must be EN, JP, or TH");
+        }
+        return value;
     }
 }

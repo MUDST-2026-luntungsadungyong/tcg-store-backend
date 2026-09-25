@@ -24,7 +24,14 @@ public interface CollectionRepository extends JpaRepository<CollectionItem, Long
 
     Optional<CollectionItem> findByIdAndUserId(Long id, Long userId);
 
-    Optional<CollectionItem> findByUserIdAndCardId(Long userId, String cardId);
+    @Query("select ci from CollectionItem ci where ci.user.id = :userId and ci.card.id = :cardId "
+        + "and ci.condition = :condition and ci.language = :language")
+    Optional<CollectionItem> findByUserIdAndCardIdAndConditionAndLanguage(
+            @Param("userId") Long userId,
+            @Param("cardId") String cardId,
+            @Param("condition") String condition,
+            @Param("language") String language
+    );
 
     @Query("""
             select ci.user.id as userId,

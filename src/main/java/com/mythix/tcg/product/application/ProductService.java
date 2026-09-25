@@ -28,7 +28,7 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public ProductPageResponse browseProducts(String search, String rarity, String stage, String condition,
-                                             String cardId, Long sellerId, BigDecimal minPrice,
+                                             String language, String cardId, Long sellerId, BigDecimal minPrice,
                                              BigDecimal maxPrice, Pageable pageable) {
         Specification<Product> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -53,7 +53,11 @@ public class ProductService {
 
             // Filter by condition (case-insensitive)
             if (condition != null && !condition.isBlank()) {
-                predicates.add(cb.equal(cb.lower(root.get("condition")), condition.trim().toLowerCase()));
+                predicates.add(cb.equal(root.get("condition"), normalizeCondition(condition)));
+            }
+
+            if (language != null && !language.isBlank()) {
+                predicates.add(cb.equal(root.get("language"), normalizeLanguage(language)));
             }
 
             if (cardId != null && !cardId.isBlank()) {
@@ -104,5 +108,25 @@ public class ProductService {
                     .map(profile -> profile.getShopName())
                     .orElse(null);
         return ProductResponse.fromEntity(product, shopName);
+    }
+
+    private String normalizeCondition(String condition) {
+        String value = condition.trim().toUpperCase().replace('-', ' ').replace('_', ' ');
+        return switch (value) {
+            case "NM", "NEAR MINT" -> "NM";
+            case "LP", "LIGHTLY PLAYED" -> "LP";
+            case "MP", "MODERATELY PLAYED" -> "MP";
+            case "HP", "HEAVILY PLAYED" -> "HP";
+            case "DMG", "DAMAGED" -> "DMG";
+            default -> throw new ProductFilterValidationException("condition", "Condition must be NM, LP, MP, HP, or DMG");
+        };
+    }
+
+    private String normalizeLanguage(String language) {
+        String value = language.trim().toUpperCase();
+        if (!List.of("EN", "JP", "TH").contains(value)) {
+            throw new ProductFilterValidationException("language", "Language must be EN, JP, or TH");
+        }
+        return value;
     }
 }

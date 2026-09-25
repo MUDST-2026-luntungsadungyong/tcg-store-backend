@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Pattern;
 
 public record SellerProductStatusRequest(
     @NotBlank(message = "Status is required")
-    @Pattern(regexp = "SHOW|HIDE", message = "Status must be SHOW or HIDE")
+    @Pattern(regexp = "(?i)SHOW|HIDE|OUT_OF_STOCK", message = "Status must be SHOW, HIDE, or OUT_OF_STOCK")
     String status
 ) {
 }

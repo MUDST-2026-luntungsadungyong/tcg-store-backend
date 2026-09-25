@@ -67,15 +67,21 @@ class CheckoutConcurrencyPostgresTests {
                 .password("hash").fullName("Buyer B").role("USER").sellerStatus("NONE").build());
             User seller = userRepository.save(User.builder()
                 .email("concurrency-seller-" + UUID.randomUUID() + "@example.com")
-                .password("hash").fullName("Seller").role("SELLER").sellerStatus("VERIFIED").build());
+                .password("hash").fullName("Seller").role("USER").sellerStatus("APPROVED").build());
             Card card = cardRepository.save(Card.builder()
-                .id("concurrency-card-" + UUID.randomUUID()).name("Rare Card").build());
+                .id("concurrency-card-" + UUID.randomUUID()).name("Rare Card").supertype("Pokemon")
+                .setName("Concurrency Set").cardNumber("001")
+                .imageSmall("https://example.com/concurrency-small.png")
+                .imageLarge("https://example.com/concurrency.png").build());
             Product product = productRepository.save(Product.builder()
                 .seller(seller).card(card).condition("Near Mint").language("EN")
                 .price(new BigDecimal("10.00")).cost(new BigDecimal("4.00"))
                 .onHand(1).reserved(0).status("SHOW").build());
             Card secondCard = cardRepository.save(Card.builder()
-                .id("concurrency-card-" + UUID.randomUUID()).name("Second Rare Card").build());
+                .id("concurrency-card-" + UUID.randomUUID()).name("Second Rare Card").supertype("Pokemon")
+                .setName("Concurrency Set").cardNumber("002")
+                .imageSmall("https://example.com/concurrency-second-small.png")
+                .imageLarge("https://example.com/concurrency-second.png").build());
             Product secondProduct = productRepository.save(Product.builder()
                 .seller(seller).card(secondCard).condition("Near Mint").language("EN")
                 .price(new BigDecimal("11.00")).cost(new BigDecimal("4.50"))

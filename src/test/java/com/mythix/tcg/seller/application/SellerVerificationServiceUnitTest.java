@@ -51,7 +51,7 @@ class SellerVerificationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("verify() - ผู้ใช้ทั่วไปยื่นขอเป็นผู้ขายสำเร็จ ระบบอัปเดต Role เป็น SELLER และบันทึก Profile")
+    @DisplayName("verify() - ผู้ใช้ทั่วไปยื่นขอเป็นผู้ขายสำเร็จ ระบบอัปเดตสถานะ APPROVED และบันทึก Profile")
     void verify_success() {
         // Arrange
         SellerVerificationRequest request = new SellerVerificationRequest(
@@ -69,9 +69,6 @@ class SellerVerificationServiceUnitTest {
             .user(sampleUser)
             .shopName("Pewter City Cards")
             .shopDescription("Authentic Pokémon Cards")
-            .contactPhone("089-999-8888")
-            .contactLine("brock_line")
-            .contactFacebook("brock_fb")
             .verifiedAt(LocalDateTime.now())
             .build();
         when(sellerProfileRepository.save(any(SellerProfile.class))).thenReturn(savedProfile);
@@ -82,10 +79,13 @@ class SellerVerificationServiceUnitTest {
         // Assert
         assertThat(response).isNotNull();
         assertThat(response.shopName()).isEqualTo("Pewter City Cards");
-        assertThat(response.sellerStatus()).isEqualTo("VERIFIED");
+        assertThat(response.sellerStatus()).isEqualTo("APPROVED");
 
-        assertThat(sampleUser.getRole()).isEqualTo("SELLER");
-        assertThat(sampleUser.getSellerStatus()).isEqualTo("VERIFIED");
+        assertThat(sampleUser.getRole()).isEqualTo("USER");
+        assertThat(sampleUser.getSellerStatus()).isEqualTo("APPROVED");
+        assertThat(sampleUser.getPhone()).isEqualTo("089-999-8888");
+        assertThat(sampleUser.getContactLine()).isEqualTo("brock_line");
+        assertThat(sampleUser.getContactFacebook()).isEqualTo("brock_fb");
 
         ArgumentCaptor<SellerProfile> profileCaptor = ArgumentCaptor.forClass(SellerProfile.class);
         verify(sellerProfileRepository).save(profileCaptor.capture());
@@ -95,7 +95,7 @@ class SellerVerificationServiceUnitTest {
     }
 
     @Test
-    @DisplayName("verify() - ปฏิเสธและโยน SellerAlreadyVerifiedException เมื่อผู้ใช้เป็นผู้ขายอยู่แล้ว")
+    @DisplayName("verify() - ปฏิเสธและโยน SellerAlreadyApprovedException เมื่อผู้ใช้เป็นผู้ขายอยู่แล้ว")
     void verify_alreadyVerified_throwsException() {
         // Arrange
         when(userRepository.findById(2L)).thenReturn(Optional.of(sampleUser));
@@ -104,7 +104,7 @@ class SellerVerificationServiceUnitTest {
 
         // Act & Assert
         assertThatThrownBy(() -> sellerVerificationService.verify(2L, request))
-            .isInstanceOf(SellerAlreadyVerifiedException.class);
+            .isInstanceOf(SellerAlreadyApprovedException.class);
 
         verify(sellerProfileRepository, never()).save(any());
     }

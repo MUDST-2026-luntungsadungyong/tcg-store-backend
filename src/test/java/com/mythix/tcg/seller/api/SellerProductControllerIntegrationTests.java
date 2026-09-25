@@ -83,8 +83,8 @@ class SellerProductControllerIntegrationTests {
 
     @BeforeEach
     void seedUsers() {
-        seller = persistUser("seller-one@example.com", "SELLER", "VERIFIED");
-        otherSeller = persistUser("seller-two@example.com", "SELLER", "VERIFIED");
+        seller = persistUser("seller-one@example.com", "USER", "APPROVED");
+        otherSeller = persistUser("seller-two@example.com", "USER", "APPROVED");
         customer = persistUser("customer@example.com", "USER", "NONE");
         persistSellerProfile(seller, "Seller One");
         persistSellerProfile(otherSeller, "Seller Two");
@@ -113,7 +113,7 @@ class SellerProductControllerIntegrationTests {
 
     @Test
     void verifiedSellerStatusAllowsAStaleUserRoleToken() throws Exception {
-        User verifiedSeller = persistUser("verified-user-role@example.com", "USER", "VERIFIED");
+        User verifiedSeller = persistUser("verified-user-role@example.com", "USER", "APPROVED");
         persistSellerProfile(verifiedSeller, "Verified Legacy Seller");
         entityManager.flush();
 
@@ -125,7 +125,7 @@ class SellerProductControllerIntegrationTests {
 
     @Test
     void sellerRoleWithoutVerifiedStatusCannotManageInventory() throws Exception {
-        User unverifiedSeller = persistUser("unverified@example.com", "SELLER", "NONE");
+        User unverifiedSeller = persistUser("unverified@example.com", "USER", "NONE");
         entityManager.flush();
 
         mockMvc.perform(get(PRODUCTS_PATH)
@@ -186,7 +186,7 @@ class SellerProductControllerIntegrationTests {
             "210.00",
             5,
             "SHOW",
-            "Near Mint",
+            "NM",
             "Paldea Evolved",
             "Double Rare",
             1
@@ -290,7 +290,7 @@ class SellerProductControllerIntegrationTests {
             "1200.25",
             4,
             "SHOW",
-            "Near Mint",
+            "NM",
             "Evolving Skies",
             "Secret Rare",
             0
@@ -370,7 +370,7 @@ class SellerProductControllerIntegrationTests {
             .andExpect(jsonPath("$.image").value(org.hamcrest.Matchers.matchesPattern(
                 "http://localhost:8080/uploads/products/[0-9a-f-]+\\.png"
             )))
-            .andExpect(jsonPath("$.condition").value("Unspecified"))
+            .andExpect(jsonPath("$.condition").value("NM"))
             .andExpect(jsonPath("$.stock").value(4));
     }
 
@@ -427,7 +427,7 @@ class SellerProductControllerIntegrationTests {
             "275.25",
             9,
             "HIDE",
-            "Lightly Played",
+            "LP",
             "Updated Set",
             "Illustration Rare",
             1
@@ -564,17 +564,19 @@ class SellerProductControllerIntegrationTests {
         entityManager.clear();
         Product softDeleted = entityManager.find(Product.class, productId);
         assertThat(softDeleted).isNotNull();
-        assertThat(softDeleted.getStatus()).isEqualTo("DELETED");
+        assertThat(softDeleted.getStatus()).isEqualTo("HIDE");
 
         mockMvc.perform(get(PRODUCTS_PATH).header("Authorization", bearer(sellerToken)))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$").isArray())
-            .andExpect(jsonPath("$").isEmpty());
+            .andExpect(jsonPath("$.length()").value(1))
+            .andExpect(jsonPath("$[0].status").value("HIDE"));
 
-        expectProductError(mockMvc.perform(patch(PRODUCTS_PATH + "/{id}/status", productId)
+        mockMvc.perform(patch(PRODUCTS_PATH + "/{id}/status", productId)
                 .header("Authorization", bearer(sellerToken))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\":\"SHOW\"}")), 404, "PRODUCT_NOT_FOUND");
+                .content("{\"status\":\"SHOW\"}"))
+            .andExpect(status().isNoContent());
     }
 
     private List<MockHttpServletRequestBuilder> protectedRequests(String id) {
@@ -662,6 +664,7 @@ class SellerProductControllerIntegrationTests {
             .name(name)
             .supertype(game)
             .setName(set)
+            .cardNumber("001")
             .rarity(rarity)
             .imageSmall(masterImage)
             .imageLarge(masterImage)
@@ -673,7 +676,7 @@ class SellerProductControllerIntegrationTests {
             .seller(owner)
             .card(card)
             .customImageUrl(customImage)
-            .condition("Near Mint")
+            .condition("NM")
             .language("EN")
             .price(price)
             .cost(cost)

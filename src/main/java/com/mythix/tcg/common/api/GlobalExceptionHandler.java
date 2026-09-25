@@ -9,7 +9,7 @@ import com.mythix.tcg.cart.application.CartNotAllowedException;
 import com.mythix.tcg.cart.application.CartValidationException;
 import com.mythix.tcg.cart.application.InsufficientStockException;
 import com.mythix.tcg.seller.application.InvalidSellerProductImageException;
-import com.mythix.tcg.seller.application.SellerAlreadyVerifiedException;
+import com.mythix.tcg.seller.application.SellerAlreadyApprovedException;
 import com.mythix.tcg.seller.application.SellerProductForbiddenException;
 import com.mythix.tcg.seller.application.SellerProductHasActiveOrdersException;
 import com.mythix.tcg.seller.application.SellerProductImageStorageException;
@@ -28,6 +28,7 @@ import com.mythix.tcg.order.application.CheckoutListingNotAvailableException;
 import com.mythix.tcg.order.application.CheckoutNotAllowedException;
 import com.mythix.tcg.order.application.CheckoutValidationException;
 import com.mythix.tcg.order.application.EmptyCartException;
+import com.mythix.tcg.order.application.OrderStatusValidationException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
 import org.springframework.http.HttpStatus;
@@ -137,16 +138,23 @@ public class GlobalExceptionHandler {
             .body(new ApiError("INSUFFICIENT_STOCK", exception.getMessage(), Map.of()));
     }
 
-    @ExceptionHandler(SellerAlreadyVerifiedException.class)
-    public ResponseEntity<ApiError> sellerAlreadyVerified(SellerAlreadyVerifiedException exception) {
+    @ExceptionHandler(SellerAlreadyApprovedException.class)
+    public ResponseEntity<ApiError> sellerAlreadyApproved(SellerAlreadyApprovedException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
-            .body(new ApiError("SELLER_ALREADY_VERIFIED", exception.getMessage(), Map.of()));
+            .body(new ApiError("SELLER_ALREADY_APPROVED", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(com.mythix.tcg.product.application.ProductNotFoundException.class)
     public ResponseEntity<ApiError> productNotFound(com.mythix.tcg.product.application.ProductNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
             .body(new ApiError("RESOURCE_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(com.mythix.tcg.product.application.ProductFilterValidationException.class)
+    public ResponseEntity<ApiError> productFilterValidation(
+            com.mythix.tcg.product.application.ProductFilterValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR", "Request validation failed", Map.of(exception.getField(), exception.getMessage())));
     }
 
     @ExceptionHandler(SellerRequiredException.class)
@@ -225,6 +233,12 @@ public class GlobalExceptionHandler {
             "Request validation failed",
             Map.of(exception.getField(), exception.getMessage())
         ));
+    }
+
+    @ExceptionHandler(OrderStatusValidationException.class)
+    public ResponseEntity<ApiError> orderStatusValidation(OrderStatusValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiError(
+            "VALIDATION_ERROR", "Request validation failed", Map.of(exception.getField(), exception.getMessage())));
     }
 
     @ExceptionHandler(EmptyCartException.class)

@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -29,7 +30,8 @@ public class BuyerOrderService {
     public List<BuyerOrderResponse> getBuyerOrders(Long buyerId, String status) {
         List<Order> orders;
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
-            orders = orderRepository.findByBuyerIdAndStatusOrderByCreatedAtDesc(buyerId, status.toUpperCase().trim());
+            orders = orderRepository.findByBuyerIdAndStatusOrderByCreatedAtDesc(
+                buyerId, normalizeStatus(status));
         } else {
             orders = orderRepository.findByBuyerIdOrderByCreatedAtDesc(buyerId);
         }
@@ -43,7 +45,8 @@ public class BuyerOrderService {
     public Page<BuyerOrderResponse> getBuyerOrdersPaged(Long buyerId, String status, Pageable pageable) {
         Page<Order> orders;
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
-            orders = orderRepository.findByBuyerIdAndStatusOrderByCreatedAtDesc(buyerId, status.toUpperCase().trim(), pageable);
+            orders = orderRepository.findByBuyerIdAndStatusOrderByCreatedAtDesc(
+                buyerId, normalizeStatus(status), pageable);
         } else {
             orders = orderRepository.findByBuyerIdOrderByCreatedAtDesc(buyerId, pageable);
         }
@@ -70,7 +73,7 @@ public class BuyerOrderService {
         String sellerName = null;
         if (!items.isEmpty() && items.get(0).getSeller() != null) {
             sellerId = String.valueOf(items.get(0).getSeller().getId());
-            sellerName = items.get(0).getSeller().getFullName();
+            sellerName = items.get(0).getShopNameSnapshot();
         }
 
         List<BuyerOrderItemResponse> itemResponses = items.stream()
@@ -137,5 +140,14 @@ public class BuyerOrderService {
                 .imageUrl(imageUrl)
                 .listing(listingDto)
                 .build();
+    }
+
+    private String normalizeStatus(String status) {
+        String value = status.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("PENDING", "PAID", "FULFILLED", "CANCELLED").contains(value)) {
+            throw new OrderStatusValidationException("status",
+                "Status must be PENDING, PAID, FULFILLED, or CANCELLED");
+        }
+        return value;
     }
 }

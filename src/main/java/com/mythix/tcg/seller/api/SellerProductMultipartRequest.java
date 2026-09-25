@@ -33,7 +33,7 @@ public class SellerProductMultipartRequest {
     private MultipartFile image;
 
     @NotNull(message = "Sell price is required")
-    @DecimalMin(value = "0.00", message = "Sell price must be 0 or more")
+    @DecimalMin(value = "0.01", message = "Sell price must be greater than 0")
     @Digits(integer = 10, fraction = 2, message = "Sell price must have at most 2 decimal places")
     private BigDecimal price;
 
@@ -47,11 +47,14 @@ public class SellerProductMultipartRequest {
     private Integer stock;
 
     @NotBlank(message = "Status is required")
-    @Pattern(regexp = "SHOW|HIDE", message = "Status must be SHOW or HIDE")
+    @Pattern(regexp = "(?i)SHOW|HIDE|OUT_OF_STOCK", message = "Status must be SHOW, HIDE, or OUT_OF_STOCK")
     private String status;
 
     @Size(max = 50, message = "Condition must be at most 50 characters")
     private String condition;
+
+    @Pattern(regexp = "(?i)EN|JP|TH", message = "Language must be EN, JP, or TH")
+    private String language;
 
     @Size(max = 255, message = "Set must be at most 255 characters")
     private String set;
@@ -69,6 +72,7 @@ public class SellerProductMultipartRequest {
             stock,
             status,
             condition,
+            language,
             set,
             rarity
         );

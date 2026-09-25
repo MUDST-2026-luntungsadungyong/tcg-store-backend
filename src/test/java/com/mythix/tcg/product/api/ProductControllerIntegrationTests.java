@@ -88,6 +88,7 @@ class ProductControllerIntegrationTests {
                 .setName("Promotional Cards")
                 .cardNumber("001")
                 .marketPrice(new BigDecimal("1500.00"))
+                .imageSmall("https://images.com/small.png")
                 .imageLarge("https://images.com/large.png")
                 .build());
 
@@ -100,6 +101,7 @@ class ProductControllerIntegrationTests {
                 .setName("Darkness Ablaze")
                 .cardNumber("020")
                 .marketPrice(new BigDecimal("350.00"))
+                .imageSmall("https://images.com/char-small.png")
                 .imageLarge("https://images.com/char.png")
                 .build());
     }

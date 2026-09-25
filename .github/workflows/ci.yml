@@ -27,6 +27,24 @@ jobs:
       - name: Verify Maven build & tests
         run: ./mvnw --batch-mode verify
 
+  tidb-revision5-contract:
+    name: TiDB Revision 5 Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Validate Revision 5 migration and JPA contract
+        run: ./mvnw --batch-mode -Dtest=TidbRevision5SchemaContractTests test
+
   postgres-concurrency:
     name: PostgreSQL checkout concurrency
     runs-on: ubuntu-latest

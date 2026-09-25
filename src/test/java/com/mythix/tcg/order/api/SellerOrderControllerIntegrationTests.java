@@ -90,7 +90,7 @@ class SellerOrderControllerIntegrationTests {
         var sellerAuth = authService.register(new RegisterRequest("Seller John", "seller@example.com", "password123"));
         sellerToken = sellerAuth.token();
         seller = userRepository.findById(Long.valueOf(sellerAuth.user().id())).orElseThrow();
-        seller.setSellerStatus("VERIFIED");
+        seller.setSellerStatus("APPROVED");
         userRepository.save(seller);
 
         // 2. Create other seller
@@ -108,7 +108,11 @@ class SellerOrderControllerIntegrationTests {
         card = Card.builder()
                 .id("card-001")
                 .name("Blue-Eyes White Dragon")
+                .supertype("YGO")
+                .setName("Legend of Blue Eyes")
+                .cardNumber("001")
                 .rarity("Ultra Rare")
+                .imageSmall("https://example.com/blueeyes-small.png")
                 .imageLarge("https://example.com/blueeyes.png")
                 .build();
         card = cardRepository.save(card);

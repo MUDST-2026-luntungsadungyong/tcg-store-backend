@@ -22,14 +22,18 @@ public class SellerVerificationService {
     @Transactional
     public SellerVerificationResponse verify(Long userId, SellerVerificationRequest request) {
         User user = userRepository.findById(userId).orElseThrow(InvalidCredentialsException::new);
-        if (sellerProfileRepository.existsByUserId(userId)) throw new SellerAlreadyVerifiedException();
+        if (sellerProfileRepository.existsByUserId(userId)) throw new SellerAlreadyApprovedException();
 
-        user.setRole("SELLER");
-        user.setSellerStatus("VERIFIED");
+        // Revision 5 keeps seller capability separate from the two-value user role.
+        user.setRole("USER");
+        user.setSellerStatus("APPROVED");
+        user.setPhone(trimToNull(request.phone()));
+        user.setContactLine(trimToNull(request.line()));
+        user.setContactFacebook(trimToNull(request.facebook()));
+        LocalDateTime now = LocalDateTime.now();
         SellerProfile profile = sellerProfileRepository.save(SellerProfile.builder()
             .user(user).shopName(request.shopName().trim()).shopDescription(trimToNull(request.shopDescription()))
-            .contactPhone(trimToNull(request.phone())).contactLine(trimToNull(request.line()))
-            .contactFacebook(trimToNull(request.facebook())).verifiedAt(LocalDateTime.now()).build());
+            .requestedAt(now).verifiedAt(now).build());
         return SellerVerificationResponse.from(profile);
     }
 

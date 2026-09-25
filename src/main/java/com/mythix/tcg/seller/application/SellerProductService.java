@@ -27,7 +27,10 @@ import java.util.stream.Stream;
 @RequiredArgsConstructor
 public class SellerProductService {
 
-    private static final String DELETED = "DELETED";
+    /* The current repository still exposes a legacy status-exclusion method.
+       This value is intentionally outside the Revision 5 status set so all
+       valid listings are returned without ever persisting a legacy status. */
+    private static final String NO_REVISION_5_STATUS = "__NO_REVISION_5_STATUS__";
     private static final String SELLER_CARD_PREFIX = "seller-listing-";
 
     private final SellerProductRepository productRepository;
@@ -49,14 +52,15 @@ public class SellerProductService {
         validateListParameters(status, page, size);
 
         List<Product> products = productRepository
-            .findAllBySeller_IdAndStatusNotOrderByUpdatedAtDescIdDesc(sellerId, DELETED);
+            .findAllBySeller_IdAndStatusNotOrderByUpdatedAtDescIdDesc(sellerId, NO_REVISION_5_STATUS);
         Map<Long, Long> activeOrders = activeOrderCounts(products);
 
         Stream<SellerProductResponse> results = products.stream()
             .map(product -> toResponse(product, activeOrders.getOrDefault(product.getId(), 0L)))
             .filter(product -> matchesSearch(product, search))
             .filter(product -> matchesGame(product, game))
-            .filter(product -> status == null || status.isBlank() || product.status().equals(status));
+            .filter(product -> status == null || status.isBlank()
+                || product.status().equalsIgnoreCase(status.trim()));
 
         if (page != null && size != null) {
             results = results.skip((long) page * size).limit(size);
@@ -69,12 +73,16 @@ public class SellerProductService {
         User seller = requireSeller(sellerId);
         String imageUrl = resolveImage(request.image(), imageFile);
 
+        String cardId = SELLER_CARD_PREFIX + UUID.randomUUID();
         Card card = cardRepository.save(Card.builder()
-            .id(SELLER_CARD_PREFIX + UUID.randomUUID())
+            .id(cardId)
             .name(request.name().trim())
             .supertype(canonicalGame(request.game()))
-            .setName(trimToNull(request.set()))
+            .setName(defaultSet(request.set()))
+            .cardNumber(shortCardNumber(cardId))
             .rarity(trimToNull(request.rarity()))
+            .imageSmall(imageUrl)
+            .imageLarge(imageUrl)
             .marketPrice(request.price())
             .build());
 
@@ -82,13 +90,13 @@ public class SellerProductService {
             .seller(seller)
             .card(card)
             .customImageUrl(imageUrl)
-            .condition(conditionOrDefault(request.condition()))
-            .language("EN")
+            .condition(normalizeCondition(request.condition()))
+            .language(normalizeLanguage(request.language()))
             .price(request.price())
             .cost(request.cost())
             .onHand(request.stock())
             .reserved(0)
-            .status(request.status())
+            .status(normalizeStatus(request.status()))
             .build());
 
         return toResponse(product, 0L);
@@ -109,16 +117,20 @@ public class SellerProductService {
         Card card = editableCard(product);
         card.setName(request.name().trim());
         card.setSupertype(canonicalGame(request.game()));
-        card.setSetName(trimToNull(request.set()));
+        card.setSetName(defaultSet(request.set()));
+        card.setCardNumber(shortCardNumber(firstNonBlank(card.getCardNumber(), card.getId())));
         card.setRarity(trimToNull(request.rarity()));
+        card.setImageSmall(imageUrl);
+        card.setImageLarge(imageUrl);
         card.setMarketPrice(request.price());
 
         product.setCustomImageUrl(imageUrl);
-        product.setCondition(conditionOrDefault(request.condition()));
+        product.setCondition(normalizeCondition(request.condition()));
+        product.setLanguage(normalizeLanguage(request.language()));
         product.setPrice(request.price());
         product.setCost(request.cost());
         product.setOnHand(addAvailableAndReserved(request.stock(), product.getReserved()));
-        product.setStatus(request.status());
+        product.setStatus(normalizeStatus(request.status()));
 
         if (previousImage != null && !previousImage.equals(imageUrl)) {
             deleteImageIfUnreferenced(previousImage, productId);
@@ -132,7 +144,7 @@ public class SellerProductService {
     public void changeStatus(Long sellerId, Long productId, String status) {
         requireSeller(sellerId);
         Product product = findOwnedForUpdate(sellerId, productId);
-        product.setStatus(status);
+        product.setStatus(normalizeStatus(status));
     }
 
     @Transactional
@@ -149,7 +161,9 @@ public class SellerProductService {
         }
 
         if (orderItemRepository.existsByProduct_Id(productId)) {
-            product.setStatus(DELETED);
+            // Revision 5 keeps order history through a restrictive FK and has
+            // no DELETED status. Retain the listing as hidden when history exists.
+            product.setStatus("HIDE");
             return;
         }
 
@@ -160,8 +174,7 @@ public class SellerProductService {
 
     private User requireSeller(Long sellerId) {
         User seller = userRepository.findById(sellerId).orElseThrow(SellerRequiredException::new);
-        boolean verifiedSeller = "VERIFIED".equalsIgnoreCase(seller.getSellerStatus());
-        if (!verifiedSeller) {
+        if (!"APPROVED".equalsIgnoreCase(seller.getSellerStatus())) {
             throw new SellerRequiredException();
         }
         return seller;
@@ -186,10 +199,11 @@ public class SellerProductService {
             .id(SELLER_CARD_PREFIX + UUID.randomUUID())
             .name(existing.getName())
             .supertype(existing.getSupertype())
-            .setName(existing.getSetName())
+            .setName(defaultSet(existing.getSetName()))
+            .cardNumber(shortCardNumber(firstNonBlank(existing.getCardNumber(), existing.getId())))
             .rarity(existing.getRarity())
-            .imageSmall(existing.getImageSmall())
-            .imageLarge(existing.getImageLarge())
+            .imageSmall(firstNonBlank(existing.getImageSmall(), product.getCustomImageUrl()))
+            .imageLarge(firstNonBlank(existing.getImageLarge(), product.getCustomImageUrl()))
             .marketPrice(existing.getMarketPrice() == null ? BigDecimal.ZERO : existing.getMarketPrice())
             .build());
         product.setCard(dedicated);
@@ -270,6 +284,7 @@ public class SellerProductService {
             Math.max(0, onHand - reserved),
             product.getStatus(),
             product.getCondition(),
+            product.getLanguage(),
             card.getSetName(),
             card.getRarity(),
             activeOrders,
@@ -299,8 +314,8 @@ public class SellerProductService {
     }
 
     private void validateListParameters(String status, Integer page, Integer size) {
-        if (status != null && !status.isBlank() && !"SHOW".equals(status) && !"HIDE".equals(status)) {
-            throw new SellerProductValidationException("status", "Status must be SHOW or HIDE");
+        if (status != null && !status.isBlank()) {
+            normalizeStatus(status);
         }
         if ((page == null) != (size == null)) {
             throw new SellerProductValidationException("page", "Page and size must be provided together");
@@ -341,9 +356,52 @@ public class SellerProductService {
         return null;
     }
 
-    private String conditionOrDefault(String condition) {
+    private String normalizeCondition(String condition) {
         String value = trimToNull(condition);
-        return value == null ? "Unspecified" : value;
+        if (value == null) {
+            return "NM";
+        }
+        return switch (value.toUpperCase(Locale.ROOT).replace('-', ' ').replace('_', ' ')) {
+            case "NM", "NEAR MINT" -> "NM";
+            case "LP", "LIGHTLY PLAYED" -> "LP";
+            case "MP", "MODERATELY PLAYED" -> "MP";
+            case "HP", "HEAVILY PLAYED" -> "HP";
+            case "DMG", "DAMAGED" -> "DMG";
+            default -> throw new SellerProductValidationException("condition", "Condition must be NM, LP, MP, HP, or DMG");
+        };
+    }
+
+    private String normalizeLanguage(String language) {
+        String value = trimToNull(language);
+        if (value == null) {
+            return "EN";
+        }
+        String normalized = value.toUpperCase(Locale.ROOT);
+        if (!List.of("EN", "JP", "TH").contains(normalized)) {
+            throw new SellerProductValidationException("language", "Language must be EN, JP, or TH");
+        }
+        return normalized;
+    }
+
+    private String normalizeStatus(String status) {
+        String value = trimToNull(status);
+        if (value == null) {
+            throw new SellerProductValidationException("status", "Status must be SHOW, HIDE, or OUT_OF_STOCK");
+        }
+        String normalized = value.toUpperCase(Locale.ROOT);
+        if (!List.of("SHOW", "HIDE", "OUT_OF_STOCK").contains(normalized)) {
+            throw new SellerProductValidationException("status", "Status must be SHOW, HIDE, or OUT_OF_STOCK");
+        }
+        return normalized;
+    }
+
+    private String defaultSet(String set) {
+        return firstNonBlank(set, "Seller Listings");
+    }
+
+    private String shortCardNumber(String value) {
+        String normalized = firstNonBlank(value, "SELLER");
+        return normalized.length() <= 50 ? normalized : normalized.substring(0, 50);
     }
 
     private String trimToNull(String value) {

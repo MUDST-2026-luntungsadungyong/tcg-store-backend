@@ -13,6 +13,7 @@ public record SellerProductResponse(
     int stock,
     String status,
     String condition,
+    String language,
     String set,
     String rarity,
     long activeOrderCount,

@@ -6,6 +6,7 @@ public record StoreProfileResponse(String sellerId, String shopName, String shop
                                    String line, String facebook) {
     public static StoreProfileResponse from(SellerProfile profile) {
         return new StoreProfileResponse(String.valueOf(profile.getUser().getId()), profile.getShopName(),
-            profile.getShopDescription(), profile.getContactPhone(), profile.getContactLine(), profile.getContactFacebook());
+            profile.getShopDescription(), profile.getUser().getPhone(), profile.getUser().getContactLine(),
+            profile.getUser().getContactFacebook());
     }
 }

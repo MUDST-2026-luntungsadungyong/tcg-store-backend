@@ -30,7 +30,25 @@ The migration was executed against the provisioned Starter instance on
 - Orphan checks for local-card sellers, local-card catalog references,
   collection-card references, and order-item orders all returned `0`.
 
-The new database is deliberately not wired into the current Spring profile yet:
-the running entities still target the legacy `cards/products` model. Application
-entity cutover and TiDB smoke tests belong in a follow-up change after this
-schema/data migration is reviewed.
+The runtime profile and example environment now target `tcg_store_revision5`.
+The application entity cutover remains a separate Java change: until the entity
+annotations use the Revision 5 table and foreign-key names, Hibernate validation
+must fail rather than silently falling back to the legacy `cards/products`
+model.
+
+## Application validation contract
+
+The repository contains two bounded validation layers:
+
+- `TidbRevision5SchemaContractTests` checks the immutable DDL/DML target,
+  secret-free example environment, and critical JPA table/column/unique-key
+  mappings. H2's `create-drop` mode cannot replace these checks.
+- `TidbRevision5LiveValidationTests` is skipped unless
+  `TIDB_REVISION5_VALIDATION=true`. The manual workflow
+  `.github/workflows/tidb-revision5-validation.yml` supplies
+  `TIDB_JDBC_URL`, `TIDB_USER`, and `TIDB_PASSWORD` through encrypted CI
+  secrets and verifies the live target tables, columns, and foreign-key
+  orphan counts.
+
+The Java entity cutover must make the contract test pass before enabling the
+live workflow as a required deployment gate.

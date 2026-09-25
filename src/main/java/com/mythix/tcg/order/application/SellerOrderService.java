@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +28,7 @@ public class SellerOrderService {
     public Page<SellerOrderResponse> getSellerOrders(Long sellerId, String status, Pageable pageable) {
         Page<Order> orders;
         if (status != null && !status.isBlank() && !"ALL".equalsIgnoreCase(status)) {
-            orders = orderRepository.findOrdersBySellerIdAndStatus(sellerId, status.toUpperCase().trim(), pageable);
+            orders = orderRepository.findOrdersBySellerIdAndStatus(sellerId, normalizeStatus(status), pageable);
         } else {
             orders = orderRepository.findOrdersBySellerId(sellerId, pageable);
         }
@@ -51,7 +52,7 @@ public class SellerOrderService {
         Order order = orderRepository.findOrderForSeller(sellerId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found for seller"));
 
-        order.setStatus(newStatus.toUpperCase().trim());
+        order.setStatus(normalizeStatus(newStatus));
         Order saved = orderRepository.save(order);
         return mapToSellerOrderResponse(saved, sellerId);
     }
@@ -157,5 +158,14 @@ public class SellerOrderService {
                 order.getCreatedAt(),
                 order.getUpdatedAt()
         );
+    }
+
+    private String normalizeStatus(String status) {
+        String value = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+        if (!List.of("PENDING", "PAID", "FULFILLED", "CANCELLED").contains(value)) {
+            throw new OrderStatusValidationException("status",
+                "Status must be PENDING, PAID, FULFILLED, or CANCELLED");
+        }
+        return value;
     }
 }

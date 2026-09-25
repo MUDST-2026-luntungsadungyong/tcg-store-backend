@@ -11,7 +11,9 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "collection_items", uniqueConstraints = {
-        @UniqueConstraint(name = "uq_collection_user_card", columnNames = {"user_id", "card_id"})
+        @UniqueConstraint(name = "uq_collection_user_card", columnNames = {
+                "user_id", "global_card_id", "condition", "language"
+        })
 })
 @Getter
 @Setter
@@ -29,13 +31,13 @@ public class CollectionItem {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "card_id", nullable = false)
+    @JoinColumn(name = "global_card_id", nullable = false)
     private Card card;
 
-    @Column(length = 50)
+    @Column(name = "`condition`", nullable = false, length = 50)
     private String condition;
 
-    @Column(length = 50)
+    @Column(nullable = false, length = 50)
     @Builder.Default
     private String language = "EN";
 

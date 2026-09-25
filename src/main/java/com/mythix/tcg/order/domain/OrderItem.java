@@ -25,18 +25,22 @@ public class OrderItem {
     private Order order;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "product_id", nullable = false)
+    @JoinColumn(name = "local_card_id", nullable = false)
     private Product product;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
-    @Column(name = "card_id", nullable = false, length = 100)
+    @Column(name = "global_card_id", nullable = false, length = 100)
     private String cardId;
 
-    @Column(name = "product_name_snapshot", nullable = false)
+    @Column(name = "card_name_snapshot", nullable = false, length = 255)
     private String productNameSnapshot;
+
+    @Column(name = "shop_name_snapshot", nullable = false, length = 255)
+    @Builder.Default
+    private String shopNameSnapshot = "";
 
     @Column(name = "price_at_purchase", nullable = false, precision = 12, scale = 2)
     private BigDecimal priceAtPurchase;
