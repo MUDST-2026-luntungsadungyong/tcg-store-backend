@@ -56,3 +56,33 @@ Before committing, confirm the runtime file is ignored:
 ```powershell
 git check-ignore -v .env
 ```
+
+## Switch between local and Neon
+
+The repository keeps one runtime file, `.env`, but uses separate Compose
+files. Do not run both stacks at the same time because they share ports 8080
+and 3000.
+
+```powershell
+# Start local PostgreSQL
+./scripts/use-local.ps1 -Build
+
+# Start shared Neon development
+neon login
+./scripts/use-neon.ps1 -Build
+```
+
+`use-neon.ps1` refreshes `.env` from the shared Neon `development` branch by
+default. To reuse the current Neon values without another pull:
+
+```powershell
+./scripts/use-neon.ps1 -SkipEnvRefresh
+```
+
+To verify which runtime is active:
+
+```powershell
+docker compose ps
+docker compose -f docker-compose.neon.yml ps
+Invoke-RestMethod http://localhost:8080/actuator/health/readiness
+```

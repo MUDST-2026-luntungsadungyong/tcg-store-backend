@@ -79,8 +79,23 @@ $env:APP_JWT_SECRET = "<random-secret-at-least-32-bytes>"
 
 ## เลือก runtime ระหว่าง local Docker กับ Neon
 
-- Local Docker PostgreSQL: ใช้ `.env` จาก `.env.example` แล้วรัน `docker compose up -d`
-- Neon cloud database: ใช้ `.env` ไฟล์เดียวกับ local แล้วรัน `docker compose -f docker-compose.neon.yml up -d --build`
+- Local Docker PostgreSQL: ใช้ `.env` ไฟล์เดียว แล้วรัน `./scripts/use-local.ps1`
+- Neon cloud database: ใช้ `.env` ไฟล์เดียว แล้วรัน `./scripts/use-neon.ps1`
+
+ทั้งสอง helper จะหยุด compose อีกชุดก่อน เพราะ backend และ frontend ใช้ port `8080` และ `3000` ร่วมกัน การเปิด PostgreSQL container ไม่ได้ทำให้ backend เปลี่ยนไป Neon อัตโนมัติ และการปิด PostgreSQL ก็ไม่ควรปล่อย Neon compose ค้างอยู่
+
+ถ้าต้องการรันคำสั่งเอง ให้ใช้ลำดับนี้:
+
+```powershell
+# Local Docker PostgreSQL
+docker compose -f docker-compose.neon.yml down
+docker compose up --build -d
+
+# Neon shared development
+docker compose down
+./scripts/setup-shared-neon.ps1
+docker compose -f docker-compose.neon.yml up --build -d
+```
 
 สำหรับ branch กลางของทีม ให้สร้าง cloud runtime env ที่ Spring ใช้ด้วยคำสั่งนี้:
 
