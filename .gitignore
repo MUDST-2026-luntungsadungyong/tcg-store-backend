@@ -41,3 +41,5 @@ uploads/
 
 ### Compiled artifacts ###
 *.class
+node_modules/
+.neon

@@ -24,8 +24,8 @@ if (Test-Path -LiteralPath ".env") {
     }
 }
 
-if (-not $values.ContainsKey("DATABASE_URL")) {
-    throw "DATABASE_URL is missing from $InputFile"
+if (-not $values.ContainsKey("DATABASE_URL") -and -not $values.ContainsKey("DATABASE_URL_UNPOOLED")) {
+    throw "DATABASE_URL or DATABASE_URL_UNPOOLED is missing from $InputFile"
 }
 $jwtSecret = $values["APP_JWT_SECRET"]
 if ([string]::IsNullOrWhiteSpace($jwtSecret)) {
@@ -37,11 +37,16 @@ if ([string]::IsNullOrWhiteSpace($jwtSecret)) {
     $jwtSecret = [Convert]::ToBase64String($jwtBytes)
 }
 
-$connectionUri = [Uri]($values["DATABASE_URL"] -replace '^postgresql://', 'https://')
+$databaseUrl = if ($values.ContainsKey("DATABASE_URL_UNPOOLED")) {
+    $values["DATABASE_URL_UNPOOLED"]
+} else {
+    $values["DATABASE_URL"]
+}
+$connectionUri = [Uri]($databaseUrl -replace '^postgresql://', 'https://')
 $userInfo = $connectionUri.UserInfo
 $separator = $userInfo.IndexOf(':')
 if ($separator -lt 1) {
-    throw "DATABASE_URL does not contain a username and password"
+    throw "Neon database URL does not contain a username and password"
 }
 
 $username = [Uri]::UnescapeDataString($userInfo.Substring(0, $separator))
@@ -51,16 +56,23 @@ if (-not [string]::IsNullOrWhiteSpace($passwordOverride)) {
     $password = $passwordOverride
 }
 $jdbcHost = $connectionUri.Host
-$jdbcPort = if ($connectionUri.Port -gt 0) { ":$($connectionUri.Port)" } else { "" }
+$jdbcPort = if (-not $connectionUri.IsDefaultPort) { ":$($connectionUri.Port)" } else { "" }
 $jdbcDatabase = $connectionUri.AbsolutePath.TrimStart('/')
-$jdbcQuery = $connectionUri.Query.TrimStart('?')
+$jdbcQuery = ($connectionUri.Query.TrimStart('?').Split('&') | Where-Object { $_ } | ForEach-Object {
+    $parts = $_ -split '=', 2
+    if ($parts[0] -eq 'channel_binding') {
+        "channelBinding=$($parts[1])"
+    } else {
+        $_
+    }
+}) -join '&'
 $jdbcUrl = "jdbc:postgresql://$jdbcHost$jdbcPort/$jdbcDatabase"
 if ($jdbcQuery) {
     $jdbcUrl = "$jdbcUrl`?$jdbcQuery"
 }
 
 @(
-    "# Neon CLI context for the linked production branch"
+    "# Neon CLI context for the linked shared development branch"
     "NEON_BRANCH=$($values['NEON_BRANCH'])"
     ""
     "# Active cloud runtime (Spring Boot + Neon)"
@@ -70,7 +82,7 @@ if ($jdbcQuery) {
     "NEON_DB_PASSWORD=$password"
     "APP_JWT_SECRET=$jwtSecret"
     "APP_JWT_EXPIRATION_MINUTES=1440"
-    "APP_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173"
+    "APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:5174"
     "APP_PUBLIC_BASE_URL=http://localhost:8080"
     "APP_LOG_LEVEL=INFO"
     "JPA_SHOW_SQL=false"

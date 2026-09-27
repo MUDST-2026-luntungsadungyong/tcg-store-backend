@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tcg-store-backend
+  labels:
+    app.kubernetes.io/name: tcg-store-backend
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tcg-store-backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tcg-store-backend
+        app.kubernetes.io/component: api
+    spec:
+      serviceAccountName: tcg-store-backend
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: backend
+          image: tcg-store-backend:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: tcg-store-backend-config
+          env:
+            - name: NEON_JDBC_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-backend-secrets
+                  key: neon-jdbc-url
+            - name: NEON_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-backend-secrets
+                  key: neon-db-username
+            - name: NEON_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-backend-secrets
+                  key: neon-db-password
+            - name: APP_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-backend-secrets
+                  key: app-jwt-secret
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 2
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: uploads
+              mountPath: /app/uploads
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: uploads
+          emptyDir: {}

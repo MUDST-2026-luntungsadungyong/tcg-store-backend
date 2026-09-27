@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     action VARCHAR(100) NOT NULL,
     target_type VARCHAR(50) NOT NULL,
     target_id VARCHAR(100) NOT NULL,
-    details JSONB,
+    details TEXT,
     ip_address VARCHAR(45),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

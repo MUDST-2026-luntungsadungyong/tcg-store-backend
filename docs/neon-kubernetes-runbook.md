@@ -14,9 +14,36 @@ Neon ไม่ใช่ database dialect ใหม่สำหรับระบ
 - `infra/kubernetes/base` เป็น Deployment, Service และ ServiceAccount ที่ใช้กับ cluster ใดก็ได้
 - `infra/kubernetes/overlays/neon` เป็น overlay สำหรับ Neon โดยไม่ใส่ credential จริง
 
+## Shared development database
+
+ทีมใช้ Neon project `hidden-block-50177803` และ branch `development` ร่วมกัน ข้อมูล seed ถูกลงไว้ที่ branch นี้แล้ว จึงไม่ต้องรันไฟล์ seed ซ้ำในแต่ละเครื่อง สมาชิกแต่ละคนต้องถูกเพิ่มเข้า Neon project ก่อน แล้วรัน:
+
+```powershell
+neon login
+./scripts/setup-shared-neon.ps1
+docker compose stop backend
+docker compose -f docker-compose.neon.yml up -d --build
+```
+
+สคริปต์จะ link ไปที่ branch `development`, ดึง connection string ลง `.env.neon-development.local` และสร้าง `.env` สำหรับ Spring Boot โดยทั้งสองไฟล์ถูก ignore จาก Git ห้ามส่ง credential ผ่าน commit, pull request หรือแชทสาธารณะ
+
+ตรวจว่าเชื่อมฐานกลางสำเร็จด้วย:
+
+```powershell
+docker compose -f docker-compose.neon.yml ps
+Invoke-RestMethod http://localhost:8080/actuator/health/readiness
+```
+
+ถ้าต้องกลับไปทดสอบฐาน local ให้หยุด Neon compose ก่อน แล้วค่อยเปิด compose หลัก:
+
+```powershell
+docker compose -f docker-compose.neon.yml down
+docker compose up -d
+```
+
 ## ขั้นตอน bootstrap Neon ครั้งแรก
 
-1. สร้าง Neon project และ database ชื่อ `tcg_store` ใน branch ที่ตั้งใจใช้เป็น staging
+1. สร้าง Neon project และ branch ที่ตั้งใจใช้เป็น shared development หรือ staging
 2. คัดลอก connection details ลงไฟล์ `.env` ที่ไม่ commit โดยอ้างอิง `.env.example` และเติม `sslmode=require`
 3. รัน schema และข้อมูลทดสอบตามลำดับนี้กับ database ที่ว่าง:
 
@@ -27,7 +54,10 @@ infra/postgres/init/03-profile-avatar.sql
 infra/postgres/migrations/001_checkout_idempotency.sql
 infra/postgres/migrations/002_revision5_seller_approval.sql
 infra/postgres/migrations/003_audit_logs.sql
+infra/postgres/migrations/004_align_audit_log_details_text.sql
 ```
+
+ฐานใหม่ที่สร้างจาก `01-schema.sql` ล่าสุดมีโครงสร้างครบแล้ว ส่วนไฟล์ใน `migrations` ใช้สำหรับอัปเกรดฐานเดิมตามลำดับและต้องบันทึกว่าไฟล์ใดถูกรันไปแล้ว
 
 การรันต้องใช้ `psql` ที่ติดตั้งในเครื่องหรือ PostgreSQL client container และต้องตรวจชื่อ database/branch ก่อนทุกครั้ง ห้ามใส่ password ใน command history หรือ commit ไฟล์ที่มีค่าจริง
 
@@ -52,10 +82,10 @@ $env:APP_JWT_SECRET = "<random-secret-at-least-32-bytes>"
 - Local Docker PostgreSQL: ใช้ `.env` จาก `.env.example` แล้วรัน `docker compose up -d`
 - Neon cloud database: ใช้ `.env` ไฟล์เดียวกับ local แล้วรัน `docker compose -f docker-compose.neon.yml up -d --build`
 
-หลัง `neon deploy` ถ้า CLI สร้าง `.env.local` ให้สร้าง cloud runtime env ที่ Spring ใช้ด้วยคำสั่งนี้ก่อน:
+สำหรับ branch กลางของทีม ให้สร้าง cloud runtime env ที่ Spring ใช้ด้วยคำสั่งนี้:
 
 ```powershell
-./scripts/prepare-neon-env.ps1
+./scripts/setup-shared-neon.ps1
 docker compose -f docker-compose.neon.yml up -d --build
 ```
 

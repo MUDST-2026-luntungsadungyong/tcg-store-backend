@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    # Neon uses the normal PostgreSQL wire protocol. Keep the URL in a secret
+    # and require TLS; the profile intentionally has no local fallback.
+    url: ${NEON_JDBC_URL}
+    username: ${NEON_DB_USERNAME}
+    password: ${NEON_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${NEON_POOL_MAX_SIZE:5}
+      minimum-idle: ${NEON_POOL_MIN_IDLE:0}
+      connection-timeout: ${NEON_CONNECTION_TIMEOUT_MS:10000}
+      validation-timeout: ${NEON_VALIDATION_TIMEOUT_MS:5000}
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+logging:
+  level:
+    org.hibernate.SQL: ${NEON_SQL_LOG_LEVEL:WARN}

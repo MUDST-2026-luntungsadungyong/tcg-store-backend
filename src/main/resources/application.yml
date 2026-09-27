@@ -30,9 +30,25 @@ logging:
     root: INFO
     com.mythix.tcg: ${APP_LOG_LEVEL:INFO}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
 app:
   cors:
-    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174}
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:5174}
   jwt:
     # Deliberately empty by default: JwtProperties fails fast unless a profile or
     # environment supplies a strong secret. Local development may opt into the
