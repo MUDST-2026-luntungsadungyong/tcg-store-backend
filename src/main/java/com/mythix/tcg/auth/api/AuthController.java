@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -34,5 +35,16 @@ public class AuthController {
     @GetMapping("/me")
     public UserResponse currentUser(@AuthenticationPrincipal AuthenticatedUser user) {
         return authService.currentUser(user.userId());
+    }
+
+    @PostMapping("/forgot-password")
+    public Map<String, Boolean> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return Map.of("exists", authService.demoAccountExists(request.email()));
+    }
+
+    @PostMapping("/reset-password")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.demoResetPassword(request.email(), request.newPassword());
     }
 }
