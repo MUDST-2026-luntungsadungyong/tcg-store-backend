@@ -20,7 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.auth.demo-reset-enabled=true")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AuthControllerIntegrationTests {
@@ -76,6 +76,40 @@ class AuthControllerIntegrationTests {
                 .content("{\"email\":\"naphat@example.com\",\"password\":\"wrong-password\"}"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+    }
+
+    @Test
+    void demoResetChecksEmailAndChangesBackendPassword() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Naphat\",\"email\":\"naphat@example.com\",\"password\":\"password123\"}"))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"missing@example.com\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.exists").value(false));
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"NAPHAT@example.com\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.exists").value(true));
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"naphat@example.com\",\"newPassword\":\"newpassword123\"}"))
+            .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"naphat@example.com\",\"password\":\"password123\"}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"naphat@example.com\",\"password\":\"newpassword123\"}"))
+            .andExpect(status().isOk());
     }
 
     @Test
