@@ -164,6 +164,7 @@ tcg-store-backend/
 - [Frontend–backend API contract](docs/api-contract.md) — endpoints และ field mapping จาก frontend ปัจจุบัน
 - [Backend architecture](docs/architecture.md) — package rules, ownership และ critical transaction flows
 - [Local database guide](docs/local-database.md) — รายละเอียดฐานข้อมูลเดิม
+- [Environment setup](docs/environment-setup.md) — สร้าง `.env`, ขอสิทธิ์/credential อย่างปลอดภัย และเลือก local, Neon หรือ TiDB
 - [Contributing guide](CONTRIBUTING.md) — branch, code, test และ PR conventions
 
 ## Known gaps

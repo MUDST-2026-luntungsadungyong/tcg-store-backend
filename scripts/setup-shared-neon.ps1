@@ -1,7 +1,7 @@
 param(
     [string]$ProjectId = "hidden-block-50177803",
     [string]$Branch = "development",
-    [string]$NeonEnvFile = ".env.neon-development.local",
+    [string]$NeonEnvFile = ".env",
     [string]$OutputFile = ".env"
 )
 

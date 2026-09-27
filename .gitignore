@@ -22,10 +22,10 @@ target/
 .vscode/
 
 ### Environment and local overrides ###
+# Keep the single runtime environment file and every local variant out of Git.
 .env
 .env.*
 !.env.example
-!.env.tidb.example
 application-local.yml
 
 ### Operating systems ###

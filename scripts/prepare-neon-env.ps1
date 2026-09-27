@@ -1,5 +1,5 @@
 param(
-    [string]$InputFile = ".env.local",
+    [string]$InputFile = ".env",
     [string]$OutputFile = ".env"
 )
 
@@ -28,7 +28,7 @@ if (-not $values.ContainsKey("DATABASE_URL") -and -not $values.ContainsKey("DATA
     throw "DATABASE_URL or DATABASE_URL_UNPOOLED is missing from $InputFile"
 }
 $jwtSecret = $values["APP_JWT_SECRET"]
-if ([string]::IsNullOrWhiteSpace($jwtSecret)) {
+if ([string]::IsNullOrWhiteSpace($jwtSecret) -or $jwtSecret -match '^(replace-with|change-this|<)') {
     $jwtSecret = $env:APP_JWT_SECRET
 }
 if ([string]::IsNullOrWhiteSpace($jwtSecret)) {
@@ -71,8 +71,10 @@ if ($jdbcQuery) {
     $jdbcUrl = "$jdbcUrl`?$jdbcQuery"
 }
 
-@(
+$output = @(
     "# Neon CLI context for the linked shared development branch"
+    "DATABASE_URL=$($values['DATABASE_URL'])"
+    "DATABASE_URL_UNPOOLED=$($values['DATABASE_URL_UNPOOLED'])"
     "NEON_BRANCH=$($values['NEON_BRANCH'])"
     ""
     "# Active cloud runtime (Spring Boot + Neon)"
@@ -99,6 +101,16 @@ if ($jdbcQuery) {
     "SELLER_PRODUCT_IMAGE_DIR=uploads/products"
     "VITE_API_BASE_URL=http://localhost:8080/api"
     "FRONTEND_PORT=3000"
-) | Set-Content -LiteralPath $OutputFile -Encoding utf8NoBOM
+    ""
+    "# Optional TiDB validation profile"
+    "TIDB_JDBC_URL=$($values['TIDB_JDBC_URL'])"
+    "TIDB_USER=$($values['TIDB_USER'])"
+    "TIDB_PASSWORD=$($values['TIDB_PASSWORD'])"
+    "TIDB_POOL_MAX_SIZE=$($values['TIDB_POOL_MAX_SIZE'])"
+    "TIDB_POOL_MIN_IDLE=$($values['TIDB_POOL_MIN_IDLE'])"
+    "TIDB_SQL_LOG_LEVEL=$($values['TIDB_SQL_LOG_LEVEL'])"
+)
+
+$output | Set-Content -LiteralPath $OutputFile -Encoding UTF8
 
 Write-Output "Prepared $OutputFile from $InputFile (credentials were not printed)."

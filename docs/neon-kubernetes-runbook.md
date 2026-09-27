@@ -9,7 +9,7 @@ Neon ไม่ใช่ database dialect ใหม่สำหรับระบ
 ## สิ่งที่เพิ่มใน repository
 
 - `src/main/resources/application-neon.yml` บังคับใช้ `NEON_JDBC_URL`, `NEON_DB_USERNAME` และ `NEON_DB_PASSWORD` โดยไม่มี local fallback
-- `.env.example` เป็นรายการตัวแปรรวมสำหรับการรันจากเครื่อง
+- `.env.example` เป็นรายการตัวแปรรวมสำหรับการรันจากเครื่อง และ `.env` เป็นไฟล์ runtime เพียงไฟล์เดียว
 - Spring Boot Actuator health probes ที่ `/actuator/health/liveness` และ `/actuator/health/readiness`
 - `infra/kubernetes/base` เป็น Deployment, Service และ ServiceAccount ที่ใช้กับ cluster ใดก็ได้
 - `infra/kubernetes/overlays/neon` เป็น overlay สำหรับ Neon โดยไม่ใส่ credential จริง
@@ -25,7 +25,7 @@ docker compose stop backend
 docker compose -f docker-compose.neon.yml up -d --build
 ```
 
-สคริปต์จะ link ไปที่ branch `development`, ดึง connection string ลง `.env.neon-development.local` และสร้าง `.env` สำหรับ Spring Boot โดยทั้งสองไฟล์ถูก ignore จาก Git ห้ามส่ง credential ผ่าน commit, pull request หรือแชทสาธารณะ
+สคริปต์จะ link ไปที่ branch `development` และดึง connection string ลง `.env` ซึ่งถูก ignore จาก Git ห้ามส่ง credential ผ่าน commit, pull request หรือแชทสาธารณะ
 
 ตรวจว่าเชื่อมฐานกลางสำเร็จด้วย:
 

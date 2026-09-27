@@ -28,7 +28,7 @@ TiDB speaks the MySQL protocol, not PostgreSQL. Moving this application therefor
 
 ## Files prepared in this repository
 
-- `.env.tidb.example`: required environment variables, without secrets.
+- `.env.example`: required environment variables, including the optional TiDB profile, without secrets.
 - `src/main/resources/application-tidb.yml`: MySQL driver, TiDB Hibernate dialect, TLS connection, UTC, and a small pool.
 - `infra/tidb/init/01-schema.sql`: legacy TiDB source schema for `tcg_store_test` only.
 - `infra/tidb/init/02-test-data.sql`: source fixtures used to exercise the copy.
