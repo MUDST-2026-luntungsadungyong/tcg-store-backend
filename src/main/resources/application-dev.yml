@@ -1,4 +1,6 @@
 app:
+  auth:
+    demo-reset-enabled: true
   jwt:
     # Development-only fallback. Never activate this profile in shared/production environments.
     secret: ${APP_JWT_SECRET:change-this-development-only-secret-key-to-a-secure-32-byte-value}

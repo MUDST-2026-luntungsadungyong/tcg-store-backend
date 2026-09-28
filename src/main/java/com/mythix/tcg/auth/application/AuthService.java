@@ -10,6 +10,9 @@ import com.mythix.tcg.user.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
@@ -21,6 +24,28 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+
+    @Value("${app.auth.demo-reset-enabled:false}")
+    private boolean demoResetEnabled;
+
+    public boolean demoAccountExists(String email) {
+        requireDemoReset();
+        return userRepository.existsByEmail(normalizeEmail(email));
+    }
+
+    @Transactional
+    public void demoResetPassword(String email, String newPassword) {
+        requireDemoReset();
+        User user = userRepository.findByEmail(normalizeEmail(email))
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Account not found"));
+        user.setPassword(passwordEncoder.encode(newPassword));
+    }
+
+    private void requireDemoReset() {
+        if (!demoResetEnabled) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Demo reset is disabled");
+        }
+    }
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
