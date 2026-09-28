@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -129,6 +130,15 @@ class PublicCollectionControllerIntegrationTests {
                 .andExpect(jsonPath("$.items[9].rank").value(10))
                 .andExpect(jsonPath("$.items[9].displayName").value("Mock Collector 03"))
                 .andExpect(jsonPath("$.items[9].rareCardCount").value(3));
+    }
+
+    @Test
+    void leaderboardAllowsTheLoopbackFrontendOrigin() throws Exception {
+        mockMvc.perform(get("/api/collections/leaderboard")
+                        .header("Origin", "http://127.0.0.1:5173")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://127.0.0.1:5173"));
     }
 
     @Test

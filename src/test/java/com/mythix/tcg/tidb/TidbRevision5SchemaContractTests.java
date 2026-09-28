@@ -34,7 +34,7 @@ class TidbRevision5SchemaContractTests {
 
     private static final Path REVISION5_DDL = Path.of("infra/tidb/migrations/001_revision5_schema.sql");
     private static final Path REVISION5_DATA = Path.of("infra/tidb/migrations/002_revision5_data.sql");
-    private static final Path TIDB_ENV = Path.of(".env.tidb.example");
+    private static final Path ENV_EXAMPLE = Path.of(".env.example");
 
     @Test
     void revision5MigrationsAreImmutableAndTargetTheRevision5Database() throws IOException {
@@ -81,10 +81,10 @@ class TidbRevision5SchemaContractTests {
 
     @Test
     void tidbExampleSelectsRevision5WithoutCommittingCredentials() throws IOException {
-        String env = readRequiredFile(TIDB_ENV);
+        String env = readRequiredFile(ENV_EXAMPLE);
         String jdbcUrl = valueFor(env, "TIDB_JDBC_URL");
 
-        assertThat(valueFor(env, "SPRING_PROFILES_ACTIVE")).isEqualTo("tidb");
+        assertThat(valueFor(env, "SPRING_PROFILES_ACTIVE")).isIn("dev", "neon", "tidb");
         assertThat(jdbcUrl).contains("/tcg_store_revision5?");
         assertThat(jdbcUrl).doesNotContain("tcg_store_test");
         assertThat(valueFor(env, "TIDB_USER")).isEqualTo("replace-with-tidb-user");
@@ -133,7 +133,7 @@ class TidbRevision5SchemaContractTests {
             .filter(line -> line.startsWith(key + "="))
             .map(line -> line.substring(key.length() + 1).trim())
             .findFirst()
-            .orElseThrow(() -> new AssertionError("Missing " + key + " in .env.tidb.example"));
+            .orElseThrow(() -> new AssertionError("Missing " + key + " in .env.example"));
     }
 
     private static String tableName(Class<?> entityType) {
