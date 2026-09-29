@@ -9,6 +9,7 @@ import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
@@ -67,6 +68,9 @@ class SellerOrderControllerIntegrationTests {
     @Autowired
     private com.mythix.tcg.collection.persistence.CollectionRepository collectionRepository;
 
+    @Autowired
+    private NotificationRepository notificationRepository;
+
     private String sellerToken;
     private User seller;
     private User otherSeller;
@@ -78,6 +82,7 @@ class SellerOrderControllerIntegrationTests {
 
     @BeforeEach
     void setUp() {
+        notificationRepository.deleteAll();
         collectionRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
@@ -219,6 +224,12 @@ class SellerOrderControllerIntegrationTests {
 
         Order updated = orderRepository.findById(sellerOrder.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo("FULFILLED");
+        assertThat(notificationRepository.findAll())
+            .anySatisfy(notification -> {
+                assertThat(notification.getRecipient().getId()).isEqualTo(buyer.getId());
+                assertThat(notification.getOrder().getId()).isEqualTo(sellerOrder.getId());
+                assertThat(notification.getType()).isEqualTo("ORDER_STATUS_CHANGED");
+            });
     }
 
     @Test
