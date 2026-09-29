@@ -7,6 +7,7 @@ import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.admin.api.AdminDashboardResponse;
 import com.mythix.tcg.admin.domain.AuditLog;
 import com.mythix.tcg.admin.persistence.AuditLogRepository;
@@ -23,6 +24,7 @@ public class AdminSellerService {
     private final SellerProfileRepository sellerProfileRepository;
     private final UserRepository userRepository;
     private final CardRepository cardRepository;
+    private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
     private final AuditLogRepository auditLogRepository;
 
@@ -30,7 +32,7 @@ public class AdminSellerService {
     public AdminDashboardResponse dashboard() {
         return new AdminDashboardResponse(userRepository.count(), userRepository.countByRole("ADMIN"), userRepository.countByRoleAndSellerStatus("USER", "NONE"),
             userRepository.countBySellerStatus("PENDING"), userRepository.countBySellerStatus("APPROVED"),
-            cardRepository.count(), orderRepository.count(), orderRepository.paidOrFulfilledGmv());
+            cardRepository.count(), productRepository.countByStatus("SHOW"), orderRepository.count(), orderRepository.paidOrFulfilledGmv());
     }
 
     @Transactional(readOnly = true)

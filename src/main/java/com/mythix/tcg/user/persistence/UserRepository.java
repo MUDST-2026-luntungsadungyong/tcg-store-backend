@@ -18,6 +18,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     long countByRole(String role);
     long countBySellerStatus(String sellerStatus);
     long countByRoleAndSellerStatus(String role, String sellerStatus);
+    List<User> findByRoleOrderByCreatedAtDesc(String role);
     List<User> findByEmailContainingIgnoreCaseOrFullNameContainingIgnoreCaseOrderByCreatedAtDesc(String email, String name);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

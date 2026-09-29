@@ -17,6 +17,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
 
     Optional<Product> findByIdAndStatus(Long id, String status);
 
+    long countByStatus(String status);
+
     List<Product> findBySellerId(Long sellerId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
