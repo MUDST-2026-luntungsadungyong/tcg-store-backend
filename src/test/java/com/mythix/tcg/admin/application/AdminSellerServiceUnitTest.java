@@ -6,6 +6,7 @@ import com.mythix.tcg.admin.domain.AuditLog;
 import com.mythix.tcg.admin.persistence.AuditLogRepository;
 import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.domain.SellerProfile;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
@@ -42,6 +43,9 @@ class AdminSellerServiceUnitTest {
 
     @Mock
     private CardRepository cardRepository;
+
+    @Mock
+    private ProductRepository productRepository;
 
     @Mock
     private OrderRepository orderRepository;
@@ -103,6 +107,7 @@ class AdminSellerServiceUnitTest {
             when(userRepository.countBySellerStatus("PENDING")).thenReturn(5L);
             when(userRepository.countBySellerStatus("APPROVED")).thenReturn(15L);
             when(cardRepository.count()).thenReturn(2000L);
+            when(productRepository.countByStatus("SHOW")).thenReturn(42L);
             when(orderRepository.count()).thenReturn(350L);
             when(orderRepository.paidOrFulfilledGmv()).thenReturn(new BigDecimal("125000.00"));
 
@@ -115,11 +120,13 @@ class AdminSellerServiceUnitTest {
             assertThat(response.pendingSellerApplications()).isEqualTo(5L);
             assertThat(response.approvedSellers()).isEqualTo(15L);
             assertThat(response.totalCards()).isEqualTo(2000L);
+            assertThat(response.listedCards()).isEqualTo(42L);
             assertThat(response.totalOrders()).isEqualTo(350L);
             assertThat(response.totalOrderAmount()).isEqualByComparingTo("125000.00");
 
             verify(userRepository).count();
             verify(cardRepository).count();
+            verify(productRepository).countByStatus("SHOW");
             verify(orderRepository).count();
             verify(orderRepository).paidOrFulfilledGmv();
         }
