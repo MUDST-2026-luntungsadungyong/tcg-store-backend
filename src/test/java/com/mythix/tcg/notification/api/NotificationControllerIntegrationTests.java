@@ -51,7 +51,8 @@ class NotificationControllerIntegrationTests {
     void setUp() {
         notificationRepository.deleteAll();
         orderRepository.deleteAll();
-        userRepository.deleteAll();
+        userRepository.findByEmail("notifications-buyer@example.com").ifPresent(userRepository::delete);
+        userRepository.findByEmail("notifications-seller@example.com").ifPresent(userRepository::delete);
 
         var buyerAuth = authService.register(new RegisterRequest("Buyer", "notifications-buyer@example.com", "password123"));
         buyerToken = buyerAuth.token();
