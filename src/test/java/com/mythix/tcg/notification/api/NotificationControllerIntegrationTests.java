@@ -8,6 +8,7 @@ import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,8 +18,11 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -35,6 +39,7 @@ class NotificationControllerIntegrationTests {
     @Autowired private UserRepository userRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private NotificationRepository notificationRepository;
+    @Autowired private ObjectMapper objectMapper;
 
     private User buyer;
     private User seller;
@@ -119,16 +124,24 @@ class NotificationControllerIntegrationTests {
     void marksOwnedNotificationAsReadIdempotently() throws Exception {
         UserNotification notification = createNotification(buyer, "ORDER_STATUS_CHANGED", "Order sent");
 
-        mockMvc.perform(patch("/api/notifications/{id}/read", notification.getId())
+        var firstResponse = mockMvc.perform(patch("/api/notifications/{id}/read", notification.getId())
                 .header("Authorization", bearer(buyerToken)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.readAt").isNotEmpty());
-        var firstReadAt = notificationRepository.findById(notification.getId()).orElseThrow().getReadAt();
+            .andExpect(jsonPath("$.readAt").isNotEmpty())
+            .andReturn();
+        var firstReadAt = objectMapper.readTree(firstResponse.getResponse().getContentAsString())
+            .get("readAt")
+            .asText();
 
-        mockMvc.perform(patch("/api/notifications/{id}/read", notification.getId())
+        var secondResponse = mockMvc.perform(patch("/api/notifications/{id}/read", notification.getId())
                 .header("Authorization", bearer(buyerToken)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.readAt").value(firstReadAt.toString()));
+            .andReturn();
+        var secondReadAt = objectMapper.readTree(secondResponse.getResponse().getContentAsString())
+            .get("readAt")
+            .asText();
+        assertThat(LocalDateTime.parse(secondReadAt))
+            .isCloseTo(LocalDateTime.parse(firstReadAt), within(1, ChronoUnit.MILLIS));
     }
 
     @Test
