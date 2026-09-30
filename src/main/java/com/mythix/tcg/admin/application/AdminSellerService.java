@@ -11,12 +11,19 @@ import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.admin.api.AdminDashboardResponse;
 import com.mythix.tcg.admin.domain.AuditLog;
 import com.mythix.tcg.admin.persistence.AuditLogRepository;
+import com.mythix.tcg.admin.api.DailyTrend;
+import com.mythix.tcg.order.domain.Order;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,9 +37,38 @@ public class AdminSellerService {
 
     @Transactional(readOnly = true)
     public AdminDashboardResponse dashboard() {
-        return new AdminDashboardResponse(userRepository.count(), userRepository.countByRole("ADMIN"), userRepository.countByRoleAndSellerStatus("USER", "NONE"),
-            userRepository.countBySellerStatus("PENDING"), userRepository.countBySellerStatus("APPROVED"),
-            cardRepository.count(), productRepository.countByStatus("SHOW"), orderRepository.count(), orderRepository.paidOrFulfilledGmv());
+        LocalDate today = LocalDate.now();
+        LocalDateTime sevenDaysAgo = today.minusDays(6).atStartOfDay();
+        List<Order> recentOrders = orderRepository.findRecentOrders(sevenDaysAgo);
+
+        Map<LocalDate, List<Order>> ordersByDate = recentOrders.stream()
+                .filter(o -> o.getCreatedAt() != null)
+                .collect(Collectors.groupingBy(o -> o.getCreatedAt().toLocalDate()));
+
+        List<DailyTrend> trends = new ArrayList<>();
+        for (int i = 6; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            List<Order> dayOrders = ordersByDate.getOrDefault(date, List.of());
+            long count = dayOrders.size();
+            BigDecimal gmv = dayOrders.stream()
+                    .filter(o -> "PAID".equalsIgnoreCase(o.getStatus()) || "FULFILLED".equalsIgnoreCase(o.getStatus()))
+                    .map(Order::getTotalAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            trends.add(new DailyTrend(date.toString(), gmv, count));
+        }
+
+        return new AdminDashboardResponse(
+                userRepository.count(),
+                userRepository.countByRole("ADMIN"),
+                userRepository.countByRoleAndSellerStatus("USER", "NONE"),
+                userRepository.countBySellerStatus("PENDING"),
+                userRepository.countBySellerStatus("APPROVED"),
+                cardRepository.count(),
+                productRepository.countByStatus("SHOW"),
+                orderRepository.count(),
+                orderRepository.paidOrFulfilledGmv(),
+                trends
+        );
     }
 
     @Transactional(readOnly = true)

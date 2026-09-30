@@ -48,6 +48,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("select coalesce(sum(o.totalAmount), 0) from Order o")
     BigDecimal totalOrderAmount();
     @Query("select coalesce(sum(o.totalAmount), 0) from Order o where o.status in ('PAID','FULFILLED')") BigDecimal paidOrFulfilledGmv();
+
+    @Query("select o from Order o where o.createdAt >= :fromDate order by o.createdAt asc")
+    List<Order> findRecentOrders(@Param("fromDate") LocalDateTime fromDate);
+
     @EntityGraph(attributePaths = "buyer")
     Page<Order> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
