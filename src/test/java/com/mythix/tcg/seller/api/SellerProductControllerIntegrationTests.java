@@ -324,6 +324,66 @@ class SellerProductControllerIntegrationTests {
     }
 
     @Test
+    void postLinksAnExistingCatalogCardWithoutOverwritingItsDetails() throws Exception {
+        Card catalogCard = Card.builder()
+            .id("catalog-scrum59-card")
+            .name("Charizard")
+            .supertype("Pokemon")
+            .subtypes("Stage 2")
+            .hp("120")
+            .types("Fire")
+            .rarity("Rare Holo")
+            .setName("Base Set")
+            .cardNumber("4")
+            .artist("Mitsuhiro Arita")
+            .imageSmall("https://example.com/charizard-small.webp")
+            .imageLarge("https://example.com/charizard-large.webp")
+            .marketPrice(new BigDecimal("31401.65"))
+            .build();
+        entityManager.persist(catalogCard);
+        entityManager.flush();
+
+        String request = """
+            {
+              "cardId": "catalog-scrum59-card",
+              "name": "Client supplied name",
+              "game": "Pokemon",
+              "image": "https://example.com/charizard-large.webp",
+              "price": 32000.00,
+              "cost": 25000.00,
+              "stock": 2,
+              "status": "SHOW",
+              "condition": "Near Mint",
+              "set": "Client supplied set",
+              "rarity": "Client supplied rarity"
+            }
+            """;
+
+        String response = mockMvc.perform(post(PRODUCTS_PATH)
+                .header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.cardId").value("catalog-scrum59-card"))
+            .andExpect(jsonPath("$.name").value("Charizard"))
+            .andExpect(jsonPath("$.set").value("Base Set"))
+            .andExpect(jsonPath("$.rarity").value("Rare Holo"))
+            .andReturn().getResponse().getContentAsString();
+
+        long productId = Long.parseLong(objectMapper.readTree(response).path("id").asText());
+        entityManager.flush();
+        entityManager.clear();
+
+        Product saved = entityManager.find(Product.class, productId);
+        assertThat(saved.getCard().getId()).isEqualTo("catalog-scrum59-card");
+        Card unchangedCard = entityManager.find(Card.class, "catalog-scrum59-card");
+        assertThat(unchangedCard.getName()).isEqualTo("Charizard");
+        assertThat(unchangedCard.getSetName()).isEqualTo("Base Set");
+        assertThat(unchangedCard.getRarity()).isEqualTo("Rare Holo");
+        assertThat(unchangedCard.getMarketPrice()).isEqualByComparingTo("31401.65");
+    }
+
+    @Test
     void postRejectsInvalidFrontendFieldsWithStandardValidationShape() throws Exception {
         String invalidRequest = """
             {
@@ -384,7 +444,7 @@ class SellerProductControllerIntegrationTests {
     }
 
     @Test
-    void putUpdatesFrontendFieldsAndTreatsStockAsAvailableWithoutDroppingReservations() throws Exception {
+    void putUpdatesListingFieldsWithoutMutatingTheCatalogCard() throws Exception {
         Product product = persistProduct(
             seller,
             "Old Name",
@@ -429,7 +489,7 @@ class SellerProductControllerIntegrationTests {
             row,
             product.getId(),
             seller.getId(),
-            "Updated Name",
+            "Old Name",
             "Pokemon",
             "https://example.com/updated.webp",
             "425.50",
@@ -437,8 +497,8 @@ class SellerProductControllerIntegrationTests {
             9,
             "HIDE",
             "LP",
-            "Updated Set",
-            "Illustration Rare",
+            "Old Set",
+            "Common",
             1
         );
 
@@ -447,6 +507,10 @@ class SellerProductControllerIntegrationTests {
         Product saved = entityManager.find(Product.class, product.getId());
         assertThat(saved.getOnHand()).isEqualTo(11);
         assertThat(saved.getReserved()).isEqualTo(2);
+        assertThat(saved.getCard().getName()).isEqualTo("Old Name");
+        assertThat(saved.getCard().getSetName()).isEqualTo("Old Set");
+        assertThat(saved.getCard().getRarity()).isEqualTo("Common");
+        assertThat(saved.getCard().getMarketPrice()).isEqualByComparingTo("314.00");
     }
 
     @Test
