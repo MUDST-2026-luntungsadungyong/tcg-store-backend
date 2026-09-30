@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.data.jpa.repository.EntityGraph;
 
 import java.util.List;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.math.BigDecimal;
 
@@ -52,4 +53,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     @EntityGraph(attributePaths = "buyer")
     Page<Order> findAllByStatusOrderByCreatedAtDesc(String status, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"buyer", "items", "items.seller"})
+    @Query("""
+        select distinct o from Order o join o.buyer buyer left join o.items item left join item.seller seller
+        where (:query = ''
+          or (:searchBy = 'ORDER_NUMBER' and lower(o.orderNumber) like lower(concat('%', :query, '%')))
+          or (:searchBy = 'BUYER' and (lower(buyer.fullName) like lower(concat('%', :query, '%')) or lower(buyer.email) like lower(concat('%', :query, '%'))))
+          or (:searchBy = 'SELLER' and (lower(seller.fullName) like lower(concat('%', :query, '%')) or lower(seller.email) like lower(concat('%', :query, '%')) or lower(item.shopNameSnapshot) like lower(concat('%', :query, '%')))))
+          and (:statusesEmpty = 'Y' or o.status in :statuses)
+          and (cast(:fromDate as localdatetime) is null or o.createdAt >= :fromDate)
+          and (cast(:toDate as localdatetime) is null or o.createdAt < :toDate)
+        order by o.createdAt desc
+        """)
+    Page<Order> searchAdminOrderLogs(@Param("query") String query, @Param("searchBy") String searchBy, @Param("statuses") List<String> statuses, @Param("statusesEmpty") String statusesEmpty, @Param("fromDate") LocalDateTime fromDate, @Param("toDate") LocalDateTime toDate, Pageable pageable);
 }
