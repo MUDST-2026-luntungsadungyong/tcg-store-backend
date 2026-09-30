@@ -71,4 +71,33 @@ class AdminUsersControllerTest {
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Email already exists");
     }
+
+    @Test
+    void delete_removesExistingAdminAccount() {
+        User admin = User.builder().id(5L).fullName("Admin to Delete").email("del@mythix.com").role("ADMIN").build();
+        when(users.findById(5L)).thenReturn(java.util.Optional.of(admin));
+
+        controller.delete(5L);
+
+        verify(users).delete(admin);
+    }
+
+    @Test
+    void delete_throwsNotFoundWhenAdminDoesNotExist() {
+        when(users.findById(99L)).thenReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> controller.delete(99L))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Admin not found");
+    }
+
+    @Test
+    void delete_throwsBadRequestWhenUserIsNotAdmin() {
+        User regularUser = User.builder().id(6L).fullName("Customer").email("cust@mythix.com").role("USER").build();
+        when(users.findById(6L)).thenReturn(java.util.Optional.of(regularUser));
+
+        assertThatThrownBy(() -> controller.delete(6L))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("User is not an admin");
+    }
 }
