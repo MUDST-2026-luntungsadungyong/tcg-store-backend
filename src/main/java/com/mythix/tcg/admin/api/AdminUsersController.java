@@ -29,14 +29,27 @@ public class AdminUsersController {
     private final PasswordEncoder passwordEncoder;
 
     @GetMapping
-    public List<AdminUserResponse> list(@RequestParam(defaultValue = "") String search) {
+    public List<AdminUserResponse> list(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "ADMIN") String role,
+            @RequestParam(required = false) String sellerStatus) {
         String query = search.trim().toLowerCase(Locale.ROOT);
-        return users.findByRoleOrderByCreatedAtDesc("ADMIN").stream()
+        var stream = (sellerStatus != null && !sellerStatus.isBlank())
+                ? users.findAll().stream().filter(u -> sellerStatus.equalsIgnoreCase(u.getSellerStatus()))
+                : ("ALL".equalsIgnoreCase(role))
+                ? users.findAll().stream()
+                : users.findByRoleOrderByCreatedAtDesc(role).stream();
+
+        return stream
             .filter(user -> query.isEmpty()
                 || user.getEmail().toLowerCase(Locale.ROOT).contains(query)
                 || user.getFullName().toLowerCase(Locale.ROOT).contains(query))
             .map(AdminUserResponse::from)
             .toList();
+    }
+
+    public List<AdminUserResponse> list(String search) {
+        return list(search, "ADMIN", null);
     }
 
     @PostMapping
