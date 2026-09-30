@@ -191,6 +191,15 @@ class SellerProductControllerIntegrationTests {
             "Double Rare",
             1
         );
+        assertThat(rows.get(0).path("cardId").asText()).isEqualTo(ownProduct.getCard().getId());
+        assertThat(rows.get(0).path("cardNumber").asText()).isEqualTo("001");
+        assertThat(rows.get(0).path("supertype").asText()).isEqualTo("Pokemon");
+        assertThat(rows.get(0).path("subtypes").asText()).isEqualTo("Stage 2");
+        assertThat(rows.get(0).path("hp").asText()).isEqualTo("120");
+        assertThat(rows.get(0).path("types").asText()).isEqualTo("Fire");
+        assertThat(rows.get(0).path("artist").asText()).isEqualTo("Mitsuhiro Arita");
+        assertThat(rows.get(0).path("marketPrice").decimalValue())
+            .isEqualByComparingTo("314.00");
     }
 
     @Test
@@ -666,9 +675,13 @@ class SellerProductControllerIntegrationTests {
             .setName(set)
             .cardNumber("001")
             .rarity(rarity)
+            .subtypes("Stage 2")
+            .hp("120")
+            .types("Fire")
+            .artist("Mitsuhiro Arita")
             .imageSmall(masterImage)
             .imageLarge(masterImage)
-            .marketPrice(BigDecimal.ZERO)
+            .marketPrice(new BigDecimal("314.00"))
             .build();
         entityManager.persist(card);
 

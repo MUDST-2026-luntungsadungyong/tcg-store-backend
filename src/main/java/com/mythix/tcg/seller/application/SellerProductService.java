@@ -73,18 +73,26 @@ public class SellerProductService {
         User seller = requireSeller(sellerId);
         String imageUrl = resolveImage(request.image(), imageFile);
 
-        String cardId = SELLER_CARD_PREFIX + UUID.randomUUID();
-        Card card = cardRepository.save(Card.builder()
-            .id(cardId)
-            .name(request.name().trim())
-            .supertype(canonicalGame(request.game()))
-            .setName(defaultSet(request.set()))
-            .cardNumber(shortCardNumber(cardId))
-            .rarity(trimToNull(request.rarity()))
-            .imageSmall(imageUrl)
-            .imageLarge(imageUrl)
-            .marketPrice(request.price())
-            .build());
+        String requestedCardId = trimToNull(request.cardId());
+        Card card;
+        if (requestedCardId != null) {
+            card = cardRepository.findById(requestedCardId)
+                .filter(foundCard -> Boolean.TRUE.equals(foundCard.getActive()))
+                .orElseThrow(() -> new SellerProductValidationException("cardId", "Card was not found in the database"));
+        } else {
+            String cardId = SELLER_CARD_PREFIX + UUID.randomUUID();
+            card = cardRepository.save(Card.builder()
+                .id(cardId)
+                .name(request.name().trim())
+                .supertype(canonicalGame(request.game()))
+                .setName(defaultSet(request.set()))
+                .cardNumber(shortCardNumber(cardId))
+                .rarity(trimToNull(request.rarity()))
+                .imageSmall(imageUrl)
+                .imageLarge(imageUrl)
+                .marketPrice(request.price())
+                .build());
+        }
 
         Product product = productRepository.save(Product.builder()
             .seller(seller)
@@ -113,16 +121,6 @@ public class SellerProductService {
         Product product = findOwnedForUpdate(sellerId, productId);
         String previousImage = product.getCustomImageUrl();
         String imageUrl = resolveImage(request.image(), imageFile);
-
-        Card card = editableCard(product);
-        card.setName(request.name().trim());
-        card.setSupertype(canonicalGame(request.game()));
-        card.setSetName(defaultSet(request.set()));
-        card.setCardNumber(shortCardNumber(firstNonBlank(card.getCardNumber(), card.getId())));
-        card.setRarity(trimToNull(request.rarity()));
-        card.setImageSmall(imageUrl);
-        card.setImageLarge(imageUrl);
-        card.setMarketPrice(request.price());
 
         product.setCustomImageUrl(imageUrl);
         product.setCondition(normalizeCondition(request.condition()));
@@ -187,27 +185,6 @@ public class SellerProductService {
             throw new SellerProductForbiddenException();
         }
         return product;
-    }
-
-    private Card editableCard(Product product) {
-        Card existing = product.getCard();
-        if (existing.getId().startsWith(SELLER_CARD_PREFIX)) {
-            return existing;
-        }
-
-        Card dedicated = cardRepository.save(Card.builder()
-            .id(SELLER_CARD_PREFIX + UUID.randomUUID())
-            .name(existing.getName())
-            .supertype(existing.getSupertype())
-            .setName(defaultSet(existing.getSetName()))
-            .cardNumber(shortCardNumber(firstNonBlank(existing.getCardNumber(), existing.getId())))
-            .rarity(existing.getRarity())
-            .imageSmall(firstNonBlank(existing.getImageSmall(), product.getCustomImageUrl()))
-            .imageLarge(firstNonBlank(existing.getImageLarge(), product.getCustomImageUrl()))
-            .marketPrice(existing.getMarketPrice() == null ? BigDecimal.ZERO : existing.getMarketPrice())
-            .build());
-        product.setCard(dedicated);
-        return dedicated;
     }
 
     private String resolveImage(String requestedImageUrl, MultipartFile imageFile) {
@@ -287,6 +264,16 @@ public class SellerProductService {
             product.getLanguage(),
             card.getSetName(),
             card.getRarity(),
+            card.getId(),
+            card.getCardNumber(),
+            card.getSupertype(),
+            card.getSubtypes(),
+            card.getHp(),
+            card.getTypes(),
+            card.getArtist(),
+            card.getImageSmall(),
+            card.getImageLarge(),
+            card.getMarketPrice(),
             activeOrders,
             activeOrders
         );
