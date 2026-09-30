@@ -7,6 +7,7 @@ import com.mythix.tcg.order.api.CheckoutDto.CheckoutResponse;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.notification.application.NotificationService;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
@@ -38,6 +39,7 @@ public class CheckoutService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final SellerProfileRepository sellerProfileRepository;
+    private final NotificationService notificationService;
 
     /**
      * The buyer row is locked before reading idempotency or cart state. This serializes
@@ -138,6 +140,7 @@ public class CheckoutService {
         }
         cartItemRepository.deleteAllInBatch(cartItems);
         orderRepository.flush();
+        notificationService.notifySellersOfReservation(saved);
         return toResponse(saved);
     }
 

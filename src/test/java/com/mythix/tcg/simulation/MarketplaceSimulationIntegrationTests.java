@@ -13,6 +13,7 @@ import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.domain.SellerProfile;
@@ -74,6 +75,9 @@ class MarketplaceSimulationIntegrationTests {
     private OrderRepository orderRepository;
 
     @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
     private ProductRepository productRepository;
 
     @Autowired
@@ -85,6 +89,7 @@ class MarketplaceSimulationIntegrationTests {
     @BeforeEach
     void cleanDatabase() {
         auditLogRepository.deleteAll();
+        notificationRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
         productRepository.deleteAll();

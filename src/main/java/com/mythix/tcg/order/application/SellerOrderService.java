@@ -4,6 +4,7 @@ import com.mythix.tcg.order.api.SellerOrderDto.*;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.notification.application.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -23,6 +24,7 @@ import java.util.Locale;
 public class SellerOrderService {
 
     private final OrderRepository orderRepository;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public Page<SellerOrderResponse> getSellerOrders(Long sellerId, String status, Pageable pageable) {
@@ -52,8 +54,16 @@ public class SellerOrderService {
         Order order = orderRepository.findOrderForSeller(sellerId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found for seller"));
 
-        order.setStatus(normalizeStatus(newStatus));
+        String previousStatus = order.getStatus();
+        String updatedStatus = normalizeStatus(newStatus);
+        order.setStatus(updatedStatus);
         Order saved = orderRepository.save(order);
+        // The current frontend maps its SENT action to the backend's FULFILLED status.
+        // Notify only on the transition so retries do not create duplicate notifications.
+        if (!"FULFILLED".equalsIgnoreCase(previousStatus)
+                && "FULFILLED".equalsIgnoreCase(updatedStatus)) {
+            notificationService.notifyBuyerOrderSent(saved);
+        }
         return mapToSellerOrderResponse(saved, sellerId);
     }
 
