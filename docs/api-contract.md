@@ -79,6 +79,20 @@ Notifications are stored in the database and inserted in the same transaction as
 - order total ส่งเป็น `totalAmount`; SCRUM-38 ใช้คำว่า `totalPrice` จึงควร normalize ก่อน implement
 - response ของ list ต้องเลือก envelope เดียวทั้งระบบ เช่น `{ "data": { "items": [], "page": {} } }`; ห้ามสลับระหว่าง raw array, Spring `Page`, และ custom object โดยไม่บันทึก contract
 
+## Seller inventory (SCRUM-59)
+
+Seller inventory endpoints use the authenticated seller from the JWT/SecurityContext and never trust a client-supplied seller ID.
+
+| Method/path | Request | Response | Notes |
+| --- | --- | --- | --- |
+| `GET /seller/products` | optional `search`, `game`, `status`, `page`, `size` query parameters | seller product array | Each item includes listing fields plus catalog-card details |
+| `POST /seller/products` | listing fields plus optional `cardId` | seller product (`201`) | A valid active `cardId` links the listing to the existing catalog card |
+| `PUT /seller/products/{id}` | listing form fields | seller product | Updates listing-owned values without mutating catalog-card details |
+| `PATCH /seller/products/{id}/status` | `{ "status": "SHOW" | "HIDE" }` | empty (`204`) | Changes listing visibility only |
+| `DELETE /seller/products/{id}` | none | empty (`204`) | Subject to ownership and active-order rules |
+
+Seller product responses include `cardId`, `cardNumber`, `supertype`, `subtypes`, `hp`, `types`, `artist`, `imageSmall`, `imageLarge`, and `marketPrice` from the linked catalog card. Creating with `cardId` treats those catalog fields as read-only even if duplicate name, set, rarity, or image values are present in the request. Updating a listing changes only product/listing state such as sell price, cost, available stock, status, condition, language, and custom image; it does not rewrite the shared catalog card.
+
 ## Shopping cart (SCRUM-11)
 
 Cart is scoped to the authenticated user from the JWT/SecurityContext. The API never accepts a client-supplied `userId`.

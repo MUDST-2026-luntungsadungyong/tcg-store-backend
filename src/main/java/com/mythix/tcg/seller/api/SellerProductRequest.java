@@ -56,6 +56,9 @@ public record SellerProductRequest(
     String set,
 
     @Size(max = 255, message = "Rarity must be at most 255 characters")
-    String rarity
+    String rarity,
+
+    @Size(max = 100, message = "Card ID must be at most 100 characters")
+    String cardId
 ) {
 }

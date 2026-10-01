@@ -16,6 +16,16 @@ public record SellerProductResponse(
     String language,
     String set,
     String rarity,
+    String cardId,
+    String cardNumber,
+    String supertype,
+    String subtypes,
+    String hp,
+    String types,
+    String artist,
+    String imageSmall,
+    String imageLarge,
+    BigDecimal marketPrice,
     long activeOrderCount,
     long activeReservationCount
 ) {

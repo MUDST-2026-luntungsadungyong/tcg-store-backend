@@ -62,6 +62,9 @@ public class SellerProductMultipartRequest {
     @Size(max = 255, message = "Rarity must be at most 255 characters")
     private String rarity;
 
+    @Size(max = 100, message = "Card ID must be at most 100 characters")
+    private String cardId;
+
     public SellerProductRequest toRequest() {
         return new SellerProductRequest(
             name,
@@ -74,7 +77,8 @@ public class SellerProductMultipartRequest {
             condition,
             language,
             set,
-            rarity
+            rarity,
+            cardId
         );
     }
 }
