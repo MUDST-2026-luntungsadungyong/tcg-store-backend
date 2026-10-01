@@ -149,9 +149,6 @@ public class SellerProductService {
     public void delete(Long sellerId, Long productId) {
         requireSeller(sellerId);
         Product product = findOwnedForUpdate(sellerId, productId);
-        if (!"HIDE".equals(product.getStatus())) {
-            throw new SellerProductMustBeHiddenException();
-        }
 
         long activeOrders = orderItemRepository.countActiveOrders(productId);
         if (activeOrders > 0 || product.getReserved() > 0) {
