@@ -2,6 +2,7 @@ services:
   backend:
     build:
       context: .
+    pull_policy: build
     container_name: tcg_backend_neon
     restart: unless-stopped
     ports:

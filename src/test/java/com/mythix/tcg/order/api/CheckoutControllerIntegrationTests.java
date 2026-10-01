@@ -9,6 +9,7 @@ import com.mythix.tcg.collection.persistence.CollectionRepository;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
@@ -47,6 +48,7 @@ class CheckoutControllerIntegrationTests {
     @Autowired private JwtService jwtService;
     @Autowired private CartItemRepository cartItemRepository;
     @Autowired private OrderRepository orderRepository;
+    @Autowired private NotificationRepository notificationRepository;
     @Autowired private OrderItemRepository orderItemRepository;
     @Autowired private ProductRepository productRepository;
     @Autowired private UserRepository userRepository;
@@ -60,6 +62,7 @@ class CheckoutControllerIntegrationTests {
 
     @BeforeEach
     void setUp() {
+        notificationRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
         cartItemRepository.deleteAll();
@@ -103,6 +106,12 @@ class CheckoutControllerIntegrationTests {
         assertThat(productRepository.findById(product.getId()).orElseThrow().getReserved()).isEqualTo(3);
         assertThat(cartItemRepository.findAllByUserIdWithProduct(buyer.getId())).isEmpty();
         assertThat(orderRepository.findByBuyerIdAndIdempotencyKey(buyer.getId(), "checkout-happy-1")).isPresent();
+        assertThat(notificationRepository.findAll())
+            .anySatisfy(notification -> {
+                assertThat(notification.getRecipient().getId()).isEqualTo(seller.getId());
+                assertThat(notification.getType()).isEqualTo("ORDER_RESERVED");
+                assertThat(notification.getOrder().getId()).isNotNull();
+            });
     }
 
     @Test

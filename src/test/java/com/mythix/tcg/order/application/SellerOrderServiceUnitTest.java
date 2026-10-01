@@ -6,6 +6,7 @@ import com.mythix.tcg.order.api.SellerOrderDto.SellerProfitSummaryResponse;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.notification.application.NotificationService;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.user.domain.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,9 @@ class SellerOrderServiceUnitTest {
 
     @Mock
     private OrderRepository orderRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private SellerOrderService sellerOrderService;
@@ -156,6 +160,7 @@ class SellerOrderServiceUnitTest {
         assertThat(response).isNotNull();
         assertThat(sampleOrder.getStatus()).isEqualTo("FULFILLED");
         verify(orderRepository).save(sampleOrder);
+        verify(notificationService).notifyBuyerOrderSent(sampleOrder);
     }
 
     @Test

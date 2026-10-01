@@ -9,6 +9,7 @@ import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
@@ -61,6 +62,9 @@ class BuyerOrderControllerIntegrationTests {
     @Autowired
     private SellerProfileRepository sellerProfileRepository;
 
+    @Autowired
+    private NotificationRepository notificationRepository;
+
     private String buyerToken;
     private String otherBuyerToken;
     private User buyer;
@@ -69,6 +73,7 @@ class BuyerOrderControllerIntegrationTests {
 
     @BeforeEach
     void setUp() {
+        notificationRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
         productRepository.deleteAll();

@@ -13,15 +13,39 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/postgres/migrations:/migrations:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-tcg_store}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  migrations:
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-tcg_store}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./infra/postgres/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        set -eu;
+        for migration in /migrations/*.sql; do
+          echo "Applying $${migration}";
+          psql -v ON_ERROR_STOP=1 -f "$${migration}";
+        done
+
   backend:
     build:
       context: .
+    pull_policy: build
     container_name: tcg_backend
     restart: unless-stopped
     ports:
@@ -40,8 +64,8 @@ services:
     volumes:
       - backend_uploads:/app/uploads/products
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
     networks:
       default:
         aliases:

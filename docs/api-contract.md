@@ -26,6 +26,40 @@
 
 `/admin/*` มี client placeholder ใน frontend แต่ไม่อยู่ใน Jira backend scope ชุดนี้ จึงยังไม่ถือเป็น committed contract
 
+## Notifications (F-06)
+
+Notifications are authenticated, persistent in-app order events. The API derives the recipient from the Bearer token; clients cannot supply a recipient ID.
+
+### Events and persistence
+
+| Type | Recipient | Created when | Default title |
+| --- | --- | --- | --- |
+| `ORDER_RESERVED` | Each seller with items in the successfully created order | Checkout commits the order and reserved stock | `New card reservation` |
+| `ORDER_STATUS_CHANGED` | The buyer on the order | Seller completes the existing frontend “Mark as sent” action | `Your order has been sent` |
+
+The current frontend translates that seller action to backend status `FULFILLED`; the notification is emitted only when the order first enters that status. The order action and notification are in the same database transaction. Notifications remain stored until the user deletes them (no time-based cleanup).
+
+### Endpoints
+
+All routes below require `Authorization: Bearer <token>` and operate only on the authenticated user's notifications.
+
+| Method and path | Behavior |
+| --- | --- |
+| `GET /api/notifications?page=0&size=20` | Return the user's notifications ordered by `createdAt DESC, id DESC`. `page` is zero-based; `size` defaults to 20 and must be 1–100. |
+| `PATCH /api/notifications/{id}/read` | Set `readAt` once; repeating the request returns the same read timestamp. |
+| `DELETE /api/notifications/{id}` | Permanently delete an owned notification; returns `204` on success. |
+
+The list response uses Spring's page envelope: `content`, `totalElements`, `totalPages`, `number`, `size`, `first`, and `last`. Each `content` item is `{ id, type, title, message, orderId, readAt, createdAt }`; `readAt` is `null` until read. IDs are JSON numbers and timestamps are ISO date-times. Recipient IDs are not returned.
+
+### Errors
+
+- `401 UNAUTHENTICATED`: missing, invalid, or expired token.
+- `400 VALIDATION_ERROR`: invalid page, size, or notification ID.
+- `404 NOT_FOUND`: notification does not exist or belongs to another user (ownership is not disclosed).
+- `5xx`: unexpected persistence/server failure; clients must show a retryable error and must not treat mock data as success.
+
+Notifications are stored in the database and inserted in the same transaction as checkout or the seller status action. There is no notification channel outside the in-app inbox and no scheduled retention job.
+
 ## Shared values
 
 | Concept | Canonical API value | หมายเหตุ |
