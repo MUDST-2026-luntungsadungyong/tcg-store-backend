@@ -513,16 +513,19 @@ class SellerProductControllerIntegrationTests {
     }
 
     @Test
-    void deleteRequiresProductToBeHiddenFirst() throws Exception {
+    void deleteAllowsVisibleProductWithoutOrderHistory() throws Exception {
         Product product = persistProduct(seller, "Visible", "Pokemon", "Test", "Rare",
             "https://example.com/visible.webp", null, new BigDecimal("100.00"), new BigDecimal("40.00"),
             2, 0, "SHOW");
         entityManager.flush();
 
-        expectProductError(mockMvc.perform(delete(PRODUCTS_PATH + "/{id}", product.getId())
-                .header("Authorization", bearer(sellerToken))), 409, "MUST_HIDE");
+        mockMvc.perform(delete(PRODUCTS_PATH + "/{id}", product.getId())
+                .header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isNoContent());
 
-        assertThat(entityManager.find(Product.class, product.getId())).isNotNull();
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(entityManager.find(Product.class, product.getId())).isNull();
     }
 
     @Test

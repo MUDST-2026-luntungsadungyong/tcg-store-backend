@@ -15,7 +15,6 @@ import com.mythix.tcg.seller.application.SellerAlreadyApprovedException;
 import com.mythix.tcg.seller.application.SellerProductForbiddenException;
 import com.mythix.tcg.seller.application.SellerProductHasActiveOrdersException;
 import com.mythix.tcg.seller.application.SellerProductImageStorageException;
-import com.mythix.tcg.seller.application.SellerProductMustBeHiddenException;
 import com.mythix.tcg.seller.application.SellerProductNotFoundException;
 import com.mythix.tcg.collection.application.CardNotFoundException;
 import com.mythix.tcg.collection.application.CollectionListingNotFoundException;
@@ -271,12 +270,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> checkoutInsufficientStock(CheckoutInsufficientStockException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(new ApiError("INSUFFICIENT_STOCK", exception.getMessage(), Map.of()));
-    }
-
-    @ExceptionHandler(SellerProductMustBeHiddenException.class)
-    public ResponseEntity<ApiError> productMustBeHidden(SellerProductMustBeHiddenException exception) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-            .body(new ApiError("MUST_HIDE", exception.getMessage(), Map.of()));
     }
 
     @ExceptionHandler(SellerProductHasActiveOrdersException.class)
