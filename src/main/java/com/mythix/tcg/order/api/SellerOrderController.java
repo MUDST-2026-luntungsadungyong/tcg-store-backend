@@ -50,7 +50,7 @@ public class SellerOrderController {
             @PathVariable Long orderId,
             @Valid @RequestBody UpdateOrderStatusRequest request) {
 
-        SellerOrderResponse response = sellerOrderService.updateOrderStatus(user.userId(), orderId, request.status());
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(user.userId(), orderId, request.status(), request.note());
         return ResponseEntity.ok(response);
     }
 

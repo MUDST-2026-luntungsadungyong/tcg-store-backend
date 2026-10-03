@@ -57,12 +57,16 @@ class ProductControllerIntegrationTests {
     @Autowired
     private com.mythix.tcg.collection.persistence.CollectionRepository collectionRepository;
 
+    @Autowired
+    private com.mythix.tcg.notification.persistence.NotificationRepository notificationRepository;
+
     private User seller;
     private Card pikachuCard;
     private Card charizardCard;
 
     @BeforeEach
     void setUp() {
+        notificationRepository.deleteAll();
         collectionRepository.deleteAll();
         cartItemRepository.deleteAll();
         orderItemRepository.deleteAll();

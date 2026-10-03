@@ -224,12 +224,54 @@ class SellerOrderControllerIntegrationTests {
 
         Order updated = orderRepository.findById(sellerOrder.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo("FULFILLED");
+
+        // Verify stock deducted in database: onHand was 10, now 8; reserved was 2, now 0
+        Product updatedProduct = productRepository.findById(sellerProduct.getId()).orElseThrow();
+        assertThat(updatedProduct.getOnHand()).isEqualTo(8);
+        assertThat(updatedProduct.getReserved()).isEqualTo(0);
+
         assertThat(notificationRepository.findAll())
             .anySatisfy(notification -> {
                 assertThat(notification.getRecipient().getId()).isEqualTo(buyer.getId());
                 assertThat(notification.getOrder().getId()).isEqualTo(sellerOrder.getId());
                 assertThat(notification.getType()).isEqualTo("ORDER_STATUS_CHANGED");
             });
+    }
+
+    @Test
+    void updateOrderStatus_Cancelled_ReleasesReservedStock() throws Exception {
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"CANCELLED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        Order updated = orderRepository.findById(sellerOrder.getId()).orElseThrow();
+        assertThat(updated.getStatus()).isEqualTo("CANCELLED");
+
+        // Verify reserved stock released: onHand remains 10, reserved was 2 now 0
+        Product updatedProduct = productRepository.findById(sellerProduct.getId()).orElseThrow();
+        assertThat(updatedProduct.getOnHand()).isEqualTo(10);
+        assertThat(updatedProduct.getReserved()).isEqualTo(0);
+    }
+
+    @Test
+    void updateOrderStatus_TerminalStatusCannotChange() throws Exception {
+        // Mark as FULFILLED first
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"FULFILLED\"}"))
+                .andExpect(status().isOk());
+
+        // Attempt to cancel an already fulfilled order should fail
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"CANCELLED\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
     @Test

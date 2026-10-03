@@ -51,6 +51,19 @@ public class BuyerOrderDto {
     @AllArgsConstructor
     @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class OrderStatusLogResponse {
+        private String fromStatus;
+        private String toStatus;
+        private String changedByRole;
+        private String note;
+        private String createdAt;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class BuyerOrderResponse {
         private String id;
         private String orderNumber;
@@ -62,6 +75,7 @@ public class BuyerOrderDto {
         private BigDecimal totalPrice;
         private Integer itemCount;
         private List<BuyerOrderItemResponse> items;
+        private List<OrderStatusLogResponse> logs;
         private String createdAt;
         private String updatedAt;
         private String paymentConfirmedAt;
@@ -69,4 +83,9 @@ public class BuyerOrderDto {
         private String ownershipTransferredAt;
         private String cancelledAt;
     }
+
+    public record UpdateBuyerOrderStatusRequest(
+        String status,
+        String note
+    ) {}
 }

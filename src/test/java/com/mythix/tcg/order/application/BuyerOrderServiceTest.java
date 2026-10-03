@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,6 +28,18 @@ class BuyerOrderServiceTest {
 
     @Mock
     private OrderRepository orderRepository;
+
+    @Mock
+    private OrderStatusLogRepository orderStatusLogRepository;
+
+    @Mock
+    private com.mythix.tcg.product.persistence.ProductRepository productRepository;
+
+    @Mock
+    private com.mythix.tcg.user.persistence.UserRepository userRepository;
+
+    @Mock
+    private com.mythix.tcg.collection.application.CollectionService collectionService;
 
     @InjectMocks
     private BuyerOrderService buyerOrderService;
@@ -118,3 +131,4 @@ class BuyerOrderServiceTest {
                 .hasMessageContaining("101");
     }
 }
+
