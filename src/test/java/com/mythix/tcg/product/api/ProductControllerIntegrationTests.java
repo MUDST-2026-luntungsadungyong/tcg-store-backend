@@ -7,6 +7,7 @@ import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.seller.domain.SellerProfile;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
@@ -41,6 +42,8 @@ class ProductControllerIntegrationTests {
 
     @Autowired
     private OrderItemRepository orderItemRepository;
+    @Autowired
+    private OrderStatusLogRepository orderStatusLogRepository;
 
     @Autowired
     private OrderRepository orderRepository;
@@ -67,6 +70,7 @@ class ProductControllerIntegrationTests {
     @BeforeEach
     void setUp() {
         notificationRepository.deleteAll();
+        orderStatusLogRepository.deleteAll();
         collectionRepository.deleteAll();
         cartItemRepository.deleteAll();
         orderItemRepository.deleteAll();
@@ -256,3 +260,4 @@ class ProductControllerIntegrationTests {
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"));
     }
 }
+

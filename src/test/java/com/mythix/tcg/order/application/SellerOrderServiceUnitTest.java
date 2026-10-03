@@ -78,7 +78,7 @@ class SellerOrderServiceUnitTest {
             .id(100L)
             .orderNumber("ORD-2026-0001")
             .buyer(buyer)
-            .status("PENDING")
+            .status("CONFIRMED")
             .totalAmount(new BigDecimal("1250.00"))
             .createdAt(LocalDateTime.now())
             .items(new ArrayList<>())
@@ -260,6 +260,7 @@ class SellerOrderServiceUnitTest {
         assertThat(summary.totalOrders()).isEqualTo(1);
     }
 }
+
 
 
 

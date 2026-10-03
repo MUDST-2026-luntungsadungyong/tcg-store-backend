@@ -206,7 +206,7 @@ public class SellerOrderService {
 
         for (Order order : allOrders) {
             String status = order.getStatus();
-            if ("PENDING".equalsIgnoreCase(status) || "PAID".equalsIgnoreCase(status)) {
+            if ("PENDING".equalsIgnoreCase(status) || "CONFIRMED".equalsIgnoreCase(status) || "SENT".equalsIgnoreCase(status)) {
                 pendingOrders++;
             } else if ("FULFILLED".equalsIgnoreCase(status)) {
                 fulfilledOrders++;
@@ -316,3 +316,4 @@ public class SellerOrderService {
         return value;
     }
 }
+
