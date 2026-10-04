@@ -3,8 +3,13 @@ package com.mythix.tcg.order.application;
 import com.mythix.tcg.order.api.SellerOrderDto.*;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
+import com.mythix.tcg.order.domain.OrderStatusLog;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.notification.application.NotificationService;
+import com.mythix.tcg.product.domain.Product;
+import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.user.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -16,8 +21,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +32,9 @@ public class SellerOrderService {
 
     private final OrderRepository orderRepository;
     private final NotificationService notificationService;
+    private final ProductRepository productRepository;
+    private final OrderStatusLogRepository orderStatusLogRepository;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public Page<SellerOrderResponse> getSellerOrders(Long sellerId, String status, Pageable pageable) {
@@ -50,21 +60,136 @@ public class SellerOrderService {
     }
 
     @Transactional
-    public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus) {
+    public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note) {
         Order order = orderRepository.findOrderForSeller(sellerId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found for seller"));
 
         String previousStatus = order.getStatus();
         String updatedStatus = normalizeStatus(newStatus);
+
+        if (previousStatus.equalsIgnoreCase(updatedStatus)) {
+            return mapToSellerOrderResponse(order, sellerId);
+        }
+
+        validateStatusTransition(previousStatus, updatedStatus);
+
+        if ("SENT".equalsIgnoreCase(updatedStatus)) {
+            deductInventoryOnSend(order);
+        } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
+            releaseInventoryOnCancellation(order);
+        }
+
         order.setStatus(updatedStatus);
         Order saved = orderRepository.save(order);
-        // The current frontend maps its SENT action to the backend's FULFILLED status.
-        // Notify only on the transition so retries do not create duplicate notifications.
-        if (!"FULFILLED".equalsIgnoreCase(previousStatus)
-                && "FULFILLED".equalsIgnoreCase(updatedStatus)) {
+
+        OrderStatusLog log = OrderStatusLog.builder()
+                .order(saved)
+                .fromStatus(previousStatus)
+                .toStatus(updatedStatus)
+                .changedBy(userRepository.getReferenceById(sellerId))
+                .changedByRole("SELLER")
+                .note(note)
+                .build();
+        orderStatusLogRepository.save(log);
+
+        if ("SENT".equalsIgnoreCase(updatedStatus)) {
             notificationService.notifyBuyerOrderSent(saved);
         }
         return mapToSellerOrderResponse(saved, sellerId);
+    }
+
+    private void validateStatusTransition(String from, String to) {
+        if ("FULFILLED".equalsIgnoreCase(from) || "CANCELLED".equalsIgnoreCase(from)) {
+            throw new OrderStatusValidationException("status",
+                    "Cannot change status of an order that is already " + from);
+        }
+        if ("CANCELLED".equalsIgnoreCase(to)) {
+            if (!"PENDING".equalsIgnoreCase(from) && !"CONFIRMED".equalsIgnoreCase(from)) {
+                throw new OrderStatusValidationException("status", "Can only cancel PENDING or CONFIRMED orders");
+            }
+        } else if ("CONFIRMED".equalsIgnoreCase(to)) {
+            if (!"PENDING".equalsIgnoreCase(from)) {
+                throw new OrderStatusValidationException("status", "Can only confirm PENDING orders");
+            }
+        } else if ("SENT".equalsIgnoreCase(to)) {
+            if (!"CONFIRMED".equalsIgnoreCase(from)) {
+                throw new OrderStatusValidationException("status", "Can only send CONFIRMED orders");
+            }
+        } else if ("FULFILLED".equalsIgnoreCase(to)) {
+            throw new OrderStatusValidationException("status", "Only the buyer can fulfill the order");
+        } else if ("PENDING".equalsIgnoreCase(to)) {
+            throw new OrderStatusValidationException("status", "Cannot revert order to PENDING");
+        }
+    }
+
+    private void deductInventoryOnSend(Order order) {
+        if (order.getItems() == null || order.getItems().isEmpty()) {
+            return;
+        }
+
+        List<Long> productIds = order.getItems().stream()
+                .filter(item -> item.getProduct() != null && item.getProduct().getId() != null)
+                .map(item -> item.getProduct().getId())
+                .sorted()
+                .distinct()
+                .toList();
+
+        Map<Long, Product> productsById = new HashMap<>();
+        for (Long productId : productIds) {
+            productRepository.findByIdForUpdate(productId).ifPresent(p -> productsById.put(p.getId(), p));
+        }
+
+        for (OrderItem item : order.getItems()) {
+            if (item.getProduct() == null) {
+                continue;
+            }
+            Product product = productsById.getOrDefault(item.getProduct().getId(), item.getProduct());
+            int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+            int onHand = product.getOnHand() != null ? product.getOnHand() : 0;
+            int reserved = product.getReserved() != null ? product.getReserved() : 0;
+
+            int newOnHand = Math.max(0, onHand - qty);
+            int newReserved = Math.max(0, reserved - qty);
+            newReserved = Math.min(newReserved, newOnHand);
+
+            product.setOnHand(newOnHand);
+            product.setReserved(newReserved);
+            productRepository.save(product);
+        }
+    }
+
+    private void releaseInventoryOnCancellation(Order order) {
+        if (order.getItems() == null || order.getItems().isEmpty()) {
+            return;
+        }
+
+        List<Long> productIds = order.getItems().stream()
+                .filter(item -> item.getProduct() != null && item.getProduct().getId() != null)
+                .map(item -> item.getProduct().getId())
+                .sorted()
+                .distinct()
+                .toList();
+
+        Map<Long, Product> productsById = new HashMap<>();
+        for (Long productId : productIds) {
+            productRepository.findByIdForUpdate(productId).ifPresent(p -> productsById.put(p.getId(), p));
+        }
+
+        for (OrderItem item : order.getItems()) {
+            if (item.getProduct() == null) {
+                continue;
+            }
+            Product product = productsById.getOrDefault(item.getProduct().getId(), item.getProduct());
+            int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+            int onHand = product.getOnHand() != null ? product.getOnHand() : 0;
+            int reserved = product.getReserved() != null ? product.getReserved() : 0;
+
+            int newReserved = Math.max(0, reserved - qty);
+            newReserved = Math.min(newReserved, onHand);
+
+            product.setReserved(newReserved);
+            productRepository.save(product);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -81,7 +206,7 @@ public class SellerOrderService {
 
         for (Order order : allOrders) {
             String status = order.getStatus();
-            if ("PENDING".equalsIgnoreCase(status)) {
+            if ("PENDING".equalsIgnoreCase(status) || "CONFIRMED".equalsIgnoreCase(status) || "SENT".equalsIgnoreCase(status)) {
                 pendingOrders++;
             } else if ("FULFILLED".equalsIgnoreCase(status)) {
                 fulfilledOrders++;
@@ -150,6 +275,17 @@ public class SellerOrderService {
 
         BigDecimal sellerProfit = sellerRevenue.subtract(sellerCost);
 
+        List<OrderStatusLogResponse> logs = orderStatusLogRepository.findByOrderIdOrderByCreatedAtAsc(order.getId())
+                .stream()
+                .map(log -> new OrderStatusLogResponse(
+                        log.getFromStatus(),
+                        log.getToStatus(),
+                        log.getChangedByRole(),
+                        log.getNote(),
+                        log.getCreatedAt()
+                ))
+                .toList();
+
         var buyer = order.getBuyer();
         return new SellerOrderResponse(
                 order.getId(),
@@ -165,6 +301,7 @@ public class SellerOrderService {
                 sellerCost,
                 sellerProfit,
                 itemDtos,
+                logs,
                 order.getCreatedAt(),
                 order.getUpdatedAt()
         );
@@ -172,10 +309,11 @@ public class SellerOrderService {
 
     private String normalizeStatus(String status) {
         String value = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
-        if (!List.of("PENDING", "PAID", "FULFILLED", "CANCELLED").contains(value)) {
+        if (!List.of("PENDING", "CONFIRMED", "SENT", "FULFILLED", "CANCELLED").contains(value)) {
             throw new OrderStatusValidationException("status",
-                "Status must be PENDING, PAID, FULFILLED, or CANCELLED");
+                "Status must be PENDING, CONFIRMED, SENT, FULFILLED, or CANCELLED");
         }
         return value;
     }
 }
+

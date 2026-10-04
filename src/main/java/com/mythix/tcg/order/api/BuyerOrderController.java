@@ -50,4 +50,14 @@ public class BuyerOrderController {
         BuyerOrderResponse response = buyerOrderService.getBuyerOrderById(user.userId(), orderId);
         return ResponseEntity.ok(response);
     }
+
+    @PatchMapping("/{orderId}/status")
+    public ResponseEntity<BuyerOrderResponse> updateOrderStatus(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable Long orderId,
+            @RequestBody BuyerOrderDto.UpdateBuyerOrderStatusRequest request) {
+        
+        BuyerOrderResponse response = buyerOrderService.updateOrderStatus(user.userId(), orderId, request.status(), request.note());
+        return ResponseEntity.ok(response);
+    }
 }

@@ -9,6 +9,7 @@ import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
@@ -55,6 +56,8 @@ class SellerOrderControllerIntegrationTests {
 
     @Autowired
     private OrderItemRepository orderItemRepository;
+    @Autowired
+    private OrderStatusLogRepository orderStatusLogRepository;
 
     @Autowired
     private CardRepository cardRepository;
@@ -83,6 +86,7 @@ class SellerOrderControllerIntegrationTests {
     @BeforeEach
     void setUp() {
         notificationRepository.deleteAll();
+        orderStatusLogRepository.deleteAll();
         collectionRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
@@ -153,7 +157,7 @@ class SellerOrderControllerIntegrationTests {
         sellerOrder = Order.builder()
                 .orderNumber("ORD-TEST-001")
                 .buyer(buyer)
-                .status("PENDING")
+                .status("CONFIRMED")
                 .totalAmount(new BigDecimal("300.00"))
                 .items(new ArrayList<>())
                 .build();
@@ -176,7 +180,7 @@ class SellerOrderControllerIntegrationTests {
         Order otherOrder = Order.builder()
                 .orderNumber("ORD-OTHER-002")
                 .buyer(buyer)
-                .status("PENDING")
+                .status("CONFIRMED")
                 .totalAmount(new BigDecimal("500.00"))
                 .items(new ArrayList<>())
                 .build();
@@ -218,12 +222,18 @@ class SellerOrderControllerIntegrationTests {
         mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
                 .header("Authorization", "Bearer " + sellerToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\":\"FULFILLED\"}"))
+                .content("{\"status\":\"SENT\", \"note\":\"sent\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("FULFILLED"));
+                .andExpect(jsonPath("$.status").value("SENT"));
 
         Order updated = orderRepository.findById(sellerOrder.getId()).orElseThrow();
-        assertThat(updated.getStatus()).isEqualTo("FULFILLED");
+        assertThat(updated.getStatus()).isEqualTo("SENT");
+
+        // Verify stock deducted in database: onHand was 10, now 8; reserved was 2, now 0
+        Product updatedProduct = productRepository.findById(sellerProduct.getId()).orElseThrow();
+        assertThat(updatedProduct.getOnHand()).isEqualTo(8);
+        assertThat(updatedProduct.getReserved()).isEqualTo(0);
+
         assertThat(notificationRepository.findAll())
             .anySatisfy(notification -> {
                 assertThat(notification.getRecipient().getId()).isEqualTo(buyer.getId());
@@ -233,11 +243,47 @@ class SellerOrderControllerIntegrationTests {
     }
 
     @Test
+    void updateOrderStatus_Cancelled_ReleasesReservedStock() throws Exception {
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"CANCELLED\", \"note\":\"cancel\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        Order updated = orderRepository.findById(sellerOrder.getId()).orElseThrow();
+        assertThat(updated.getStatus()).isEqualTo("CANCELLED");
+
+        // Verify reserved stock released: onHand remains 10, reserved was 2 now 0
+        Product updatedProduct = productRepository.findById(sellerProduct.getId()).orElseThrow();
+        assertThat(updatedProduct.getOnHand()).isEqualTo(10);
+        assertThat(updatedProduct.getReserved()).isEqualTo(0);
+    }
+
+    @Test
+    void updateOrderStatus_TerminalStatusCannotChange() throws Exception {
+        // Mark as FULFILLED first
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"SENT\", \"note\":\"sent\"}"))
+                .andExpect(status().isOk());
+
+        // Attempt to cancel an already fulfilled order should fail
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"CANCELLED\", \"note\":\"cancel\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
     void updateOrderStatusRejectsFrontendOnlyStatusValues() throws Exception {
         mockMvc.perform(patch("/api/seller/orders/{orderId}/status", sellerOrder.getId())
                 .header("Authorization", "Bearer " + sellerToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\":\"SENT\"}"))
+                .content("{\"status\":\"FULFILLED\"}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
@@ -262,3 +308,9 @@ class SellerOrderControllerIntegrationTests {
                 .andExpect(status().isUnauthorized());
     }
 }
+
+
+
+
+
+

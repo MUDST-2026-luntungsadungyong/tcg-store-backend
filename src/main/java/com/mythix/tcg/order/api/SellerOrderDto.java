@@ -20,6 +20,14 @@ public class SellerOrderDto {
         BigDecimal itemTotal
     ) {}
 
+    public record OrderStatusLogResponse(
+        String fromStatus,
+        String toStatus,
+        String changedByRole,
+        String note,
+        LocalDateTime createdAt
+    ) {}
+
     public record SellerOrderResponse(
         Long id,
         String orderNumber,
@@ -34,14 +42,16 @@ public class SellerOrderDto {
         BigDecimal sellerCost,
         BigDecimal sellerProfit,
         List<SellerOrderItemResponse> items,
+        List<OrderStatusLogResponse> logs,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
     ) {}
 
     public record UpdateOrderStatusRequest(
         @NotBlank(message = "Status is required")
-        @Pattern(regexp = "(?i)PENDING|PAID|FULFILLED|CANCELLED", message = "Status must be PENDING, PAID, FULFILLED, or CANCELLED")
-        String status
+        @Pattern(regexp = "(?i)PENDING|CONFIRMED|SENT|FULFILLED|CANCELLED", message = "Status must be PENDING, CONFIRMED, SENT, FULFILLED, or CANCELLED")
+        String status,
+        String note
     ) {}
 
     public record SellerProfitSummaryResponse(

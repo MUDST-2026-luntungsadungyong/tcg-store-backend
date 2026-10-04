@@ -8,6 +8,8 @@ import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.notification.application.NotificationService;
 import com.mythix.tcg.product.domain.Product;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
+import com.mythix.tcg.user.persistence.UserRepository;
 import com.mythix.tcg.user.domain.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,12 +44,22 @@ class SellerOrderServiceUnitTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private com.mythix.tcg.product.persistence.ProductRepository productRepository;
+
+    @Mock
+    private OrderStatusLogRepository orderStatusLogRepository;
+
+    @Mock
+    private UserRepository userRepository;
+
     @InjectMocks
     private SellerOrderService sellerOrderService;
 
     private User buyer;
     private User seller;
     private Order sampleOrder;
+    private Product product;
 
     @BeforeEach
     void setUp() {
@@ -58,13 +70,15 @@ class SellerOrderServiceUnitTest {
             .setName("Pop Series 4").cardNumber("004")
             .imageSmall("https://example.com/mew-small.png")
             .imageLarge("https://example.com/mew.png").build();
-        Product product = Product.builder().id(10L).seller(seller).card(card).price(new BigDecimal("1250.00")).cost(new BigDecimal("800.00")).build();
+        product = Product.builder().id(10L).seller(seller).card(card)
+            .price(new BigDecimal("1250.00")).cost(new BigDecimal("800.00"))
+            .onHand(10).reserved(1).status("SHOW").build();
 
         sampleOrder = Order.builder()
             .id(100L)
             .orderNumber("ORD-2026-0001")
             .buyer(buyer)
-            .status("PENDING")
+            .status("CONFIRMED")
             .totalAmount(new BigDecimal("1250.00"))
             .createdAt(LocalDateTime.now())
             .items(new ArrayList<>())
@@ -147,20 +161,86 @@ class SellerOrderServiceUnitTest {
     }
 
     @Test
-    @DisplayName("updateOrderStatus() - อัปเดตสถานะคำสั่งซื้อสำเร็จ")
+    @DisplayName("updateOrderStatus() - อัปเดตสถานะคำสั่งซื้อเป็น FULFILLED สำเร็จและตัดสต๊อกจริง (onHand และ reserved)")
     void updateOrderStatus_success() {
         // Arrange
         when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+        when(productRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(product));
         when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder);
 
         // Act
-        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "FULFILLED");
+        when(userRepository.getReferenceById(2L)).thenReturn(seller);
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Sent package");
 
         // Assert
         assertThat(response).isNotNull();
-        assertThat(sampleOrder.getStatus()).isEqualTo("FULFILLED");
+        assertThat(sampleOrder.getStatus()).isEqualTo("SENT");
+        assertThat(product.getOnHand()).isEqualTo(9); // 10 - 1
+        assertThat(product.getReserved()).isEqualTo(0); // 1 - 1
+        verify(productRepository).save(product);
         verify(orderRepository).save(sampleOrder);
         verify(notificationService).notifyBuyerOrderSent(sampleOrder);
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus() - อัปเดตสถานะเป็น CANCELLED และคืนสต๊อกจอง (reserved ลดลง, onHand เท่าเดิม)")
+    void updateOrderStatus_cancelled_releasesReservedStock() {
+        // Arrange
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+        when(productRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(product));
+        when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder);
+
+        // Act
+        when(userRepository.getReferenceById(2L)).thenReturn(seller);
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "CANCELLED", "Out of stock");
+
+        // Assert
+        assertThat(response).isNotNull();
+        assertThat(sampleOrder.getStatus()).isEqualTo("CANCELLED");
+        assertThat(product.getOnHand()).isEqualTo(10); // remains 10
+        assertThat(product.getReserved()).isEqualTo(0); // 1 - 1 = 0
+        verify(productRepository).save(product);
+        verify(orderRepository).save(sampleOrder);
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus() - ไม่อนุญาตให้เปลี่ยนสถานะออเดอร์ที่ FULFILLED แล้ว")
+    void updateOrderStatus_alreadyFulfilled_throwsException() {
+        // Arrange
+        sampleOrder.setStatus("FULFILLED");
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+
+        // Act & Assert
+        assertThatThrownBy(() -> sellerOrderService.updateOrderStatus(2L, 100L, "CANCELLED", "Out of stock"))
+            .isInstanceOf(OrderStatusValidationException.class);
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus() - ไม่อนุญาตให้เปลี่ยนสถานะออเดอร์ที่ CANCELLED แล้ว")
+    void updateOrderStatus_alreadyCancelled_throwsException() {
+        // Arrange
+        sampleOrder.setStatus("CANCELLED");
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+
+        // Act & Assert
+        assertThatThrownBy(() -> sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Sent package"))
+            .isInstanceOf(OrderStatusValidationException.class);
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus() - สถานะเดิมซ้ำเดิม ไม่ทำการเปลี่ยนแปลงสต๊อกซ้ำ (Idempotent)")
+    void updateOrderStatus_sameStatus_isNoOp() {
+        // Arrange
+        sampleOrder.setStatus("CONFIRMED");
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+
+        // Act
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "CONFIRMED", "");
+
+        // Assert
+        assertThat(response).isNotNull();
+        verifyNoInteractions(productRepository);
+        verify(orderRepository, never()).save(any());
     }
 
     @Test
@@ -180,3 +260,8 @@ class SellerOrderServiceUnitTest {
         assertThat(summary.totalOrders()).isEqualTo(1);
     }
 }
+
+
+
+
+

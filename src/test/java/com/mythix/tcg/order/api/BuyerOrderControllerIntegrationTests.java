@@ -9,6 +9,7 @@ import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
@@ -55,6 +56,8 @@ class BuyerOrderControllerIntegrationTests {
 
     @Autowired
     private OrderItemRepository orderItemRepository;
+    @Autowired
+    private OrderStatusLogRepository orderStatusLogRepository;
 
     @Autowired
     private CollectionRepository collectionRepository;
@@ -74,6 +77,7 @@ class BuyerOrderControllerIntegrationTests {
     @BeforeEach
     void setUp() {
         notificationRepository.deleteAll();
+        orderStatusLogRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
         productRepository.deleteAll();
@@ -128,7 +132,7 @@ class BuyerOrderControllerIntegrationTests {
         buyerOrder = Order.builder()
                 .orderNumber("ORD-BUYER-001")
                 .buyer(buyer)
-                .status("PAID")
+                .status("CONFIRMED")
                 .totalAmount(new BigDecimal("999.00"))
                 .items(new ArrayList<>())
                 .build();
@@ -163,7 +167,7 @@ class BuyerOrderControllerIntegrationTests {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].id").value(buyerOrder.getId().toString()))
-                .andExpect(jsonPath("$[0].status").value("PAID"))
+                .andExpect(jsonPath("$[0].status").value("CONFIRMED"))
                 .andExpect(jsonPath("$[0].totalAmount").value(999.00));
     }
 
@@ -182,7 +186,7 @@ class BuyerOrderControllerIntegrationTests {
     void getOrders_withStatusFilter_returnsFiltered() throws Exception {
         mockMvc.perform(get("/api/orders/me")
                         .header("Authorization", "Bearer " + buyerToken)
-                        .param("status", "PAID"))
+                        .param("status", "CONFIRMED"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(1));
@@ -206,7 +210,7 @@ class BuyerOrderControllerIntegrationTests {
                         .header("Authorization", "Bearer " + buyerToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.orderNumber").value("ORD-BUYER-001"))
-                .andExpect(jsonPath("$.status").value("PAID"))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"))
                 .andExpect(jsonPath("$.items").isArray())
                 .andExpect(jsonPath("$.items.length()").value(1))
                 .andExpect(jsonPath("$.items[0].productName").value("Mewtwo NM"));
@@ -221,3 +225,5 @@ class BuyerOrderControllerIntegrationTests {
                 .andExpect(jsonPath("$.code").value("ORDER_NOT_FOUND"));
     }
 }
+
+
