@@ -153,7 +153,8 @@ CREATE TABLE IF NOT EXISTS collection_items (
 CREATE TABLE IF NOT EXISTS notifications (
     id BIGINT NOT NULL AUTO_INCREMENT,
     recipient_id BIGINT NOT NULL,
-    order_id BIGINT NOT NULL,
+    order_id BIGINT,
+    seller_profile_id BIGINT,
     notification_type VARCHAR(40) NOT NULL,
     title VARCHAR(160) NOT NULL,
     message VARCHAR(1000) NOT NULL,
@@ -161,7 +162,12 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (id),
     KEY idx_notifications_recipient_created (recipient_id, created_at, id),
-    CONSTRAINT chk_notifications_type CHECK (notification_type IN ('ORDER_RESERVED', 'ORDER_STATUS_CHANGED')),
+    KEY idx_notifications_recipient_read (recipient_id, read_at),
+    CONSTRAINT chk_notifications_type CHECK (notification_type IN (
+        'ORDER_RESERVED', 'ORDER_STATUS_CHANGED', 'SELLER_APPLICATION_SUBMITTED',
+        'SELLER_APPLICATION_APPROVED', 'SELLER_APPLICATION_REJECTED'
+    )),
     CONSTRAINT fk_notifications_recipient FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE,
-    CONSTRAINT fk_notifications_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    CONSTRAINT fk_notifications_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_seller_profile FOREIGN KEY (seller_profile_id) REFERENCES seller_profiles(id) ON DELETE CASCADE
 );

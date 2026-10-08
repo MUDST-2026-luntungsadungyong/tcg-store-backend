@@ -22,7 +22,7 @@ Snapshot จาก Jira board `SCRUM Sprint 0` วันที่ 2026-09-08 ใ
 - JWT has expiration and `userId` claim; ownership is resolved from authenticated context.
 - Checkout reserves stock atomically so two buyers cannot buy the same remaining unit.
 - Buyer A cannot read Buyer B's order; seller sees only order items belonging to their shop.
-- Order status filtering uses `PENDING`, `FULFILLED`, `CANCELLED` and history sorts newest first.
+- Order status filtering uses `PENDING`, `CONFIRMED`, `SENT`, `FULFILLED`, `CANCELLED` and history sorts newest first.
 - Profit uses purchase-time cost snapshots.
 - Each service use case needs JUnit 5 + Mockito tests and CI must pass.
 

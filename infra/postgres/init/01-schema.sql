@@ -193,8 +193,12 @@ CREATE INDEX IF NOT EXISTS idx_collection_user ON collection_items(user_id);
 CREATE TABLE IF NOT EXISTS notifications (
     id BIGSERIAL PRIMARY KEY,
     recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    order_id BIGINT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-    notification_type VARCHAR(40) NOT NULL CHECK (notification_type IN ('ORDER_RESERVED', 'ORDER_STATUS_CHANGED')),
+    order_id BIGINT REFERENCES orders(id) ON DELETE CASCADE,
+    seller_profile_id BIGINT REFERENCES seller_profiles(id) ON DELETE CASCADE,
+    notification_type VARCHAR(40) NOT NULL CHECK (notification_type IN (
+        'ORDER_RESERVED', 'ORDER_STATUS_CHANGED', 'SELLER_APPLICATION_SUBMITTED',
+        'SELLER_APPLICATION_APPROVED', 'SELLER_APPLICATION_REJECTED'
+    )),
     title VARCHAR(160) NOT NULL,
     message VARCHAR(1000) NOT NULL,
     read_at TIMESTAMP,
@@ -203,3 +207,5 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient_created
     ON notifications(recipient_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_read
+    ON notifications(recipient_id, read_at);

@@ -2,9 +2,11 @@ package com.mythix.tcg.notification.application;
 
 import com.mythix.tcg.notification.api.NotificationResponse;
 import com.mythix.tcg.notification.domain.UserNotification;
+import com.mythix.tcg.notification.domain.NotificationTypes;
 import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
+import com.mythix.tcg.seller.domain.SellerProfile;
 import com.mythix.tcg.user.domain.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -17,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
+import java.util.Collection;
 import java.util.Map;
 
 @Service
@@ -30,6 +33,11 @@ public class NotificationService {
         return notificationRepository
             .findAllByRecipient_IdOrderByCreatedAtDescIdDesc(recipientId, pageable)
             .map(NotificationResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public long getUnreadCount(Long recipientId) {
+        return notificationRepository.countByRecipient_IdAndReadAtIsNull(recipientId);
     }
 
     @Transactional
@@ -61,7 +69,7 @@ public class NotificationService {
         recipients.values().forEach(seller -> notificationRepository.save(UserNotification.builder()
             .recipient(seller)
             .order(order)
-            .type("ORDER_RESERVED")
+            .type(NotificationTypes.ORDER_RESERVED)
             .title("New card reservation")
             .message("A buyer reserved cards from your listings in order " + order.getOrderNumber() + ".")
             .build()));
@@ -72,10 +80,62 @@ public class NotificationService {
         notificationRepository.save(UserNotification.builder()
             .recipient(order.getBuyer())
             .order(order)
-            .type("ORDER_STATUS_CHANGED")
+            .type(NotificationTypes.ORDER_STATUS_CHANGED)
             .title("Your order has been sent")
             .message("The seller marked order " + order.getOrderNumber() + " as sent.")
             .build());
+    }
+
+    @Transactional
+    public void notifyAdminsOfSellerApplication(SellerProfile profile, Collection<User> admins) {
+        for (User admin : admins) {
+            notificationRepository.save(sellerApplicationNotification(
+                admin,
+                profile,
+                NotificationTypes.SELLER_APPLICATION_SUBMITTED,
+                "New seller application",
+                profile.getShopName() + " submitted a seller application for review."
+            ));
+        }
+    }
+
+    @Transactional
+    public void notifySellerApplicationApproved(SellerProfile profile) {
+        notificationRepository.save(sellerApplicationNotification(
+            profile.getUser(),
+            profile,
+            NotificationTypes.SELLER_APPLICATION_APPROVED,
+            "Seller application approved",
+            "Your seller application for " + profile.getShopName() + " was approved."
+        ));
+    }
+
+    @Transactional
+    public void notifySellerApplicationRejected(SellerProfile profile, String reason) {
+        String rejectionReason = reason == null || reason.isBlank() ? "No reason provided." : reason;
+        notificationRepository.save(sellerApplicationNotification(
+            profile.getUser(),
+            profile,
+            NotificationTypes.SELLER_APPLICATION_REJECTED,
+            "Seller application rejected",
+            "Your seller application for " + profile.getShopName() + " was rejected. Reason: " + rejectionReason
+        ));
+    }
+
+    @Transactional
+    public void resolveSellerApplicationReviewNotifications(Long sellerProfileId) {
+        notificationRepository.resolveSellerApplicationReviewNotifications(sellerProfileId);
+    }
+
+    private UserNotification sellerApplicationNotification(
+            User recipient, SellerProfile profile, String type, String title, String message) {
+        return UserNotification.builder()
+            .recipient(recipient)
+            .sellerProfile(profile)
+            .type(type)
+            .title(title)
+            .message(message)
+            .build();
     }
 
     private UserNotification findOwned(Long recipientId, Long notificationId) {

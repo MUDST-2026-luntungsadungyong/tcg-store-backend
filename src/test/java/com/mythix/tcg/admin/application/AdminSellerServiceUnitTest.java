@@ -4,6 +4,7 @@ import com.mythix.tcg.admin.api.AdminDashboardResponse;
 import com.mythix.tcg.admin.api.AdminSellerApplicationResponse;
 import com.mythix.tcg.admin.domain.AuditLog;
 import com.mythix.tcg.admin.persistence.AuditLogRepository;
+import com.mythix.tcg.notification.application.NotificationService;
 import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.persistence.ProductRepository;
@@ -52,6 +53,9 @@ class AdminSellerServiceUnitTest {
 
     @Mock
     private AuditLogRepository auditLogRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private AdminSellerService adminSellerService;
@@ -163,7 +167,7 @@ class AdminSellerServiceUnitTest {
         @Test
         @DisplayName("อนุมัติสำเร็จ: อัปเดตสถานะเป็น APPROVED บันทึกผู้อนุมัติ วันที่อนุมัติ และบันทึก Audit Log")
         void approve_success() {
-            when(sellerProfileRepository.findById(2L)).thenReturn(Optional.of(pendingProfile));
+            when(sellerProfileRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(pendingProfile));
             when(userRepository.findById(8L)).thenReturn(Optional.of(adminUser));
 
             AdminSellerApplicationResponse response = adminSellerService.approve(2L, 8L);
@@ -172,6 +176,8 @@ class AdminSellerServiceUnitTest {
             assertThat(applicantUser.getSellerStatus()).isEqualTo("APPROVED");
             assertThat(pendingProfile.getApprovedBy()).isEqualTo(8L);
             assertThat(pendingProfile.getVerifiedAt()).isNotNull();
+            verify(notificationService).notifySellerApplicationApproved(pendingProfile);
+            verify(notificationService).resolveSellerApplicationReviewNotifications(2L);
 
             ArgumentCaptor<AuditLog> logCaptor = ArgumentCaptor.forClass(AuditLog.class);
             verify(auditLogRepository).save(logCaptor.capture());
@@ -185,7 +191,7 @@ class AdminSellerServiceUnitTest {
         @Test
         @DisplayName("เกิด SellerApplicationNotFoundException เมื่อไม่พบใบสมัคร ID ที่ระบุ")
         void approve_notFoundApplication_throwsException() {
-            when(sellerProfileRepository.findById(999L)).thenReturn(Optional.empty());
+            when(sellerProfileRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> adminSellerService.approve(999L, 8L))
                 .isInstanceOf(SellerApplicationNotFoundException.class);
@@ -197,18 +203,20 @@ class AdminSellerServiceUnitTest {
         @DisplayName("เกิด SellerApplicationStateException เมื่อสถานะของผู้ยื่นคำขอไม่ได้เป็น PENDING")
         void approve_notPendingState_throwsException() {
             applicantUser.setSellerStatus("APPROVED");
-            when(sellerProfileRepository.findById(2L)).thenReturn(Optional.of(pendingProfile));
+            when(sellerProfileRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(pendingProfile));
 
             assertThatThrownBy(() -> adminSellerService.approve(2L, 8L))
                 .isInstanceOf(SellerApplicationStateException.class);
 
             verify(auditLogRepository, never()).save(any());
+            verify(notificationService, never()).notifySellerApplicationApproved(any());
+            verify(notificationService, never()).resolveSellerApplicationReviewNotifications(any());
         }
 
         @Test
         @DisplayName("เกิด SellerApplicationNotFoundException เมื่อไม่พบบัญชีผู้ใช้ของ Admin ผู้อนุมัติ")
         void approve_adminNotFound_throwsException() {
-            when(sellerProfileRepository.findById(2L)).thenReturn(Optional.of(pendingProfile));
+            when(sellerProfileRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(pendingProfile));
             when(userRepository.findById(888L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> adminSellerService.approve(2L, 888L))
@@ -225,7 +233,7 @@ class AdminSellerServiceUnitTest {
         @Test
         @DisplayName("ปฏิเสธสำเร็จ: อัปเดตสถานะเป็น REJECTED บันทึกผู้ปฏิเสธ วันที่ และเหตุผล พร้อมบันทึก Audit Log")
         void reject_success() {
-            when(sellerProfileRepository.findById(2L)).thenReturn(Optional.of(pendingProfile));
+            when(sellerProfileRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(pendingProfile));
             when(userRepository.findById(8L)).thenReturn(Optional.of(adminUser));
 
             String reason = "ภาพถ่ายบัตรประชาชนไม่ชัดเจน กรุณาถ่ายใหม่";
@@ -236,6 +244,8 @@ class AdminSellerServiceUnitTest {
             assertThat(pendingProfile.getRejectedBy()).isEqualTo(8L);
             assertThat(pendingProfile.getRejectedAt()).isNotNull();
             assertThat(pendingProfile.getRejectionReason()).isEqualTo(reason);
+            verify(notificationService).notifySellerApplicationRejected(pendingProfile, reason);
+            verify(notificationService).resolveSellerApplicationReviewNotifications(2L);
 
             ArgumentCaptor<AuditLog> logCaptor = ArgumentCaptor.forClass(AuditLog.class);
             verify(auditLogRepository).save(logCaptor.capture());
@@ -249,7 +259,7 @@ class AdminSellerServiceUnitTest {
         @Test
         @DisplayName("เกิด SellerApplicationNotFoundException เมื่อไม่พบใบสมัคร ID ที่ต้องการปฏิเสธ")
         void reject_notFoundApplication_throwsException() {
-            when(sellerProfileRepository.findById(999L)).thenReturn(Optional.empty());
+            when(sellerProfileRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> adminSellerService.reject(999L, 8L, "Reason"))
                 .isInstanceOf(SellerApplicationNotFoundException.class);
@@ -261,18 +271,20 @@ class AdminSellerServiceUnitTest {
         @DisplayName("เกิด SellerApplicationStateException เมื่อสถานะของผู้ยื่นไม่ได้เป็น PENDING ขณะปฏิเสธ")
         void reject_notPendingState_throwsException() {
             applicantUser.setSellerStatus("REJECTED");
-            when(sellerProfileRepository.findById(2L)).thenReturn(Optional.of(pendingProfile));
+            when(sellerProfileRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(pendingProfile));
 
             assertThatThrownBy(() -> adminSellerService.reject(2L, 8L, "Reason"))
                 .isInstanceOf(SellerApplicationStateException.class);
 
             verify(auditLogRepository, never()).save(any());
+            verify(notificationService, never()).notifySellerApplicationRejected(any(), any());
+            verify(notificationService, never()).resolveSellerApplicationReviewNotifications(any());
         }
 
         @Test
         @DisplayName("เกิด SellerApplicationNotFoundException เมื่อไม่พบบัญชีผู้ใช้ของ Admin ผู้ปฏิเสธ")
         void reject_adminNotFound_throwsException() {
-            when(sellerProfileRepository.findById(2L)).thenReturn(Optional.of(pendingProfile));
+            when(sellerProfileRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(pendingProfile));
             when(userRepository.findById(888L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> adminSellerService.reject(2L, 888L, "Reason"))

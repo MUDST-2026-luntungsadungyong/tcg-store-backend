@@ -44,7 +44,11 @@ tcg-store-backend/
 | Role | Email | รหัสผ่านจริง (Plaintext) | คำอธิบาย |
 |---|---|---|---|
 | **Buyer** | `buyer@mythix.com` | `password123` | ลูกค้าทั่วไป สำหรับทดสอบค้นหาการ์ด, เพิ่มลงตะกร้า, และกดสั่งซื้อ |
+| **Buyer (ไม่เคยยื่น Seller)** | `buyer2@mythix.com` | `password123` | บัญชี buyer ใหม่ที่มี `seller_status=NONE` และยังไม่เคยกดขอเป็น seller |
 | **Seller** | `seller@mythix.com` | `password123` | ผู้ขายที่ผ่านการ Verify แล้ว มีร้านค้าชื่อ *"Pewter City Card Vault"* สำหรับทดสอบจัดการสต๊อกและดู Dashboard กำไร |
+| **Admin** | `admin@mythix.com` | `password123` | ผู้ดูแลระบบสำหรับทดสอบ seller application queue และ approve/reject |
+
+บัญชีข้างต้นเป็น credential สำหรับ local seed เท่านั้น ห้ามนำไปใช้ใน shared หรือ production environment
 
 ### 📦 รายการสินค้าลงขายเริ่มต้น (ตาราง `products`)
 มีสินค้าลงขายตัวอย่าง **20 รายการ** ผูกกับการ์ดจริง:

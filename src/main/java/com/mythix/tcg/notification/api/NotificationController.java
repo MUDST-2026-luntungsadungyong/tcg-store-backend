@@ -31,6 +31,12 @@ public class NotificationController {
         return ResponseEntity.ok(notificationService.getNotifications(user.userId(), pageable));
     }
 
+    @GetMapping("/unread-count")
+    public ResponseEntity<UnreadCountResponse> getUnreadCount(
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        return ResponseEntity.ok(new UnreadCountResponse(notificationService.getUnreadCount(user.userId())));
+    }
+
     @PatchMapping("/{notificationId}/read")
     public ResponseEntity<NotificationResponse> markRead(
             @AuthenticationPrincipal AuthenticatedUser user,

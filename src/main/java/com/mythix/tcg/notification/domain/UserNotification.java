@@ -1,6 +1,7 @@
 package com.mythix.tcg.notification.domain;
 
 import com.mythix.tcg.order.domain.Order;
+import com.mythix.tcg.seller.domain.SellerProfile;
 import com.mythix.tcg.user.domain.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -27,9 +28,13 @@ public class UserNotification {
     @JoinColumn(name = "recipient_id", nullable = false)
     private User recipient;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "order_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
     private Order order;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seller_profile_id")
+    private SellerProfile sellerProfile;
 
     @Column(name = "notification_type", nullable = false, length = 40)
     private String type;
