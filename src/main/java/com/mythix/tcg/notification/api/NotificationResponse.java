@@ -10,6 +10,7 @@ public record NotificationResponse(
     String title,
     String message,
     Long orderId,
+    Long sellerApplicationId,
     LocalDateTime readAt,
     LocalDateTime createdAt
 ) {
@@ -19,7 +20,8 @@ public record NotificationResponse(
             notification.getType(),
             notification.getTitle(),
             notification.getMessage(),
-            notification.getOrder().getId(),
+            notification.getOrder() == null ? null : notification.getOrder().getId(),
+            notification.getSellerProfile() == null ? null : notification.getSellerProfile().getId(),
             notification.getReadAt(),
             notification.getCreatedAt()
         );

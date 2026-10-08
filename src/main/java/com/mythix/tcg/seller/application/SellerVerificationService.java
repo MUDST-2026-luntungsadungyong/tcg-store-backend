@@ -1,6 +1,7 @@
 package com.mythix.tcg.seller.application;
 
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
+import com.mythix.tcg.notification.application.NotificationService;
 import com.mythix.tcg.seller.api.SellerVerificationRequest;
 import com.mythix.tcg.seller.api.SellerVerificationResponse;
 import com.mythix.tcg.seller.domain.SellerProfile;
@@ -18,6 +19,7 @@ import java.time.LocalDateTime;
 public class SellerVerificationService {
     private final UserRepository userRepository;
     private final SellerProfileRepository sellerProfileRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public SellerVerificationResponse verify(Long userId, SellerVerificationRequest request) {
@@ -34,6 +36,10 @@ public class SellerVerificationService {
         SellerProfile profile = sellerProfileRepository.save(SellerProfile.builder()
             .user(user).shopName(request.shopName().trim()).shopDescription(trimToNull(request.shopDescription()))
             .requestedAt(now).build());
+        notificationService.notifyAdminsOfSellerApplication(
+            profile,
+            userRepository.findByRoleOrderByCreatedAtDesc("ADMIN")
+        );
         return SellerVerificationResponse.from(profile);
     }
 

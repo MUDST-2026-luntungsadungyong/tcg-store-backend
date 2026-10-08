@@ -2019,7 +2019,8 @@ INSERT INTO users (id, email, password, full_name, phone, contact_line, contact_
 (6, 'gary@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Gary Oak', '085-555-6666', 'gary_oak', 'facebook.com/gary.oak', NULL, 'USER', 'NONE'),
 (7, 'lance@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Lance Dragon', '086-666-7777', 'lance_dragon', 'facebook.com/lance.dragon', NULL, 'USER', 'NONE'),
 (8, 'admin@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Platform Administrator', '080-000-9999', 'mythix_admin', 'facebook.com/mythix.admin', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde', 'ADMIN', 'NONE'),
-(9, 'misty@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Misty Cerulean', '081-333-7777', 'misty_water', 'facebook.com/misty.water', NULL, 'USER', 'PENDING');
+(9, 'misty@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Misty Cerulean', '081-333-7777', 'misty_water', 'facebook.com/misty.water', NULL, 'USER', 'PENDING'),
+(10, 'buyer2@mythix.com', '$2b$12$yt.ju9w4yQHb8cnk90GnqeVDPbyiTEVKZI8VZ3qMe6KBYbTegzU0O', 'Buyer Two', '087-000-1111', 'buyer_two', 'facebook.com/buyer.two', NULL, 'USER', 'NONE');
 
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users));
 

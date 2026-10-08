@@ -3,9 +3,12 @@ package com.mythix.tcg.notification.api;
 import com.mythix.tcg.auth.api.RegisterRequest;
 import com.mythix.tcg.auth.application.AuthService;
 import com.mythix.tcg.notification.domain.UserNotification;
+import com.mythix.tcg.notification.application.NotificationService;
 import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.seller.domain.SellerProfile;
+import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -39,6 +43,8 @@ class NotificationControllerIntegrationTests {
     @Autowired private UserRepository userRepository;
     @Autowired private OrderRepository orderRepository;
     @Autowired private NotificationRepository notificationRepository;
+    @Autowired private SellerProfileRepository sellerProfileRepository;
+    @Autowired private NotificationService notificationService;
     @Autowired private ObjectMapper objectMapper;
 
     private User buyer;
@@ -50,6 +56,7 @@ class NotificationControllerIntegrationTests {
     @BeforeEach
     void setUp() {
         notificationRepository.deleteAll();
+        sellerProfileRepository.deleteAll();
         orderRepository.deleteAll();
         userRepository.findByEmail("notifications-buyer@example.com").ifPresent(userRepository::delete);
         userRepository.findByEmail("notifications-seller@example.com").ifPresent(userRepository::delete);
@@ -75,6 +82,94 @@ class NotificationControllerIntegrationTests {
         mockMvc.perform(get("/api/notifications"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("UNAUTHENTICATED"));
+    }
+
+    @Test
+    void unreadCountIsAuthenticatedAndScopedToCurrentUser() throws Exception {
+        createNotification(seller, "ORDER_RESERVED", "New reservation");
+        createNotification(buyer, "ORDER_STATUS_CHANGED", "Order sent");
+        UserNotification alreadyRead = createNotification(buyer, "ORDER_RESERVED", "Earlier reservation");
+        alreadyRead.setReadAt(LocalDateTime.now());
+        notificationRepository.save(alreadyRead);
+
+        mockMvc.perform(get("/api/notifications/unread-count")
+                .header("Authorization", bearer(buyerToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.unreadCount").value(1));
+
+        mockMvc.perform(get("/api/notifications/unread-count"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void supportsSellerApplicationNotificationsWithoutAnOrderReference() throws Exception {
+        SellerProfile profile = sellerProfileRepository.save(SellerProfile.builder()
+            .user(seller)
+            .shopName("Seller Cards")
+            .build());
+        UserNotification notification = notificationRepository.save(UserNotification.builder()
+            .recipient(seller)
+            .sellerProfile(profile)
+            .type("SELLER_APPLICATION_REJECTED")
+            .title("Application rejected")
+            .message("Reason: Missing information")
+            .build());
+
+        mockMvc.perform(get("/api/notifications")
+                .header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content[0].id").value(notification.getId()))
+            .andExpect(jsonPath("$.content[0].orderId").isEmpty())
+            .andExpect(jsonPath("$.content[0].sellerApplicationId").value(profile.getId()));
+    }
+
+    @Test
+    void createsOneReviewNotificationPerAdminAndResolvesWithoutDeletingRows() {
+        SellerProfile profile = sellerProfileRepository.save(SellerProfile.builder()
+            .user(seller)
+            .shopName("Seller Cards")
+            .build());
+        User adminOne = registerUser("notifications-admin-one@example.com", "Admin One");
+        User adminTwo = registerUser("notifications-admin-two@example.com", "Admin Two");
+
+        notificationService.notifyAdminsOfSellerApplication(profile, List.of(adminOne, adminTwo));
+
+        assertThat(notificationRepository.countByRecipient_IdAndReadAtIsNull(adminOne.getId())).isEqualTo(1);
+        assertThat(notificationRepository.countByRecipient_IdAndReadAtIsNull(adminTwo.getId())).isEqualTo(1);
+        assertThat(notificationRepository.findAll()).filteredOn(n -> profile.getId().equals(
+            n.getSellerProfile() == null ? null : n.getSellerProfile().getId())).hasSize(2);
+
+        notificationService.resolveSellerApplicationReviewNotifications(profile.getId());
+
+        assertThat(notificationRepository.countByRecipient_IdAndReadAtIsNull(adminOne.getId())).isZero();
+        assertThat(notificationRepository.countByRecipient_IdAndReadAtIsNull(adminTwo.getId())).isZero();
+        assertThat(notificationRepository.count()).isEqualTo(2);
+    }
+
+    @Test
+    void notifiesApplicantOfApprovalAndRejectionWithReason() {
+        SellerProfile profile = sellerProfileRepository.save(SellerProfile.builder()
+            .user(seller)
+            .shopName("Seller Cards")
+            .build());
+
+        notificationService.notifySellerApplicationApproved(profile);
+        notificationService.notifySellerApplicationRejected(profile, "Identity document is unclear");
+
+        var applicantNotifications = notificationRepository.findAll().stream()
+            .filter(n -> n.getRecipient().getId().equals(seller.getId()))
+            .toList();
+        assertThat(applicantNotifications)
+            .extracting(UserNotification::getType)
+            .containsExactlyInAnyOrder("SELLER_APPLICATION_APPROVED", "SELLER_APPLICATION_REJECTED");
+        assertThat(applicantNotifications)
+            .filteredOn(n -> "SELLER_APPLICATION_REJECTED".equals(n.getType()))
+            .singleElement()
+            .extracting(UserNotification::getMessage)
+            .asString()
+            .contains("Identity document is unclear");
+        assertThat(applicantNotifications)
+            .allSatisfy(n -> assertThat(n.getSellerProfile().getId()).isEqualTo(profile.getId()));
     }
 
     @Test
@@ -187,6 +282,11 @@ class NotificationControllerIntegrationTests {
             .title(title)
             .message("Order update")
             .build());
+    }
+
+    private User registerUser(String email, String name) {
+        var auth = authService.register(new RegisterRequest(name, email, "password123"));
+        return userRepository.findById(Long.valueOf(auth.user().id())).orElseThrow();
     }
 
     private String bearer(String token) {

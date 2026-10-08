@@ -28,16 +28,19 @@
 
 ## Notifications (F-06)
 
-Notifications are authenticated, persistent in-app order events. The API derives the recipient from the Bearer token; clients cannot supply a recipient ID.
+Notifications are authenticated, persistent in-app events. The API derives the recipient from the Bearer token; clients cannot supply a recipient ID. Production delivery is in-app only; email, push, realtime delivery, and a mock notification implementation are out of scope.
 
 ### Events and persistence
 
 | Type | Recipient | Created when | Default title |
 | --- | --- | --- | --- |
 | `ORDER_RESERVED` | Each seller with items in the successfully created order | Checkout commits the order and reserved stock | `New card reservation` |
-| `ORDER_STATUS_CHANGED` | The buyer on the order | Seller completes the existing frontend “Mark as sent” action | `Your order has been sent` |
+| `ORDER_STATUS_CHANGED` | The buyer on the order | Exactly when order transitions from `CONFIRMED` to `SENT` | `Your order has been sent` |
+| `SELLER_APPLICATION_SUBMITTED` | All admins | Seller submits an application in `PENDING` status | New seller application |
+| `SELLER_APPLICATION_APPROVED` | Applicant seller | Admin approves the application | Seller application approved |
+| `SELLER_APPLICATION_REJECTED` | Applicant seller | Admin rejects the application; message includes rejection reason | Seller application rejected |
 
-The current frontend translates that seller action to backend status `FULFILLED`; the notification is emitted only when the order first enters that status. The order action and notification are in the same database transaction. Notifications remain stored until the user deletes them (no time-based cleanup).
+Order lifecycle is `PENDING → CONFIRMED → SENT → FULFILLED`. The seller sends `SENT` and the backend persists `SENT`; it must not translate this request to `FULFILLED`. The buyer later confirms `FULFILLED`. The buyer notification is emitted exactly on the transition to `SENT`, in the same database transaction. After an admin approves or rejects an application, the submitted notifications for that application are marked read/resolved for all admins. Notifications remain stored until the user deletes them (no time-based cleanup).
 
 ### Endpoints
 
@@ -46,19 +49,20 @@ All routes below require `Authorization: Bearer <token>` and operate only on the
 | Method and path | Behavior |
 | --- | --- |
 | `GET /api/notifications?page=0&size=20` | Return the user's notifications ordered by `createdAt DESC, id DESC`. `page` is zero-based; `size` defaults to 20 and must be 1–100. |
+| `GET /api/notifications/unread-count` | Return `{ "unreadCount": number }` for the authenticated user. |
 | `PATCH /api/notifications/{id}/read` | Set `readAt` once; repeating the request returns the same read timestamp. |
 | `DELETE /api/notifications/{id}` | Permanently delete an owned notification; returns `204` on success. |
 
-The list response uses Spring's page envelope: `content`, `totalElements`, `totalPages`, `number`, `size`, `first`, and `last`. Each `content` item is `{ id, type, title, message, orderId, readAt, createdAt }`; `readAt` is `null` until read. IDs are JSON numbers and timestamps are ISO date-times. Recipient IDs are not returned.
+The list response uses Spring's page envelope: `content`, `totalElements`, `totalPages`, `number`, `size`, `first`, and `last`. Each `content` item is `{ id, type, title, message, orderId, sellerApplicationId, readAt, createdAt }`. `orderId` and `sellerApplicationId` are nullable references: order events set `orderId`; seller verification events set `sellerApplicationId`. `readAt` is `null` until read. IDs are JSON numbers and timestamps are ISO date-times. Recipient IDs are not returned.
 
 ### Errors
 
 - `401 UNAUTHENTICATED`: missing, invalid, or expired token.
 - `400 VALIDATION_ERROR`: invalid page, size, or notification ID.
 - `404 NOT_FOUND`: notification does not exist or belongs to another user (ownership is not disclosed).
-- `5xx`: unexpected persistence/server failure; clients must show a retryable error and must not treat mock data as success.
+- `5xx`: unexpected persistence/server failure; clients must show a retryable error.
 
-Notifications are stored in the database and inserted in the same transaction as checkout or the seller status action. There is no notification channel outside the in-app inbox and no scheduled retention job.
+Notifications are stored in the database and inserted in the same transaction as checkout, the seller's transition to `SENT`, or seller application submission/decision. Seller submission creates a `PENDING` application and notifies all admins; approval or rejection notifies the seller, with rejection reason included. Admin submitted notifications for that application are resolved/read after the decision. There is no channel outside the in-app inbox and no scheduled retention job.
 
 ## Shared values
 
@@ -66,8 +70,8 @@ Notifications are stored in the database and inserted in the same transaction as
 | --- | --- | --- |
 | User role | `CUSTOMER`, `SELLER`, `ADMIN` | frontend ใช้ `CUSTOMER`; DB/Jira บางจุดยังใช้ `USER` ต้อง map หรือ migrate ก่อนปล่อย API |
 | Product status | `SHOW`, `HIDE` | ตรงกับ frontend และ schema |
-| Order status | `PENDING`, `FULFILLED`, `CANCELLED` | ตรงกับ frontend/Jira |
-| IDs | JSON string | แม้ DB ใช้ `BIGINT` ให้ serialize เป็น string-compatible value เพื่อไม่ผูก frontend กับชนิด DB |
+| Order status | `PENDING`, `CONFIRMED`, `SENT`, `FULFILLED`, `CANCELLED` | Seller persists `SENT`; buyer later confirms `FULFILLED`. |
+| IDs | Backend JSON number; frontend adapter normalizes to string | DB ใช้ `BIGINT`; frontend ต้อง normalize ก่อนเก็บใน domain state |
 | Money | JSON number, scale 2 | backend ใช้ `BigDecimal`; ห้ามคำนวณเงินจริงด้วย floating point |
 | Date/time | ISO-8601 UTC | ตัวอย่าง `2026-09-01T10:30:00Z` |
 

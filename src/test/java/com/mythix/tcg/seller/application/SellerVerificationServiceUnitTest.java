@@ -1,6 +1,7 @@
 package com.mythix.tcg.seller.application;
 
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
+import com.mythix.tcg.notification.application.NotificationService;
 import com.mythix.tcg.seller.api.SellerVerificationRequest;
 import com.mythix.tcg.seller.api.SellerVerificationResponse;
 import com.mythix.tcg.seller.domain.SellerProfile;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,6 +35,9 @@ class SellerVerificationServiceUnitTest {
 
     @Mock
     private SellerProfileRepository sellerProfileRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private SellerVerificationService sellerVerificationService;
@@ -63,6 +68,9 @@ class SellerVerificationServiceUnitTest {
         );
         when(userRepository.findById(2L)).thenReturn(Optional.of(sampleUser));
         when(sellerProfileRepository.existsByUserId(2L)).thenReturn(false);
+        User firstAdmin = User.builder().id(3L).role("ADMIN").build();
+        User secondAdmin = User.builder().id(4L).role("ADMIN").build();
+        when(userRepository.findByRoleOrderByCreatedAtDesc("ADMIN")).thenReturn(List.of(firstAdmin, secondAdmin));
 
         SellerProfile savedProfile = SellerProfile.builder()
             .id(1L)
@@ -91,6 +99,8 @@ class SellerVerificationServiceUnitTest {
         verify(sellerProfileRepository).save(profileCaptor.capture());
         SellerProfile captured = profileCaptor.getValue();
         assertThat(captured.getShopName()).isEqualTo("Pewter City Cards");
+        verify(notificationService).notifyAdminsOfSellerApplication(eq(savedProfile),
+            argThat(admins -> admins.stream().map(User::getId).toList().equals(List.of(3L, 4L))));
         assertThat(captured.getShopDescription()).isEqualTo("Authentic Pokémon Cards");
     }
 
@@ -107,6 +117,7 @@ class SellerVerificationServiceUnitTest {
             .isInstanceOf(SellerAlreadyApprovedException.class);
 
         verify(sellerProfileRepository, never()).save(any());
+        verify(notificationService, never()).notifyAdminsOfSellerApplication(any(), any());
     }
 
     @Test
@@ -121,5 +132,20 @@ class SellerVerificationServiceUnitTest {
             .isInstanceOf(InvalidCredentialsException.class);
 
         verify(sellerProfileRepository, never()).existsByUserId(any());
+    }
+
+    @Test
+    void verify_noAdmins_stillSubmitsApplication() {
+        when(userRepository.findById(2L)).thenReturn(Optional.of(sampleUser));
+        when(sellerProfileRepository.existsByUserId(2L)).thenReturn(false);
+        when(userRepository.findByRoleOrderByCreatedAtDesc("ADMIN")).thenReturn(List.of());
+        SellerProfile savedProfile = SellerProfile.builder().id(1L).user(sampleUser).shopName("Shop").build();
+        when(sellerProfileRepository.save(any(SellerProfile.class))).thenReturn(savedProfile);
+
+        SellerVerificationResponse response = sellerVerificationService.verify(
+            2L, new SellerVerificationRequest("Shop", null, null, null, null));
+
+        assertThat(response.sellerStatus()).isEqualTo("PENDING");
+        verify(notificationService).notifyAdminsOfSellerApplication(savedProfile, List.of());
     }
 }

@@ -11,6 +11,7 @@ import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.admin.api.AdminDashboardResponse;
 import com.mythix.tcg.admin.domain.AuditLog;
 import com.mythix.tcg.admin.persistence.AuditLogRepository;
+import com.mythix.tcg.notification.application.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,7 @@ public class AdminSellerService {
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
     private final AuditLogRepository auditLogRepository;
+    private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
     public AdminDashboardResponse dashboard() {
@@ -44,7 +46,7 @@ public class AdminSellerService {
 
     @Transactional
     public AdminSellerApplicationResponse approve(Long applicationId, Long adminUserId) {
-        SellerProfile profile = sellerProfileRepository.findById(applicationId)
+        SellerProfile profile = sellerProfileRepository.findByIdForUpdate(applicationId)
             .orElseThrow(SellerApplicationNotFoundException::new);
         User applicant = profile.getUser();
         if (!"PENDING".equalsIgnoreCase(applicant.getSellerStatus())) {
@@ -56,17 +58,21 @@ public class AdminSellerService {
         profile.setApprovedBy(admin.getId());
         profile.setVerifiedAt(LocalDateTime.now());
         auditLogRepository.save(AuditLog.builder().actor(admin).action("APPROVE_SELLER").targetType("SELLER_PROFILE").targetId(String.valueOf(profile.getId())).details("Approved seller application").build());
+        notificationService.notifySellerApplicationApproved(profile);
+        notificationService.resolveSellerApplicationReviewNotifications(profile.getId());
         return AdminSellerApplicationResponse.from(profile);
     }
 
     @Transactional
     public AdminSellerApplicationResponse reject(Long applicationId, Long adminUserId, String reason) {
-        SellerProfile profile = sellerProfileRepository.findById(applicationId).orElseThrow(SellerApplicationNotFoundException::new);
+        SellerProfile profile = sellerProfileRepository.findByIdForUpdate(applicationId).orElseThrow(SellerApplicationNotFoundException::new);
         if (!"PENDING".equalsIgnoreCase(profile.getUser().getSellerStatus())) throw new SellerApplicationStateException();
         User admin = userRepository.findById(adminUserId).orElseThrow(SellerApplicationNotFoundException::new);
         profile.getUser().setSellerStatus("REJECTED");
         profile.setRejectedBy(admin.getId()); profile.setRejectedAt(LocalDateTime.now()); profile.setRejectionReason(reason.trim());
         auditLogRepository.save(AuditLog.builder().actor(admin).action("REJECT_SELLER").targetType("SELLER_PROFILE").targetId(String.valueOf(profile.getId())).details(reason.trim()).build());
+        notificationService.notifySellerApplicationRejected(profile, reason.trim());
+        notificationService.resolveSellerApplicationReviewNotifications(profile.getId());
         return AdminSellerApplicationResponse.from(profile);
     }
 }
