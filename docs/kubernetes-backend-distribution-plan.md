@@ -358,6 +358,8 @@ Dependency: เริ่มได้ทันทีหลัง Step 2 และ
 
 รวม Step 4 และส่วน build/security ของ Step 8
 
+สถานะ: Planned — พร้อมแจกงานตาม work packages ในเอกสารรายละเอียด
+
 ขอบเขต:
 
 - pin base image, UID/GID, JVM memory policy และ OCI labels
@@ -366,7 +368,7 @@ Dependency: เริ่มได้ทันทีหลัง Step 2 และ
 - เพิ่ม Compose health dependency และตรวจ read-only filesystem
 - ทำ image reproducibility และ vulnerability gates
 
-ไฟล์หลัก: `Dockerfile`, `.dockerignore`, `docker-compose.desktop.yml`, `.github/workflows/ci.yml` และ image-publish workflow เท่านั้น
+ไฟล์หลัก: `Dockerfile`, `.dockerignore`, `docker-compose.desktop.yml`, `pom.xml` เฉพาะ reproducible-build metadata, `.github/workflows/ci.yml` และ image-publish workflow เท่านั้น
 
 Acceptance:
 
@@ -376,6 +378,8 @@ Acceptance:
 - API และ migration runner ใช้ image digest เดียวกัน
 
 Dependency: เริ่มได้ทันทีหลัง Step 2 และทำขนานกับ Component A/C ได้
+
+รายละเอียด: [Component B — Container and software supply-chain plan](./kubernetes-component-b-container-supply-chain-plan.md)
 
 ### Component C — Kubernetes environments and secure edge
 
