@@ -71,6 +71,34 @@ if ($jdbcQuery) {
     $jdbcUrl = "$jdbcUrl`?$jdbcQuery"
 }
 
+function First-NonEmptyValue([string[]]$Keys, [string]$Fallback = "") {
+    foreach ($key in $Keys) {
+        if ($values.ContainsKey($key) -and -not [string]::IsNullOrWhiteSpace($values[$key])) {
+            return $values[$key]
+        }
+    }
+    return $Fallback
+}
+
+$objectStorageEndpoint = First-NonEmptyValue @("OBJECT_STORAGE_ENDPOINT", "AWS_ENDPOINT_URL_S3")
+$objectStorageRegion = First-NonEmptyValue @("OBJECT_STORAGE_REGION", "AWS_REGION") "us-east-2"
+$objectStorageBucket = First-NonEmptyValue @("OBJECT_STORAGE_BUCKET") "tcg-product-images"
+$objectStorageAccessKey = First-NonEmptyValue @("OBJECT_STORAGE_ACCESS_KEY", "AWS_ACCESS_KEY_ID")
+$objectStorageSecretKey = First-NonEmptyValue @("OBJECT_STORAGE_SECRET_KEY", "AWS_SECRET_ACCESS_KEY")
+$objectStoragePublicBaseUrl = First-NonEmptyValue @("OBJECT_STORAGE_PUBLIC_BASE_URL")
+if ([string]::IsNullOrWhiteSpace($objectStoragePublicBaseUrl) -and -not [string]::IsNullOrWhiteSpace($objectStorageEndpoint)) {
+    $objectStoragePublicBaseUrl = "$($objectStorageEndpoint.TrimEnd('/'))/$objectStorageBucket"
+}
+
+$missingObjectStorageValues = @(
+    if ([string]::IsNullOrWhiteSpace($objectStorageEndpoint)) { "AWS_ENDPOINT_URL_S3" }
+    if ([string]::IsNullOrWhiteSpace($objectStorageAccessKey)) { "AWS_ACCESS_KEY_ID" }
+    if ([string]::IsNullOrWhiteSpace($objectStorageSecretKey)) { "AWS_SECRET_ACCESS_KEY" }
+)
+if ($missingObjectStorageValues.Count -gt 0) {
+    throw "Missing Neon Object Storage value(s): $($missingObjectStorageValues -join ', '). Enable the bucket and pull the object-storage service."
+}
+
 $output = @(
     "# Neon CLI context for the linked shared development branch"
     "DATABASE_URL=$($values['DATABASE_URL'])"
@@ -85,9 +113,15 @@ $output = @(
     "APP_JWT_SECRET=$jwtSecret"
     "APP_JWT_EXPIRATION_MINUTES=1440"
     "APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:5174"
-    "APP_PUBLIC_BASE_URL=http://localhost:8080"
     "APP_LOG_LEVEL=INFO"
     "JPA_SHOW_SQL=false"
+    "OBJECT_STORAGE_ENDPOINT=$objectStorageEndpoint"
+    "OBJECT_STORAGE_REGION=$objectStorageRegion"
+    "OBJECT_STORAGE_BUCKET=$objectStorageBucket"
+    "OBJECT_STORAGE_PUBLIC_BASE_URL=$objectStoragePublicBaseUrl"
+    "OBJECT_STORAGE_PATH_STYLE=true"
+    "OBJECT_STORAGE_ACCESS_KEY=$objectStorageAccessKey"
+    "OBJECT_STORAGE_SECRET_KEY=$objectStorageSecretKey"
     ""
     "# Local Docker PostgreSQL runtime"
     "DB_URL=jdbc:postgresql://localhost:5432/tcg_store"
@@ -98,7 +132,6 @@ $output = @(
     "POSTGRES_PASSWORD=postgres"
     "POSTGRES_PORT=5432"
     "SERVER_PORT=8080"
-    "SELLER_PRODUCT_IMAGE_DIR=uploads/products"
     "VITE_API_BASE_URL=http://localhost:8080/api"
     "FRONTEND_PORT=3000"
     ""

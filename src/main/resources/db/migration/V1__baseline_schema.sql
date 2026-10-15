@@ -1,3 +1,4 @@
+-- Flyway V1: canonical PostgreSQL baseline schema.
 -- =============================================================================
 -- Mythix TCG Platform — Production Schema Initialization (Revision 5)
 -- Target DBMS: PostgreSQL 16

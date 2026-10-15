@@ -1,4 +1,4 @@
--- Revision 5 compatibility migration for legacy local PostgreSQL volumes.
+-- Flyway V3: seller approval compatibility migration for legacy databases.
 -- Additive and repeatable: preserves existing users and seller profiles.
 
 ALTER TABLE seller_profiles

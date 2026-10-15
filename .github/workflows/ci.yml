@@ -78,7 +78,7 @@ jobs:
         run: ./mvnw --batch-mode -Dspring.profiles.active=postgres -Dtest=CheckoutConcurrencyPostgresTests verify
 
   db-schema-validation:
-    name: Database Schema & Seed Validation
+    name: Flyway Fresh, Upgrade & Restore Validation
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -99,48 +99,102 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
       - name: Install PostgreSQL client
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
 
-      - name: Execute schema and migrations
+      - name: Build migration artifact
+        run: ./mvnw --batch-mode package -DskipTests
+
+      - name: Validate fresh, repeat, upgrade-baseline and backup-restore paths
         env:
           PGPASSWORD: postgres
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: tcg_store_test
+          PGUSER: postgres
+          DB_URL: jdbc:postgresql://localhost:5432/tcg_store_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          FLYWAY_ENABLED: "true"
         run: |
-          echo "Applying 01-schema.sql..."
-          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/01-schema.sql
-          echo "Applying 02-data.sql..."
-          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/02-data.sql
-          echo "Applying 03-profile-avatar.sql..."
-          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/init/03-profile-avatar.sql
-          echo "Applying migrations..."
-          psql -h localhost -U postgres -d tcg_store_test -f infra/postgres/migrations/001_checkout_idempotency.sql
+          set -euo pipefail
+          MIGRATION_JAR=$(find target -maxdepth 1 -type f -name '*.jar' ! -name '*.original' -print -quit)
+          run_migration() {
+            java -Dloader.main=com.mythix.tcg.DatabaseMigrationApplication \
+              -cp "$MIGRATION_JAR" \
+              org.springframework.boot.loader.launch.PropertiesLauncher
+          }
 
-      - name: Validate Table and Seed Record Integrity
-        env:
-          PGPASSWORD: postgres
-        run: |
-          echo "Verifying database integrity..."
-          TABLE_COUNT=$(psql -h localhost -U postgres -d tcg_store_test -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
-          echo "Total public tables created: $TABLE_COUNT"
-          if [ "$TABLE_COUNT" -lt 10 ]; then
-            echo "ERROR: Expected at least 10 tables, found $TABLE_COUNT"
-            exit 1
-          fi
+          echo "Running Flyway against a fresh database..."
+          run_migration
+          FRESH_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
+          test "$FRESH_COUNT" -eq 9
 
-          CARD_COUNT=$(psql -h localhost -U postgres -d tcg_store_test -t -A -c "SELECT COUNT(*) FROM global_cards;")
-          echo "Total global cards seeded: $CARD_COUNT"
-          if [ "$CARD_COUNT" -lt 2000 ]; then
-            echo "ERROR: Expected at least 2000 global cards, found $CARD_COUNT"
-            exit 1
-          fi
+          echo "Applying development seed separately..."
+          psql -v ON_ERROR_STOP=1 -f infra/postgres/init/02-data.sql
+          psql -v ON_ERROR_STOP=1 -f infra/postgres/init/03-profile-avatar.sql
+          run_migration
+          REPEAT_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
+          test "$REPEAT_COUNT" -eq 9
 
-          USER_COUNT=$(psql -h localhost -U postgres -d tcg_store_test -t -A -c "SELECT COUNT(*) FROM users;")
-          echo "Total users seeded: $USER_COUNT"
-          if [ "$USER_COUNT" -lt 9 ]; then
-            echo "ERROR: Expected at least 9 users, found $USER_COUNT"
-            exit 1
-          fi
-          echo "Database schema and seed validation passed successfully!"
+          echo "Verifying database integrity and seed separation..."
+          TABLE_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
+          test "$TABLE_COUNT" -ge 10
+          CARD_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM global_cards;")
+          test "$CARD_COUNT" -ge 2000
+          USER_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM users;")
+          test "$USER_COUNT" -ge 9
+
+          echo "Upgrading a legacy pre-Flyway V8 schema and preserving its data..."
+          createdb tcg_store_upgrade
+          while IFS= read -r migration; do
+            if [[ "$(basename "$migration")" == V9__* ]]; then
+              break
+            fi
+            psql -v ON_ERROR_STOP=1 -d tcg_store_upgrade -f "$migration"
+          done < <(find src/main/resources/db/migration -maxdepth 1 -type f -name 'V*.sql' | sort -V)
+          psql -v ON_ERROR_STOP=1 -d tcg_store_upgrade <<'SQL'
+          INSERT INTO users (email, password, full_name, role, seller_status)
+          VALUES ('legacy-seller@example.test', 'not-a-real-password', 'Legacy Seller', 'USER', 'APPROVED');
+          INSERT INTO global_cards (id, name, supertype, set_name, card_number, image_small, image_large, market_price)
+          VALUES ('legacy-card', 'Legacy Card', 'Pokémon', 'Legacy Set', '1', 'small', 'large', 10.00);
+          INSERT INTO local_cards (seller_id, global_card_id, custom_image_url, condition, language, price, cost, on_hand, reserved, status)
+          SELECT id, 'legacy-card', 'https://example.test/legacy.png', 'NM', 'EN', 20.00, 10.00, 2, 0, 'SHOW'
+          FROM users WHERE email = 'legacy-seller@example.test';
+          ALTER TABLE global_cards RENAME TO cards;
+          ALTER TABLE local_cards RENAME TO products;
+          ALTER TABLE products RENAME COLUMN global_card_id TO card_id;
+          ALTER TABLE cart_items RENAME COLUMN local_card_id TO product_id;
+          ALTER TABLE collection_items RENAME COLUMN global_card_id TO card_id;
+          ALTER TABLE order_items RENAME COLUMN local_card_id TO product_id;
+          ALTER TABLE order_items RENAME COLUMN global_card_id TO card_id;
+          ALTER TABLE order_items RENAME COLUMN card_name_snapshot TO product_name_snapshot;
+          SQL
+          LEGACY_CARD_COUNT=$(psql -t -A -d tcg_store_upgrade -c 'SELECT COUNT(*) FROM products;')
+          DB_URL=jdbc:postgresql://localhost:5432/tcg_store_upgrade run_migration
+          BASELINE_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='BASELINE' AND version='8' AND success;")
+          test "$BASELINE_COUNT" -eq 1
+          V9_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='9' AND success;")
+          test "$V9_COUNT" -eq 1
+          UPGRADED_CARD_COUNT=$(psql -t -A -d tcg_store_upgrade -c 'SELECT COUNT(*) FROM local_cards;')
+          test "$UPGRADED_CARD_COUNT" -eq "$LEGACY_CARD_COUNT"
+          LEGACY_TABLE_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN ('cards', 'products');")
+          test "$LEGACY_TABLE_COUNT" -eq 0
+
+          echo "Rehearsing backup and restore before future production migrations..."
+          pg_dump --format=custom --file=target/tcg_store_test.dump tcg_store_test
+          createdb tcg_store_restore
+          pg_restore --exit-on-error --no-owner --dbname=tcg_store_restore target/tcg_store_test.dump
+          RESTORED_CARD_COUNT=$(psql -t -A -d tcg_store_restore -c 'SELECT COUNT(*) FROM global_cards;')
+          test "$RESTORED_CARD_COUNT" -eq "$CARD_COUNT"
+          DB_URL=jdbc:postgresql://localhost:5432/tcg_store_restore run_migration
 
   docker-build-verify:
     name: Docker Build Verification
@@ -149,6 +203,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate canonical Compose profiles
+        env:
+          APP_JWT_SECRET: ci-only-secret-that-is-at-least-32-bytes
+          NEON_JDBC_URL: jdbc:postgresql://example.invalid/neondb
+          NEON_DB_USERNAME: ci-only
+          NEON_DB_PASSWORD: ci-only
+          OBJECT_STORAGE_ENDPOINT: https://storage.example.invalid
+          OBJECT_STORAGE_BUCKET: tcg-product-images-ci
+          OBJECT_STORAGE_PUBLIC_BASE_URL: https://storage.example.invalid/tcg-product-images-ci
+          OBJECT_STORAGE_ACCESS_KEY: ci-only-access-key
+          OBJECT_STORAGE_SECRET_KEY: ci-only-secret-key
+        run: |
+          docker compose -f docker-compose.desktop.yml --profile local config --quiet
+          docker compose -f docker-compose.desktop.yml --profile cloud config --quiet
+          kubectl kustomize infra/kubernetes/overlays/neon >/dev/null
+          kubectl kustomize infra/kubernetes/overlays/neon/migration >/dev/null
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

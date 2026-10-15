@@ -1,3 +1,4 @@
+-- Flyway V4: immutable admin audit log.
 CREATE TABLE IF NOT EXISTS audit_logs (
  id BIGSERIAL PRIMARY KEY, actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
  action VARCHAR(100) NOT NULL, target_type VARCHAR(50) NOT NULL, target_id VARCHAR(100) NOT NULL,

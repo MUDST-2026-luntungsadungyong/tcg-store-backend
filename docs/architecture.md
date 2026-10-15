@@ -52,4 +52,4 @@ buyer identity ต้องมาจาก token, เรียงล่าสุ
 
 ## Database
 
-ไฟล์ bootstrap สำหรับ local PostgreSQL อยู่ที่ `infra/postgres/init`. PostgreSQL รันไฟล์เหล่านี้เฉพาะตอนสร้าง volume ใหม่ จึงไม่ควรใช้เป็น production migration mechanism. ก่อน deploy หลาย environment ให้ย้าย schema evolution ไป Flyway/Liquibase และเก็บ seed data สำหรับ development แยกจาก migration จริง
+schema evolution อยู่ใน `src/main/resources/db/migration` และรันด้วย Flyway migration gate ก่อน API rollout ทั้ง Local, Cloud และ Kubernetes ส่วน `infra/postgres/init` เก็บเฉพาะ development seed แยกจาก production migration ทุก schema change ต้องเพิ่ม migration version ใหม่และห้ามแก้ไฟล์ที่เคย apply แล้ว

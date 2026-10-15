@@ -1,3 +1,4 @@
+-- Flyway V6: in-app notifications.
 CREATE TABLE IF NOT EXISTS notifications (
     id BIGSERIAL PRIMARY KEY,
     recipient_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

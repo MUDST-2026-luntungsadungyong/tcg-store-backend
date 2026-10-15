@@ -1,3 +1,4 @@
+-- Flyway V8: backfill pending seller application notifications.
 INSERT INTO notifications (
     recipient_id,
     seller_profile_id,

@@ -1,6 +1,5 @@
 package com.mythix.tcg.seller.application;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,19 +17,7 @@ import java.net.URI;
 @EnableConfigurationProperties(SellerProductImageStorageProperties.class)
 public class SellerProductImageStorageConfiguration {
 
-    @Bean
-    @ConditionalOnProperty(
-        name = "app.seller.product-images.storage",
-        havingValue = "local",
-        matchIfMissing = true
-    )
-    SellerProductImageStore localProductImageStore(SellerProductImageStorageProperties properties) {
-        properties.validate();
-        return new SellerProductImageStorage(properties.storageDirectory(), properties.publicBaseUrl());
-    }
-
     @Bean(destroyMethod = "close")
-    @ConditionalOnProperty(name = "app.seller.product-images.storage", havingValue = "s3")
     S3Client productImageS3Client(SellerProductImageStorageProperties properties) {
         properties.validate();
         S3ClientBuilder builder = S3Client.builder()
@@ -52,7 +39,6 @@ public class SellerProductImageStorageConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(name = "app.seller.product-images.storage", havingValue = "s3")
     SellerProductImageStore s3ProductImageStore(
         S3Client client,
         SellerProductImageStorageProperties properties

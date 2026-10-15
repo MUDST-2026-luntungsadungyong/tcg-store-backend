@@ -1,6 +1,6 @@
--- SCRUM-12: add durable idempotency support to existing PostgreSQL deployments.
+-- Flyway V2: add durable checkout idempotency support.
 -- Safe to run more than once. Execute with:
--- docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+-- docker compose -f docker-compose.desktop.yml exec -T postgres-local psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
 --   -f /migrations/001_checkout_idempotency.sql
 
 ALTER TABLE orders

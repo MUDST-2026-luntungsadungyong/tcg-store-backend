@@ -68,8 +68,8 @@ feature/
 
 ## 5. Database และ concurrency
 
-- local schema อยู่ใน `infra/postgres/init/01-schema.sql`; development seed อยู่ใน `02-data.sql`
-- SQL bootstrap รันเฉพาะ volume ใหม่ อย่าแก้แล้วสรุปว่า environment เดิม migrate แล้ว
+- schema migration อยู่ใน `src/main/resources/db/migration` และ Flyway รันผ่าน migration service/Job ก่อนเริ่ม API
+- ห้ามแก้ไฟล์ `V*` ที่เคยใช้งานแล้ว ให้เพิ่ม version ใหม่เสมอ; development seed อยู่ใน `infra/postgres/init` และไม่ใช่ production migration
 - schema change ต้องแก้ JPA mapping, SQL, test และ API docs ที่เกี่ยวข้องใน PR เดียวกัน
 - ห้ามลบ/เปลี่ยนชื่อ column ที่ใช้แล้วโดยไม่มี migration/backward-compatibility plan
 - checkout/stock reservation ต้องอยู่ใน transaction และมี concurrency-safe update/lock พร้อม test ป้องกัน oversell

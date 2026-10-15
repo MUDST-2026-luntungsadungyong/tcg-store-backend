@@ -1,7 +1,14 @@
 # Step 1 — ย้าย Seller Product Images ไป Object Storage
 
-สถานะเอกสาร: Implementation plan  
+สถานะเอกสาร: Implemented — S3-only runtime
 Parent plan: [แผนทำ Backend ให้รองรับ Kubernetes และการกระจายโหลด](./kubernetes-backend-distribution-plan.md)
+
+หลักฐานการย้ายข้อมูล ณ 2026-10-15:
+
+- Neon: `local_cards` 22/22 รายการชี้เข้า Neon Object Storage, bucket มี 22 objects, external image URL เหลือ 0 และ sample object ตอบ HTTP 200
+- Local: `local_cards` 20/20 รายการชี้เข้า S3Mock, bucket มี 20 objects และ external image URL เหลือ 0
+- ใช้ `scripts/migrate-product-images-to-s3.ps1` สำหรับ inventory/download/upload/update/verify แบบรันซ้ำได้ต่อ seller credential
+- Kubernetes multi-replica fault test เป็น acceptance ต่อเนื่องใน Component A; ไม่ใช่ filesystem fallback
 
 ## 1. เป้าหมาย
 
@@ -10,16 +17,16 @@ Parent plan: [แผนทำ Backend ให้รองรับ Kubernetes แ
 แนวทางที่เลือก:
 
 - Production ใช้ S3-compatible object storage
-- Local/integration ใช้ Adobe S3Mock หรือ local filesystem ผ่าน storage contract เดียวกัน
+- Local/integration ใช้ Adobe S3Mock โดยเปิดอัตโนมัติพร้อม Local backend
 - Database เก็บ stable public URL ของรูป
 - Bucket เปิดอ่านเฉพาะ object ที่เป็น public catalog images หรือเปิดผ่าน CDN/public gateway
 - Write/delete credentials อยู่เฉพาะ backend Secret
 
 งานนี้ต้องเสร็จก่อนเพิ่ม backend replicas มากกว่า 1
 
-## 2. ปัญหาใน implementation ปัจจุบัน
+## 2. ปัญหาก่อนทำ Step 1
 
-ปัจจุบัน `SellerProductImageStorage`:
+ก่อนทำ Step 1 `SellerProductImageStorage` เคย:
 
 - เขียนไฟล์ลง `SELLER_PRODUCT_IMAGE_DIR`
 - เปิดไฟล์ผ่าน Spring MVC resource handler ที่ `/uploads/products/**`
@@ -134,7 +141,6 @@ seller/infrastructure/storage/
 |---|---|
 | `SellerProductImageStore` | Contract ที่ application service ใช้ |
 | `SellerProductImageValidator` | ตรวจขนาด, magic bytes, MIME และคืน format/extension |
-| `LocalSellerProductImageStore` | รักษาพฤติกรรม filesystem สำหรับ local/test |
 | `S3SellerProductImageStore` | PUT/DELETE object ผ่าน S3-compatible API |
 | `StorageProperties` | Bind และ validate runtime configuration |
 | `StorageConfiguration` | เลือก implementation ตาม property |
@@ -182,13 +188,11 @@ https://images.example.com/products/550e8400-e29b-41d4-a716-446655440000.webp
 
 | Environment variable | ตัวอย่าง | หมายเหตุ |
 |---|---|---|
-| `SELLER_PRODUCT_IMAGE_STORAGE` | `local` หรือ `s3` | ค่า production ต้องเป็น `s3` |
 | `OBJECT_STORAGE_ENDPOINT` | `http://s3mock:9090` | เว้นว่างได้สำหรับ AWS S3 |
-| `OBJECT_STORAGE_REGION` | `auto` หรือ region จริง | ขึ้นกับ provider |
+| `OBJECT_STORAGE_REGION` | `us-east-2` หรือ region จริง | Neon env pull ให้ค่าของ branch |
 | `OBJECT_STORAGE_BUCKET` | `tcg-product-images` | แยก staging/production |
 | `OBJECT_STORAGE_PUBLIC_BASE_URL` | `https://images.example.com` | ไม่มี trailing slash |
-| `OBJECT_STORAGE_PATH_STYLE` | `true` | S3Mock ใช้ path-style |
-| `SELLER_PRODUCT_IMAGE_DIR` | `/app/uploads/products` | ใช้เฉพาะ local mode |
+| `OBJECT_STORAGE_PATH_STYLE` | `true` | S3Mock และ Neon Object Storage ใช้ path-style |
 
 ### Secret config
 
@@ -201,16 +205,13 @@ https://images.example.com/products/550e8400-e29b-41d4-a716-446655440000.webp
 
 ## 7. Docker และ S3Mock local environment
 
-เพิ่ม Compose profile เช่น `object-storage` โดยใช้ไฟล์ override เพื่อบังคับให้ backend ใช้ S3 mode เมื่อเปิด profile:
+Compose file กลางมี `local` profile ซึ่งเปิด S3Mock พร้อม backend โดยอัตโนมัติ:
 
 ```powershell
-docker compose `
-  -f docker-compose.yml `
-  -f docker-compose.object-storage.yml `
-  --profile object-storage up --build
+docker compose -f docker-compose.desktop.yml --profile local up --build -d postgres-local backend-local frontend
 ```
 
-การแยก override สำคัญ เพราะ Compose profile ที่เปิดเฉพาะ S3Mock ไม่ได้เปลี่ยนค่า `SELLER_PRODUCT_IMAGE_STORAGE` ของ backend ให้เอง
+`backend-local` ใช้ S3Mock เสมอ ไม่มี filesystem mode หรือ service สำรองอีกต่อไป
 
 ```text
 backend --> s3mock:9090
@@ -220,7 +221,7 @@ developer/browser --> localhost:9090
 Services ที่ต้องมี:
 
 1. `s3mock`: S3-compatible test server พร้อม named volume และ initial bucket
-2. `backend`: inject endpoint, bucket และ dummy development credentials ผ่าน `.env`
+2. `backend-local`: inject endpoint, bucket และ dummy development credentials สำหรับ local test
 
 ข้อกำหนด Compose:
 
@@ -231,31 +232,22 @@ Services ที่ต้องมี:
 - Dummy credentials สำหรับ S3Mock เป็นค่าทดสอบที่เปิดเผยได้; หาก override ให้เก็บใน `.env` ซึ่งถูก gitignore
 - Production ห้ามใช้ S3Mock หรือ credentials ชุด local
 
-Local filesystem mode คงไว้ได้สำหรับ fast unit tests แต่ integration test ของ distributed behavior ต้องใช้ S3Mock หรือ S3-compatible test container
+Unit tests ใช้ mock `S3Client`; integration และ distributed behavior ใช้ S3Mock หรือ S3-compatible test container
 
 คำสั่ง local S3 flow:
 
 ```powershell
-docker compose `
-  -f docker-compose.yml `
-  -f docker-compose.object-storage.yml `
-  --profile object-storage `
-  config --quiet
+docker compose -f docker-compose.desktop.yml --profile local config --quiet
 
-docker compose `
-  -f docker-compose.yml `
-  -f docker-compose.object-storage.yml `
-  --profile object-storage `
-  up --build backend
+docker compose -f docker-compose.desktop.yml --profile local up --build -d postgres-local backend-local frontend
 ```
 
-คำสั่งนี้ยังใช้ PostgreSQL/migrations เดิม แต่ backend จะรอ S3Mock healthy และ S3Mock จะสร้าง initial bucket ก่อนรับ traffic ส่วน default `docker compose up` ยังเป็น filesystem mode เหมือนเดิม
+คำสั่งนี้ใช้ `postgres-local` และ `migrations-local` ชุดเดียวกับ local runtime โดย `backend-local` จะรอ S3Mock healthy และ S3Mock จะสร้าง initial bucket ก่อนรับ traffic
 
 ## 8. Kubernetes changes
 
 ### Deployment
 
-- ตั้ง `SELLER_PRODUCT_IMAGE_STORAGE=s3`
 - inject endpoint/region/bucket/public URL จาก ConfigMap
 - inject access/secret key จาก Secret
 - ลบ `uploads` volume และ volumeMount จาก production overlay
@@ -398,14 +390,14 @@ Log ต้องมี correlation ID และ object key ที่ไม่ล
 - Backup database
 - เก็บ local upload volume
 - เก็บ URL mapping
-- ทดสอบ local storage mode กับ release เดียวกัน
+- ทดสอบ Local S3Mock profile กับ release เดียวกัน
 
 หาก production cutover ล้มเหลว:
 
 1. หยุด image writes
 2. Roll back Deployment ไป image ก่อนหน้า
 3. Restore URL mapping หรือใช้ compatibility read path
-4. เปิด local storage mode
+4. ชี้ backend ไปยัง S3-compatible rollback bucket ที่เก็บ object ชุดเดิม
 5. ตรวจว่ารูปที่สร้างระหว่าง cutover ถูก copy กลับหรือเก็บไว้ใน object storage
 
 ห้ามลบ local volume จนกว่าจะผ่าน observation period และ reconcile object/database ครบ
@@ -416,7 +408,7 @@ Log ต้องมี correlation ID และ object key ที่ไม่ล
 
 - สร้าง storage interface
 - ย้าย validation เป็น reusable component
-- เปลี่ยน filesystem class ให้ implement interface
+- ลบ filesystem implementation และให้ runtime ใช้ S3 implementation เพียงแบบเดียว
 - คง tests เดิมและเพิ่ม contract tests
 
 ผลลัพธ์: local behavior เหมือนเดิมทุกอย่าง
@@ -428,7 +420,7 @@ Log ต้องมี correlation ID และ object key ที่ไม่ล
 - เพิ่ม unit tests ด้วย fake/mock client
 - รักษา transaction-aware cleanup
 
-### 1C — เพิ่ม S3Mock Compose profile
+### 1C — ผูก S3Mock เข้ากับ Local Compose profile
 
 - เพิ่ม S3Mock และ initial bucket configuration
 - เพิ่ม `.env.example` placeholders
@@ -456,7 +448,7 @@ Log ต้องมี correlation ID และ object key ที่ไม่ล
 
 ## 16. Definition of Done สำหรับ Step 1
 
-- `SellerProductService` ไม่รู้รายละเอียด filesystem หรือ S3
+- `SellerProductService` ไม่รู้รายละเอียดของ S3 provider
 - Production ไม่มี long-lived image data ใน Pod filesystem
 - 2+ replicas อ่าน/เขียน/ลบรูปชุดเดียวกันได้
 - Pod restart และ rolling update ไม่ทำให้รูปหาย

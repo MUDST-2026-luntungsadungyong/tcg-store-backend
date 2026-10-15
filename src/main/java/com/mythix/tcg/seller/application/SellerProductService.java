@@ -198,9 +198,6 @@ public class SellerProductService {
     }
 
     private void validateImageUrl(String imageUrl) {
-        if (imageUrl.startsWith("/uploads/products/")) {
-            return;
-        }
         try {
             URI uri = URI.create(imageUrl);
             boolean validScheme = "http".equalsIgnoreCase(uri.getScheme())

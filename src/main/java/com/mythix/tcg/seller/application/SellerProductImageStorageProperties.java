@@ -7,9 +7,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "app.seller.product-images")
 public record SellerProductImageStorageProperties(
-    StorageType storage,
-    String storageDirectory,
-    String publicBaseUrl,
     String objectStorageEndpoint,
     String objectStorageRegion,
     String objectStorageBucket,
@@ -20,21 +17,11 @@ public record SellerProductImageStorageProperties(
 ) {
 
     public SellerProductImageStorageProperties {
-        storage = storage == null ? StorageType.LOCAL : storage;
-        storageDirectory = defaultValue(storageDirectory, "uploads/products");
-        publicBaseUrl = defaultValue(publicBaseUrl, "http://localhost:8080");
         objectStorageRegion = defaultValue(objectStorageRegion, "us-east-1");
         objectStoragePublicBaseUrl = defaultValue(objectStoragePublicBaseUrl, "");
     }
 
     public void validate() {
-        if (storage == StorageType.LOCAL) {
-            if (storageDirectory.isBlank() || publicBaseUrl.isBlank()) {
-                throw new IllegalStateException("Local product image storage requires directory and public base URL");
-            }
-            return;
-        }
-
         requireNonBlank(objectStorageRegion, "OBJECT_STORAGE_REGION");
         requireNonBlank(objectStorageBucket, "OBJECT_STORAGE_BUCKET");
         requireNonBlank(objectStoragePublicBaseUrl, "OBJECT_STORAGE_PUBLIC_BASE_URL");
@@ -65,8 +52,4 @@ public record SellerProductImageStorageProperties(
         }
     }
 
-    public enum StorageType {
-        LOCAL,
-        S3
-    }
 }

@@ -1,4 +1,4 @@
--- Align audit_logs.details with the JPA entity and the canonical bootstrap schema.
+-- Flyway V5: align audit_logs.details with the JPA entity and canonical schema.
 -- The cast preserves existing JSON values as their textual representation.
 DO $$
 BEGIN

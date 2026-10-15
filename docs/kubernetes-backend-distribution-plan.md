@@ -1,7 +1,7 @@
 # แผนทำ Backend ให้รองรับ Kubernetes และการกระจายโหลด
 
-สถานะเอกสาร: Working plan  
-ขอบเขต: `tcg-store-backend`, Docker, Kubernetes, Neon PostgreSQL และ object storage  
+สถานะเอกสาร: Step 1–2 implemented; remaining work grouped by component
+ขอบเขต: `tcg-store-backend`, Docker, Kubernetes, Neon PostgreSQL และ object storage
 เป้าหมาย: ทำให้ Spring Boot backend รันหลาย replicas ได้อย่างปลอดภัย และมีเส้นทาง deploy/rollback ที่ทำซ้ำได้
 
 ## 1. Executive summary
@@ -18,11 +18,10 @@ Backend ปัจจุบันเป็น modular monolith ที่ใช้
 
 สิ่งที่ยังขวางการกระจายหลาย Pods:
 
-1. รูปสินค้ายังเก็บใน local filesystem และ Kubernetes ใช้ `emptyDir`
-2. Database migration ยังไม่มี versioned migration runner และ Kubernetes migration gate
-3. Readiness, graceful shutdown และ rollout behavior ยังไม่ได้ทดสอบกับ dependency failure จริง
-4. ยังไม่มี staging/production overlays, Ingress/TLS และ deployment pipeline
-5. Release image ยังต้อง harden, scan และ build multi-architecture
+1. Readiness, graceful shutdown และ rollout behavior ยังไม่ได้ทดสอบกับ dependency failure จริง
+2. ยังไม่มี staging/production overlays และ Ingress/TLS
+3. Release image ยังต้อง harden, scan และ build multi-architecture
+4. ยังต้องเพิ่ม reliability controls, observability และ production rollout automation
 
 แผนละเอียดของงานแรกอยู่ที่ [Step 1 — Object storage](./kubernetes-step-1-object-storage-plan.md)
 
@@ -69,12 +68,13 @@ Frontend เป็น static Vite application จึงควร deploy บน C
 
 ### Step 1 — ย้ายรูปสินค้าไป S3-compatible object storage
 
+สถานะ: S3-only runtime และ data migration implemented; multi-replica Kubernetes acceptance รวมอยู่ใน Component A
+
 เป้าหมาย: ทำให้ทุก Pod อ่าน เขียน และลบรูปชุดเดียวกัน และ Pod restart แล้วรูปไม่หาย
 
 งานหลัก:
 
-- แยก storage contract ออกจาก filesystem implementation
-- เพิ่ม S3-compatible implementation
+- ใช้ S3-compatible implementation เป็น runtime เดียวและไม่มี filesystem fallback
 - ใช้ Adobe S3Mock สำหรับ local/integration environment
 - ย้าย credentials ไป Secret และ config ที่ไม่ลับไป ConfigMap
 - ย้ายรูปเดิมพร้อมปรับ URL ในฐานข้อมูล
@@ -91,6 +91,8 @@ Exit criteria:
 รายละเอียด: [kubernetes-step-1-object-storage-plan.md](./kubernetes-step-1-object-storage-plan.md)
 
 ### Step 2 — ทำ versioned database migration
+
+สถานะ: Implemented
 
 เป้าหมาย: schema เปลี่ยนแบบตรวจสอบย้อนหลังและ deploy ซ้ำได้
 
@@ -109,6 +111,8 @@ Exit criteria:
 - Application ใช้ `ddl-auto=validate`
 - Pipeline หยุดก่อน rollout เมื่อ migration ล้มเหลว
 - Backup/restore rehearsal ผ่านก่อน production migration
+
+รายละเอียด: [kubernetes-step-2-versioned-database-migration.md](./kubernetes-step-2-versioned-database-migration.md)
 
 ### Step 3 — ทำ health และ shutdown behavior ให้พร้อม production
 
@@ -144,8 +148,8 @@ Dockerfile:
 
 Docker Compose:
 
-- ใช้ profile แยก local PostgreSQL, Neon และ S3Mock
-- เปลี่ยน raw SQL migration service ไปใช้ versioned migration
+- ใช้ profile แยก Local กับ Cloud โดย Local เปิด S3Mock อัตโนมัติ
+- รักษา Flyway migration gate ที่ทำใน Step 2 และตรวจว่า API image กับ migration image เป็น digest เดียวกัน
 - เพิ่ม backend healthcheck
 - ให้ dependent service รอ backend healthy
 - Bind database port กับ loopback เมื่อจำเป็นต้องเปิดให้ host
@@ -306,7 +310,7 @@ Production ควรพัฒนาไปสู่ External Secrets Operator ห
 
 1. `refactor(storage): introduce product image storage contract`
 2. `feat(storage): add S3-compatible product image storage`
-3. `chore(compose): add S3Mock development profile`
+3. `chore(compose): make S3Mock mandatory for local development`
 4. `feat(db): add versioned Flyway migrations`
 5. `feat(runtime): configure probes and graceful shutdown`
 6. `chore(docker): harden and build multi-arch image`
@@ -314,3 +318,120 @@ Production ควรพัฒนาไปสู่ External Secrets Operator ห
 8. `feat(k8s): add ingress TLS and network policies`
 9. `feat(k8s): add PDB HPA and topology spread`
 10. `ci(deploy): add migration rollout smoke test and rollback`
+
+## 8. Component work packages สำหรับ Step 3–9
+
+งานหลัง Step 2 จัดใหม่เป็น component เพื่อให้หลาย agent ทำพร้อมกันโดยลดการแก้ไฟล์ชนกัน แต่ละ component ต้องส่งมอบทั้ง code, tests, manifests และเอกสารในขอบเขตของตัวเอง
+
+### Component A — Runtime reliability and horizontal scaling
+
+รวม Step 3 และ Step 7
+
+ขอบเขต:
+
+- แยก startup/liveness/readiness semantics และเพิ่ม database readiness
+- เปิด graceful shutdown, กำหนด shutdown timeout และทดสอบ SIGTERM/in-flight request
+- เพิ่ม topology spread, PodDisruptionBudget และ HPA
+- คำนวณ Neon connection budget จาก replica และ pool size
+- ทำ two-replica, rollout, rollback และ dependency-failure tests
+
+ไฟล์หลัก: `src/main`, `src/test`, `infra/kubernetes/base` เฉพาะ probe/reliability resources
+
+Acceptance:
+
+- database outage ทำให้ readiness DOWN แต่ liveness UP
+- readiness ฟื้นได้โดยไม่ restart Pod
+- สอง replicas รับ request และแชร์ PostgreSQL/S3 state ได้
+- ไม่มี request สำคัญถูกตัดระหว่าง graceful rollout
+
+Dependency: เริ่มได้ทันทีหลัง Step 2 และทำขนานกับ Component B/C ได้ ส่วน HPA tuning ปิดงานหลังมี metrics baseline จาก Component D
+
+### Component B — Container and software-supply-chain
+
+รวม Step 4 และส่วน build/security ของ Step 8
+
+ขอบเขต:
+
+- pin base image, UID/GID, JVM memory policy และ OCI labels
+- ทำ multi-architecture image สำหรับ amd64/arm64
+- เพิ่ม SBOM, dependency/image/secret scan และ immutable SHA/digest publishing
+- เพิ่ม Compose health dependency และตรวจ read-only filesystem
+- ทำ image reproducibility และ vulnerability gates
+
+ไฟล์หลัก: `Dockerfile`, `.dockerignore`, `docker-compose.desktop.yml`, `.github/workflows/ci.yml` และ image-publish workflow เท่านั้น
+
+Acceptance:
+
+- image tag เป็น Git SHA หรือ digest ไม่ใช้ `latest` ใน release
+- amd64/arm64 build ผ่าน
+- critical vulnerability/secret gate หยุด release ได้
+- API และ migration runner ใช้ image digest เดียวกัน
+
+Dependency: เริ่มได้ทันทีหลัง Step 2 และทำขนานกับ Component A/C ได้
+
+### Component C — Kubernetes environments and secure edge
+
+รวม Step 5 และ Step 6
+
+ขอบเขต:
+
+- แยก local/staging/production overlays พร้อม namespace, sizing และ labels
+- เพิ่ม Ingress, DNS/TLS annotations, upload body limit, timeout และ rate limit
+- เพิ่ม NetworkPolicy และ secret-provider reference
+- ทำ render/schema validation ทุก overlay และตรวจ placeholder/secret leakage
+
+ไฟล์หลัก: `infra/kubernetes` ยกเว้น reliability resources ที่ Component A รับผิดชอบ
+
+Acceptance:
+
+- ทุก overlay render ผ่านและ production ไม่มี placeholder
+- เปิด public เฉพาะ HTTPS API
+- database และ Kubernetes API ไม่ถูกเปิดสาธารณะ
+- secret value ไม่อยู่ใน Git หรือ CI render logs
+
+Dependency: เริ่มได้ทันทีหลัง Step 2 โดยใช้ image placeholder contract จาก Component B; ผสาน final digest หลัง Component B เสร็จ
+
+### Component D — Observability, release orchestration and cloud rollout
+
+รวมส่วน observability/deployment ของ Step 8 และ Step 9
+
+ขอบเขต:
+
+- structured logs, correlation ID, metrics และ alerts
+- staging deploy, migration gate, smoke tests, promotion approval และ automatic rollback
+- full-stack verification สำหรับ login, catalog, upload, cart, checkout และ authorization
+- node reboot, rollback และ restore runbook/rehearsal
+
+ไฟล์หลัก: observability config, `.github/workflows/deploy-*.yml` (สร้างใหม่), smoke tests และ runbooks; ห้ามแก้ `ci.yml` ที่ Component B เป็นเจ้าของโดยไม่ประสาน owner
+
+Acceptance:
+
+- dashboard/alerts ครอบคลุม availability, 5xx, latency, restart, OOM และ DB quota
+- staging ผ่านก่อน production และ production ต้องมี approval
+- smoke test fail แล้ว rollback อัตโนมัติ
+- restore rehearsal และ full-stack checklist ผ่าน
+
+Dependency: เริ่ม instrumentation contract ขนานได้ แต่ deployment/rollout integration ต้องรอ Component A, B และ C
+
+### Parallel execution map
+
+```text
+Step 2 complete
+      |
+      |-------------------|-------------------|
+      v                   v                   v
+Component A           Component B           Component C
+Runtime               Container/CI          K8s/Edge
+      |                   |                   |
+      |-------------------|-------------------|
+                          v
+                    Component D
+              Observability + Rollout
+```
+
+กติกาการแจก agent:
+
+- แจก A, B และ C พร้อมกันได้ โดยยึด file ownership ด้านบน
+- ห้ามให้สอง agent แก้ `docker-compose.desktop.yml` หรือ Kustomize resource เดียวกันพร้อมกันโดยไม่มี owner
+- Component D เริ่มส่วน instrumentation contract ได้ แต่ merge release workflow หลัง A/B/C ผ่าน acceptance แล้ว
+- ทุก component ต้องส่งรายงานไฟล์ที่แก้, คำสั่งทดสอบ, ผลทดสอบ และความเสี่ยงที่ยังเหลือ

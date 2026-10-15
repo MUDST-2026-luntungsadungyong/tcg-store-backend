@@ -4,11 +4,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$backendRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $backendRoot
 
-Write-Output "Stopping the local PostgreSQL runtime..."
-docker compose down
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    throw "Docker CLI was not found. Start Docker Desktop and install the Docker CLI before switching runtimes."
+}
+
+Write-Output "Stopping other backend runtimes..."
+docker compose -f docker-compose.desktop.yml --profile local --profile cloud stop backend-local backend-cloud s3mock postgres-local
 if ($LASTEXITCODE -ne 0) {
-    throw "Failed to stop the local runtime."
+    throw "Failed to stop the other backend runtimes."
 }
 
 if (-not $SkipEnvRefresh) {
@@ -18,10 +24,11 @@ if (-not $SkipEnvRefresh) {
     }
 }
 
-$arguments = @("compose", "-f", "docker-compose.neon.yml", "up", "-d")
+$arguments = @("compose", "-f", "docker-compose.desktop.yml", "--profile", "cloud", "up", "-d")
 if ($Build) {
     $arguments += "--build"
 }
+$arguments += @("backend-cloud", "frontend")
 
 Write-Output "Starting the shared Neon runtime..."
 docker @arguments
@@ -29,4 +36,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to start the Neon runtime."
 }
 
-Write-Output "Neon runtime is active: Neon database + backend + frontend."
+Write-Output "Cloud runtime is active: Neon + backend + frontend."

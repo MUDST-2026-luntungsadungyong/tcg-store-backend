@@ -58,6 +58,61 @@ class S3SellerProductImageStorageTests {
     }
 
     @Test
+    void storesJpegAndWebpBasedOnMagicBytes() {
+        S3SellerProductImageStorage storage = storage();
+
+        assertThat(storage.store(new MockMultipartFile(
+            "image", "card.bin", "image/jpeg", bytes(0xff, 0xd8, 0xff, 0xe0, 0x01)
+        ))).endsWith(".jpg");
+        assertThat(storage.store(new MockMultipartFile(
+            "image", "card.bin", "image/webp", bytes('R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P', 1)
+        ))).endsWith(".webp");
+    }
+
+    @Test
+    void rejectsSpoofedImageContent() {
+        S3SellerProductImageStorage storage = storage();
+
+        assertThatThrownBy(() -> storage.store(new MockMultipartFile(
+            "image", "not-an-image.png", "image/png", "not a PNG".getBytes()
+        )))
+            .isInstanceOfSatisfying(InvalidSellerProductImageException.class, exception ->
+                assertThat(exception.getCode()).isEqualTo("IMAGE_TYPE_UNSUPPORTED")
+            );
+    }
+
+    @Test
+    void rejectsContentTypeThatDisagreesWithMagicBytes() {
+        S3SellerProductImageStorage storage = storage();
+
+        assertThatThrownBy(() -> storage.store(new MockMultipartFile(
+            "image",
+            "card.jpg",
+            "image/jpeg",
+            bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+        )))
+            .isInstanceOfSatisfying(InvalidSellerProductImageException.class, exception ->
+                assertThat(exception.getCode()).isEqualTo("IMAGE_TYPE_MISMATCH")
+            );
+    }
+
+    @Test
+    void rejectsImagesLargerThanFiveMebibytes() {
+        S3SellerProductImageStorage storage = storage();
+        byte[] oversized = new byte[(int) SellerProductImageValidator.MAX_IMAGE_SIZE_BYTES + 1];
+        oversized[0] = (byte) 0xff;
+        oversized[1] = (byte) 0xd8;
+        oversized[2] = (byte) 0xff;
+
+        assertThatThrownBy(() -> storage.store(
+            new MockMultipartFile("image", "card.jpg", "image/jpeg", oversized)
+        ))
+            .isInstanceOfSatisfying(InvalidSellerProductImageException.class, exception ->
+                assertThat(exception.getCode()).isEqualTo("IMAGE_TOO_LARGE")
+            );
+    }
+
+    @Test
     void ignoresExternalAndMalformedUrlsWhenDeleting() {
         S3SellerProductImageStorage storage = storage();
 
@@ -95,9 +150,6 @@ class S3SellerProductImageStorageTests {
     @Test
     void rejectsMissingS3Configuration() {
         SellerProductImageStorageProperties properties = new SellerProductImageStorageProperties(
-            SellerProductImageStorageProperties.StorageType.S3,
-            "uploads/products",
-            "http://localhost:8080",
             "http://s3mock:9090",
             "us-east-1",
             "",
@@ -115,9 +167,6 @@ class S3SellerProductImageStorageTests {
     @Test
     void rejectsRelativeObjectStorageEndpoint() {
         SellerProductImageStorageProperties properties = new SellerProductImageStorageProperties(
-            SellerProductImageStorageProperties.StorageType.S3,
-            "uploads/products",
-            "http://localhost:8080",
             "s3mock:9090",
             "us-east-1",
             "tcg-product-images",
@@ -134,9 +183,6 @@ class S3SellerProductImageStorageTests {
 
     private S3SellerProductImageStorage storage() {
         return new S3SellerProductImageStorage(client, new SellerProductImageStorageProperties(
-            SellerProductImageStorageProperties.StorageType.S3,
-            "uploads/products",
-            "http://localhost:8080",
             "http://s3mock:9090",
             "us-east-1",
             "tcg-product-images",
