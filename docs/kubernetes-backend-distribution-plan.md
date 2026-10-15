@@ -116,6 +116,8 @@ Exit criteria:
 
 ### Step 3 — ทำ health และ shutdown behavior ให้พร้อม production
 
+สถานะ: Implemented ใน application และ manifest; รอ live-cluster acceptance
+
 เป้าหมาย: Kubernetes ตัดสินใจ restart/route traffic ได้ถูกต้อง
 
 งานหลัก:
@@ -132,6 +134,8 @@ Exit criteria:
 - ปิด database แล้ว readiness เป็น DOWN แต่ liveness ยังเป็น UP
 - เปิด database กลับแล้ว readiness ฟื้นโดยไม่ restart Pod
 - Rolling update ไม่มี request สำคัญถูกตัดกลางทาง
+
+รายละเอียด: [Component A — Runtime reliability and horizontal scaling](./kubernetes-component-a-runtime-reliability.md)
 
 ### Step 4 — Harden Docker image และ local Compose
 
@@ -216,6 +220,8 @@ Exit criteria:
 - Database และ Kubernetes API ไม่เปิดสาธารณะ
 
 ### Step 7 — เปิดหลาย replicas และ reliability controls
+
+สถานะ: Implemented ค่าเริ่มต้นสำหรับ production; รอ metrics/load baseline และ live-cluster acceptance
 
 เป้าหมาย: กระจาย request และรองรับ Pod/node disruption ตามระดับ cluster
 
@@ -326,6 +332,8 @@ Production ควรพัฒนาไปสู่ External Secrets Operator ห
 ### Component A — Runtime reliability and horizontal scaling
 
 รวม Step 3 และ Step 7
+
+สถานะ: In progress — implementation และ automated application tests พร้อมแล้ว เหลือทดสอบบน cluster จริง
 
 ขอบเขต:
 

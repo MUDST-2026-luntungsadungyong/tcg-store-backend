@@ -6,7 +6,10 @@ metadata:
     app.kubernetes.io/name: tcg-store-backend
     app.kubernetes.io/component: api
 spec:
-  replicas: 1
+  replicas: 2
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
+  revisionHistoryLimit: 5
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -26,7 +29,15 @@ spec:
       securityContext:
         runAsNonRoot: true
         fsGroup: 1000
-      terminationGracePeriodSeconds: 30
+      terminationGracePeriodSeconds: 45
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: tcg-store-backend
+              app.kubernetes.io/component: api
       containers:
         - name: backend
           image: tcg-store-backend:dev
@@ -59,6 +70,10 @@ spec:
                 secretKeyRef:
                   name: tcg-store-backend-secrets
                   key: app-jwt-secret
+            - name: NEON_POOL_MAX_SIZE
+              value: "5"
+            - name: NEON_POOL_MIN_IDLE
+              value: "0"
             - name: OBJECT_STORAGE_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
@@ -82,24 +97,34 @@ spec:
             capabilities:
               drop:
                 - ALL
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - sleep 5
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
               port: http
             failureThreshold: 30
             periodSeconds: 5
+            timeoutSeconds: 2
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: http
             periodSeconds: 30
             failureThreshold: 3
+            timeoutSeconds: 2
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: http
             periodSeconds: 10
             failureThreshold: 2
+            timeoutSeconds: 2
           volumeMounts:
             - name: tmp
               mountPath: /tmp

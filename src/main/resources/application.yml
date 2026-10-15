@@ -1,5 +1,6 @@
 server:
   port: ${SERVER_PORT:8080}
+  shutdown: graceful
   error:
     include-message: never
     include-stacktrace: never
@@ -7,6 +8,8 @@ server:
 spring:
   application:
     name: tcg-store-backend
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:30s}
   servlet:
     multipart:
       max-file-size: 5MB
@@ -50,6 +53,11 @@ management:
       probes:
         enabled: true
       show-details: never
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
   health:
     livenessstate:
       enabled: true
