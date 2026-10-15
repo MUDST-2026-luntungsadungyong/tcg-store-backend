@@ -59,6 +59,16 @@ spec:
                 secretKeyRef:
                   name: tcg-store-backend-secrets
                   key: app-jwt-secret
+            - name: OBJECT_STORAGE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-backend-secrets
+                  key: object-storage-access-key
+            - name: OBJECT_STORAGE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-backend-secrets
+                  key: object-storage-secret-key
           resources:
             requests:
               cpu: 250m
@@ -93,10 +103,6 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: uploads
-              mountPath: /app/uploads
       volumes:
         - name: tmp
-          emptyDir: {}
-        - name: uploads
           emptyDir: {}

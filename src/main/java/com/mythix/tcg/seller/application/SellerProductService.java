@@ -37,7 +37,7 @@ public class SellerProductService {
     private final SellerOrderItemRepository orderItemRepository;
     private final CardRepository cardRepository;
     private final UserRepository userRepository;
-    private final SellerProductImageStorage imageStorage;
+    private final SellerProductImageStore imageStorage;
 
     @Transactional(readOnly = true)
     public List<SellerProductResponse> findAll(

@@ -57,5 +57,13 @@ app:
     expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:60}
   seller:
     product-images:
+      storage: ${SELLER_PRODUCT_IMAGE_STORAGE:local}
       storage-directory: ${SELLER_PRODUCT_IMAGE_DIR:uploads/products}
       public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+      object-storage-endpoint: ${OBJECT_STORAGE_ENDPOINT:}
+      object-storage-region: ${OBJECT_STORAGE_REGION:us-east-1}
+      object-storage-bucket: ${OBJECT_STORAGE_BUCKET:}
+      object-storage-public-base-url: ${OBJECT_STORAGE_PUBLIC_BASE_URL:}
+      object-storage-path-style: ${OBJECT_STORAGE_PATH_STYLE:false}
+      object-storage-access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
+      object-storage-secret-key: ${OBJECT_STORAGE_SECRET_KEY:}

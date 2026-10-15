@@ -120,7 +120,9 @@ kubectl -n tcg-store create secret generic tcg-store-backend-secrets `
   --from-literal=neon-jdbc-url="$env:NEON_JDBC_URL" `
   --from-literal=neon-db-username="$env:NEON_DB_USERNAME" `
   --from-literal=neon-db-password="$env:NEON_DB_PASSWORD" `
-  --from-literal=app-jwt-secret="$env:APP_JWT_SECRET"
+  --from-literal=app-jwt-secret="$env:APP_JWT_SECRET" `
+  --from-literal=object-storage-access-key="$env:OBJECT_STORAGE_ACCESS_KEY" `
+  --from-literal=object-storage-secret-key="$env:OBJECT_STORAGE_SECRET_KEY"
 ```
 
 4. แก้ origin ใน `configmap.yaml` แล้วตรวจ manifest:

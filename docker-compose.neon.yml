@@ -1,9 +1,10 @@
+name: tcg-store-service
+
 services:
   backend:
     build:
       context: .
     pull_policy: build
-    container_name: tcg_backend_neon
     restart: unless-stopped
     ports:
       - "${SERVER_PORT:-8080}:8080"
@@ -18,7 +19,15 @@ services:
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8080}
       APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
       JPA_SHOW_SQL: ${JPA_SHOW_SQL:-false}
+      SELLER_PRODUCT_IMAGE_STORAGE: ${SELLER_PRODUCT_IMAGE_STORAGE:-local}
       SELLER_PRODUCT_IMAGE_DIR: /app/uploads/products
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
+      OBJECT_STORAGE_PUBLIC_BASE_URL: ${OBJECT_STORAGE_PUBLIC_BASE_URL:-}
+      OBJECT_STORAGE_PATH_STYLE: ${OBJECT_STORAGE_PATH_STYLE:-false}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-}
     volumes:
       - backend_neon_uploads:/app/uploads/products
 
@@ -28,7 +37,6 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api}
-    container_name: tcg_frontend_neon
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-3000}:80"
