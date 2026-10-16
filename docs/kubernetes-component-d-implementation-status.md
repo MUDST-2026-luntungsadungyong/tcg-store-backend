@@ -8,6 +8,8 @@
 
 Platform inputs/วิธีใช้ release flow: [Release operations](./kubernetes-component-d-release-operations.md)
 
+แผนปิด live acceptance ตั้งแต่ Step 1 ถึง Component D: [Step 1–Component D live acceptance plan](./kubernetes-live-acceptance-plan.md)
+
 ## Work board
 
 Agents ชุดก่อนหยุดเพราะ usage limit และถูกปิดแล้ว งานบางส่วนที่เขียนไว้ยังต้องตรวจ ไม่ถือว่า complete จากการมีไฟล์อย่างเดียว ชุดใหม่ใช้ Luna 6 และทำงานบน checkout หลักร่วมกัน โดยแบ่ง write scope ไม่ซ้อนกัน
