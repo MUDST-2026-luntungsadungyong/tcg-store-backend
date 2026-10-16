@@ -2,11 +2,18 @@ ALTER TABLE notifications
     ALTER COLUMN order_id DROP NOT NULL;
 
 ALTER TABLE notifications
-    ADD COLUMN seller_profile_id BIGINT;
+    ADD COLUMN IF NOT EXISTS seller_profile_id BIGINT;
 
-ALTER TABLE notifications
-    ADD CONSTRAINT fk_notifications_seller_profile
-        FOREIGN KEY (seller_profile_id) REFERENCES seller_profiles(id) ON DELETE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_notifications_seller_profile'
+    ) THEN
+        ALTER TABLE notifications
+            ADD CONSTRAINT fk_notifications_seller_profile
+                FOREIGN KEY (seller_profile_id) REFERENCES seller_profiles(id) ON DELETE CASCADE;
+    END IF;
+END $$;
 
 ALTER TABLE notifications
     DROP CONSTRAINT IF EXISTS notifications_notification_type_check;
