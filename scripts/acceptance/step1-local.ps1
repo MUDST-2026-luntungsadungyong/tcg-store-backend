@@ -178,10 +178,10 @@ try {
     $results.Add('PASS: current-source migration runner completed against isolated Postgres.')
 
     $historyResult = [string](docker exec $postgres psql -U $dbUser -d $database -At -F '|' -v ON_ERROR_STOP=1 `
-        -c "SELECT count(*) FILTER (WHERE success), count(*) FILTER (WHERE version = '9' AND success) FROM flyway_schema_history;")
+        -c "SELECT count(*) FILTER (WHERE success), count(*) FILTER (WHERE version = '10' AND success) FROM flyway_schema_history;")
     if ($LASTEXITCODE -ne 0) { throw 'Could not query Flyway history after migration.' }
-    if ($historyResult.Trim() -ne '9|1') { throw "Flyway history expected 9 successful migrations including exactly one version 9; observed '$($historyResult.Trim())'." }
-    $results.Add('PASS: isolated PostgreSQL Flyway history records all 9 successful migrations, including version 9.')
+    if ($historyResult.Trim() -ne '10|1') { throw "Flyway history expected 10 successful migrations including exactly one version 10; observed '$($historyResult.Trim())'." }
+    $results.Add('PASS: isolated PostgreSQL Flyway history records all 10 successful migrations, including version 10.')
 
     $backendEnv = @(
         '--env', 'SPRING_PROFILES_ACTIVE=dev',

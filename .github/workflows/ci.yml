@@ -135,14 +135,14 @@ jobs:
           echo "Running Flyway against a fresh database..."
           run_migration
           FRESH_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
-          test "$FRESH_COUNT" -eq 9
+          test "$FRESH_COUNT" -eq 10
 
           echo "Applying development seed separately..."
           psql -v ON_ERROR_STOP=1 -f infra/postgres/init/02-data.sql
           psql -v ON_ERROR_STOP=1 -f infra/postgres/init/03-profile-avatar.sql
           run_migration
           REPEAT_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
-          test "$REPEAT_COUNT" -eq 9
+          test "$REPEAT_COUNT" -eq 10
 
           echo "Verifying database integrity and seed separation..."
           TABLE_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
@@ -168,6 +168,12 @@ jobs:
           INSERT INTO local_cards (seller_id, global_card_id, custom_image_url, condition, language, price, cost, on_hand, reserved, status)
           SELECT id, 'legacy-card', 'https://example.test/legacy.png', 'NM', 'EN', 20.00, 10.00, 2, 0, 'SHOW'
           FROM users WHERE email = 'legacy-seller@example.test';
+          ALTER TABLE orders DROP CONSTRAINT orders_status_check;
+          ALTER TABLE orders ADD CONSTRAINT orders_status_check
+            CHECK (status IN ('PENDING', 'PAID', 'FULFILLED', 'CANCELLED'));
+          INSERT INTO orders (buyer_id, order_number, idempotency_key, status, total_amount, platform_fee, seller_net_amount)
+          SELECT id, 'legacy-paid-order', 'legacy-paid-order-key', 'PAID', 20.00, 0.00, 20.00
+          FROM users WHERE email = 'legacy-seller@example.test';
           ALTER TABLE global_cards RENAME TO cards;
           ALTER TABLE local_cards RENAME TO products;
           ALTER TABLE products RENAME COLUMN global_card_id TO card_id;
@@ -183,6 +189,15 @@ jobs:
           test "$BASELINE_COUNT" -eq 1
           V9_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='9' AND success;")
           test "$V9_COUNT" -eq 1
+          V10_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='10' AND success;")
+          test "$V10_COUNT" -eq 1
+          LEGACY_PAID_ORDER_STATUS=$(psql -t -A -d tcg_store_upgrade -c "SELECT status FROM orders WHERE order_number = 'legacy-paid-order';")
+          test "$LEGACY_PAID_ORDER_STATUS" = "CONFIRMED"
+          psql -v ON_ERROR_STOP=1 -d tcg_store_upgrade -c "UPDATE orders SET status = 'SENT' WHERE order_number = 'legacy-paid-order';"
+          if psql -v ON_ERROR_STOP=1 -d tcg_store_upgrade -c "UPDATE orders SET status = 'PAID' WHERE order_number = 'legacy-paid-order';"; then
+            echo "Legacy PAID status must be rejected after V10" >&2
+            exit 1
+          fi
           UPGRADED_CARD_COUNT=$(psql -t -A -d tcg_store_upgrade -c 'SELECT COUNT(*) FROM local_cards;')
           test "$UPGRADED_CARD_COUNT" -eq "$LEGACY_CARD_COUNT"
           LEGACY_TABLE_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN ('cards', 'products');")
