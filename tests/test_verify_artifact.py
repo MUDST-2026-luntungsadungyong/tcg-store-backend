@@ -93,10 +93,12 @@ def test_prior_image_reverification_does_not_require_build_artifact():
     }, SHA, runner=runner)
     assert any(args[0] == "cosign" for args in calls)
     assert all("actions/artifacts" not in " ".join(args) for args in calls)
-    index_attestations = [args for args in calls if args[:3] == ["gh", "attestation", "verify"] and args[3].endswith(INDEX)]
-    child_attestations = [args for args in calls if args[:3] == ["gh", "attestation", "verify"] and args[3].endswith((AMD, ARM))]
-    assert len(index_attestations) == 1 and "--predicate-type" not in index_attestations[0]
-    assert len(child_attestations) == 2 and all(args[-2:] == ["--predicate-type", "https://spdx.dev/Document/v2.3"] for args in child_attestations)
+    index_attestations = [args for args in calls if args[:4] == ["cosign", "verify-attestation", "--type", "slsaprovenance1"]]
+    child_attestations = [args for args in calls if args[:4] == ["cosign", "verify-attestation", "--type", "spdxjson"]]
+    assert len(index_attestations) == 1 and any(value.endswith(INDEX) for value in index_attestations[0])
+    assert len(child_attestations) == 2 and all(any(value.endswith((AMD, ARM)) for value in args) for args in child_attestations)
+    assert all(args[-2:] == ["--certificate-github-workflow-sha", SHA]
+               for args in [*index_attestations, *child_attestations])
 
 
 def test_verify_release_accepts_only_protected_main_run_and_exact_artifact():
@@ -134,7 +136,9 @@ def test_verify_release_accepts_only_protected_main_run_and_exact_artifact():
     result = verifier.verify_release(RUN_ID, repository, runner=runner)
     assert result["buildRunId"] == RUN_ID
     assert result["verification"] == {"signature": True, "provenance": True, "sbom": True}
-    index_attestations = [args for args in calls if args[:3] == ["gh", "attestation", "verify"] and args[3].endswith(INDEX)]
-    child_attestations = [args for args in calls if args[:3] == ["gh", "attestation", "verify"] and args[3].endswith((AMD, ARM))]
-    assert len(index_attestations) == 1 and "--predicate-type" not in index_attestations[0]
-    assert len(child_attestations) == 2 and all(args[-2:] == ["--predicate-type", "https://spdx.dev/Document/v2.3"] for args in child_attestations)
+    index_attestations = [args for args in calls if args[:4] == ["cosign", "verify-attestation", "--type", "slsaprovenance1"]]
+    child_attestations = [args for args in calls if args[:4] == ["cosign", "verify-attestation", "--type", "spdxjson"]]
+    assert len(index_attestations) == 1 and any(value.endswith(INDEX) for value in index_attestations[0])
+    assert len(child_attestations) == 2 and all(any(value.endswith((AMD, ARM)) for value in args) for args in child_attestations)
+    assert all(args[-2:] == ["--certificate-github-workflow-sha", SHA]
+               for args in [*index_attestations, *child_attestations])

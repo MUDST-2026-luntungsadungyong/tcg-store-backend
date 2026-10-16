@@ -321,7 +321,7 @@ Runtime และ release reproducibility acceptance ผ่านแล้วต
 - เปลี่ยน Gitleaks เป็น official open-source CLI image แบบ pin digest เพื่อไม่ผูกกับ organization license ของ GitHub Action
 - allow เฉพาะ fingerprint ของ Spring Boot generated test password ใน historical Surefire report; finding อื่นยัง block ตามเดิม
 - main workflow build/push `linux/amd64,linux/arm64` ด้วย full SHA tag และ reproducible image exporter
-- main workflow ถูกตั้งค่าให้สร้าง/ตรวจ SPDX SBOM สอง architecture, GitHub provenance/SBOM attestations และ keyless Cosign signature
+- main workflow ถูกตั้งค่าให้สร้าง/ตรวจ SPDX SBOM สอง architecture, keyless Cosign OCI SLSA/SPDX attestations และ keyless Cosign signature โดยไม่ผูก acceptance กับ GitHub Artifact Attestations ซึ่งใช้ไม่ได้กับ organization plan ปัจจุบัน
 - เมื่อ publish ผ่าน workflow จะส่ง `image-contract.txt` ซึ่งมี image, full SHA tag, manifest digest, canonical reference และ commit
 
 ### Verification evidence
@@ -336,7 +336,15 @@ Runtime และ release reproducibility acceptance ผ่านแล้วต
 - Cloud runtime: Neon migration exit `0`, readiness `UP`, backend/migration image เดียวกัน; restored cloud backend healthy ที่ `:8080`
 - arm64 runtime: Java และ migration exit `0`, image `sha256:405c9f29042afae1bdf7121099456618f2860a8c2a4f01a0418c3f4cadea01e8`
 - Final Local/Cloud and amd64/arm64 runtime acceptance: ผ่านตามรายการข้างต้น
-- Registry acceptance ที่ยังเหลือ: GHCR push, two-platform registry scan, SBOM/provenance attestation, Cosign/GitHub verification และส่ง digest จริงให้ Component C/D
+- Registry acceptance ที่ยังเหลือ: rerun จาก commit ที่มี Cosign OCI fallback, verify SBOM/provenance/signature จาก registry และส่ง digest contract จริงให้ Component C/D; protected-main run หลัง merge ยังเป็น final release gate
+
+### B4 — Registry acceptance run 1 และ provider limitation
+
+- workflow dispatch run `38891638571` จาก commit `6d6a162e333d2bad02eb0928f13c098591d38056` สร้างและ push multi-architecture candidate digest `sha256:751e6438f0e0b0050dfafe25b6a019a819906a07460a299f7222a066f8c25444`
+- Maven, Compose validation, Gitleaks, source scan, reproducible amd64 build, GHCR push, platform digest resolution, amd64/arm64 CRITICAL scan และ SPDX SBOM generation ผ่าน
+- run หยุดที่ `actions/attest-build-provenance` เพราะ GitHub ตอบว่า Artifact Attestations ไม่พร้อมใช้กับ organization plan ปัจจุบัน จึงไม่มี signature, accepted image contract หรือ digest handoff จาก run นี้
+- candidate digest จาก run แรกถือเป็น **unaccepted** และห้ามใช้ deploy แม้ว่าตัว image จะอยู่ใน GHCR
+- workflow และ release verifier เปลี่ยนเป็น keyless Cosign signature พร้อม SLSA provenance attestation ที่ index digest และ SPDX JSON attestations ที่ child digest ทั้งสอง architecture; verification pin workflow identity, OIDC issuer และ exact Git commit SHA
 
 ## 12. ความเสี่ยงที่ต้องเฝ้าระวัง
 

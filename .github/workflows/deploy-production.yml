@@ -20,7 +20,6 @@ permissions:
   contents: read
   actions: read
   packages: read
-  attestations: read
 
 concurrency:
   group: tcg-deploy-production

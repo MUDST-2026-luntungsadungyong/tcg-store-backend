@@ -149,6 +149,11 @@ def _validate_index(raw: str | bytes, contract: dict[str, Any]) -> None:
         raise VerificationError("published OCI index child digests differ from the signed image contract")
 
 
+def _cosign_identity(identity: str, source_commit: str) -> list[str]:
+    return ["--certificate-identity", identity, "--certificate-oidc-issuer", ISSUER,
+            "--certificate-github-workflow-sha", source_commit]
+
+
 def reverify_image_identity(image: dict[str, Any], source_commit: str, runner: RUNNER | None = None) -> None:
     """Recheck signatures and attestations for a previously accepted image.
 
@@ -167,19 +172,18 @@ def reverify_image_identity(image: dict[str, Any], source_commit: str, runner: R
         raise VerificationError("prior image platform digest inventory is invalid")
     identity = f"https://github.com/{EXPECTED_REPOSITORY}/{WORKFLOW}@refs/heads/main"
     index_ref = f"{IMAGE}@{digest}"
-    _run(runner, ["cosign", "verify", index_ref, "--certificate-identity", identity,
-                  "--certificate-oidc-issuer", ISSUER])
-    _run(runner, ["gh", "attestation", "verify", f"oci://{index_ref}", "--repo", EXPECTED_REPOSITORY,
-                  "--signer-workflow", f"{EXPECTED_REPOSITORY}/{WORKFLOW}", "--source-digest", source_commit])
+    identity_args = _cosign_identity(identity, source_commit)
+    _run(runner, ["cosign", "verify", index_ref, *identity_args])
+    _run(runner, ["cosign", "verify-attestation", "--type", "slsaprovenance1", index_ref,
+                  *identity_args])
     raw_index = _run(runner, ["docker", "buildx", "imagetools", "inspect", "--raw", index_ref]).stdout
     _validate_index(raw_index, {"platformDigests": platforms})
     for child_digest in platforms.values():
         if not isinstance(child_digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", child_digest):
             raise VerificationError("prior image contains an invalid child digest")
-        child_ref = f"oci://{IMAGE}@{child_digest}"
-        _run(runner, ["gh", "attestation", "verify", child_ref, "--repo", EXPECTED_REPOSITORY,
-                      "--signer-workflow", f"{EXPECTED_REPOSITORY}/{WORKFLOW}", "--source-digest", source_commit,
-                      "--predicate-type", "https://spdx.dev/Document/v2.3"])
+        child_ref = f"{IMAGE}@{child_digest}"
+        _run(runner, ["cosign", "verify-attestation", "--type", "spdxjson", child_ref,
+                      *identity_args])
 
 
 def verify_release(run_id: int, repository: str, runner: RUNNER | None = None) -> dict[str, Any]:
@@ -226,14 +230,13 @@ def verify_release(run_id: int, repository: str, runner: RUNNER | None = None) -
     index = _run(runner, ["docker", "buildx", "imagetools", "inspect", "--raw", contract["image"]])
     _validate_index(index.stdout, contract)
     identity = f"https://github.com/{repository}/{WORKFLOW}@refs/heads/main"
-    _run(runner, ["cosign", "verify", contract["image"], "--certificate-identity", identity,
-                  "--certificate-oidc-issuer", ISSUER])
-    _run(runner, ["gh", "attestation", "verify", f"oci://{contract['image']}", "--repo", repository,
-                  "--signer-workflow", f"{repository}/{WORKFLOW}", "--source-digest", source_sha])
+    identity_args = _cosign_identity(identity, source_sha)
+    _run(runner, ["cosign", "verify", contract["image"], *identity_args])
+    _run(runner, ["cosign", "verify-attestation", "--type", "slsaprovenance1", contract["image"],
+                  *identity_args])
     for child_digest in contract["platformDigests"].values():
-        _run(runner, ["gh", "attestation", "verify", f"oci://{IMAGE}@{child_digest}", "--repo", repository,
-                      "--signer-workflow", f"{repository}/{WORKFLOW}", "--source-digest", source_sha,
-                      "--predicate-type", "https://spdx.dev/Document/v2.3"])
+        _run(runner, ["cosign", "verify-attestation", "--type", "spdxjson",
+                      f"{IMAGE}@{child_digest}", *identity_args])
     contract["verification"] = {"signature": True, "provenance": True, "sbom": True}
     return contract
 

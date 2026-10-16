@@ -13,7 +13,6 @@ permissions:
   contents: read
   packages: write
   id-token: write
-  attestations: write
 
 env:
   IMAGE_NAME: ghcr.io/mudst-2026-luntungsadungyong/tcg-store-backend
@@ -210,31 +209,49 @@ jobs:
           artifact-name: sbom-arm64.spdx.json
           upload-release-assets: false
 
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4.2.2
-        with:
-          subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
-          push-to-registry: true
-
-      - name: Attest amd64 SBOM
-        uses: actions/attest@v4.2.1
-        with:
-          subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.platform.outputs.amd64 }}
-          sbom-path: sbom-amd64.spdx.json
-          push-to-registry: true
-
-      - name: Attest arm64 SBOM
-        uses: actions/attest@v4.2.1
-        with:
-          subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.platform.outputs.arm64 }}
-          sbom-path: sbom-arm64.spdx.json
-          push-to-registry: true
-
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Write SLSA provenance predicate
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -n \
+            --arg build_type "https://github.com/Attestations/GitHubActionsWorkflow@v1" \
+            --arg builder "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}" \
+            --arg commit "${GITHUB_SHA}" \
+            --arg invocation "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" \
+            --arg ref "${GITHUB_REF}" \
+            --arg repository "https://github.com/${GITHUB_REPOSITORY}" \
+            --arg workflow ".github/workflows/docker-build.yml" \
+            '{
+              buildDefinition: {
+                buildType: $build_type,
+                externalParameters: {workflow: {path: $workflow, ref: $ref}},
+                internalParameters: {github: {repository: $repository}},
+                resolvedDependencies: [{uri: ($repository + "@" + $ref), digest: {gitCommit: $commit}}]
+              },
+              runDetails: {
+                builder: {id: $builder},
+                metadata: {invocationId: $invocation}
+              }
+            }' > provenance.slsa.json
+
+      - name: Attest build provenance with Cosign
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: >-
+          cosign attest --yes --type slsaprovenance1
+          --predicate provenance.slsa.json "$IMAGE_REF"
+
+      - name: Attest architecture SBOMs with Cosign
+        env:
+          AMD64_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.amd64 }}
+          ARM64_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.arm64 }}
+        run: |
+          set -euo pipefail
+          cosign attest --yes --type spdxjson --predicate sbom-amd64.spdx.json "$AMD64_REF"
+          cosign attest --yes --type spdxjson --predicate sbom-arm64.spdx.json "$ARM64_REF"
 
       - name: Sign immutable image digest
         env:
@@ -248,30 +265,28 @@ jobs:
           cosign verify "$IMAGE_REF"
           --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}"
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          --certificate-github-workflow-sha "${GITHUB_SHA}"
 
-      - name: Verify GitHub provenance attestation
+      - name: Verify Cosign provenance attestation
         env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGE_REF: oci://${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
         run: >-
-          gh attestation verify "$IMAGE_REF"
-          --repo "$GITHUB_REPOSITORY"
-          --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/docker-build.yml"
-          --source-digest "$GITHUB_SHA"
+          cosign verify-attestation --type slsaprovenance1 "$IMAGE_REF"
+          --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}"
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          --certificate-github-workflow-sha "${GITHUB_SHA}"
 
-      - name: Verify GitHub SPDX SBOM attestations
+      - name: Verify Cosign SPDX SBOM attestations
         env:
-          GH_TOKEN: ${{ github.token }}
-          AMD64_REF: oci://${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.amd64 }}
-          ARM64_REF: oci://${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.arm64 }}
+          AMD64_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.amd64 }}
+          ARM64_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.arm64 }}
         run: |
           set -euo pipefail
           for image_ref in "$AMD64_REF" "$ARM64_REF"; do
-            gh attestation verify "$image_ref" \
-              --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/docker-build.yml" \
-              --source-digest "$GITHUB_SHA" \
-              --predicate-type "https://spdx.dev/Document/v2.3"
+            cosign verify-attestation --type spdxjson "$image_ref" \
+              --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              --certificate-github-workflow-sha "${GITHUB_SHA}"
           done
 
       - name: Write immutable image contract
@@ -315,5 +330,5 @@ jobs:
             echo "- amd64 digest: \`${AMD64_DIGEST}\`"
             echo "- arm64 digest: \`${ARM64_DIGEST}\`"
             echo "- SBOMs: amd64 and arm64 SPDX JSON"
-            echo "- Signature and GitHub attestations: verified"
+            echo "- Signature and Cosign OCI attestations: verified"
           } >> "$GITHUB_STEP_SUMMARY"
