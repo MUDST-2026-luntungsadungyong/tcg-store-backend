@@ -69,7 +69,7 @@ jobs:
           echo '2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0  '"$archive" | sha256sum --check --status
           mkdir -p "$RUNNER_TEMP/prometheus-3.15.0"
           tar -xzf "$archive" -C "$RUNNER_TEMP/prometheus-3.15.0" --strip-components=1
-          "$RUNNER_TEMP/prometheus-3.15.0/promtool" version | grep -F '3.15.0'
+          "$RUNNER_TEMP/prometheus-3.15.0/promtool" --version | grep -F '3.15.0'
           echo "PROMTOOL_PATH=$RUNNER_TEMP/prometheus-3.15.0/promtool" >> "$GITHUB_ENV"
       - name: Validate workflow syntax and static policy
         run: "$(go env GOPATH)/bin/actionlint -config-file .github/actionlint.yaml .github/workflows/deploy-staging.yml .github/workflows/deploy-production.yml .github/workflows/release-validation.yml"
