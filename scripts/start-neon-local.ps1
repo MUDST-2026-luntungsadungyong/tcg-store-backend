@@ -14,5 +14,5 @@ Get-Content ".env" | ForEach-Object {
 }
 
 $env:SPRING_PROFILES_ACTIVE = "neon"
-& .\mvnw.cmd spring-boot:run
+& .\mvnw.cmd compile spring-boot:run
 exit $LASTEXITCODE
