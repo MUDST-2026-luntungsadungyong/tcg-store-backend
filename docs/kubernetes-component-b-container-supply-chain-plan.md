@@ -1,6 +1,6 @@
 # Component B — Container and software supply-chain plan
 
-สถานะ: Planned — ready for agent assignment
+สถานะ: Runtime และ release reproducibility acceptance ผ่าน; main-branch registry publish/attestation และ digest handoff ยัง pending
 
 วันที่จัดทำ: 2026-10-16
 
@@ -62,8 +62,9 @@ Component นี้รวม Step 4 และส่วน build/security ขอ�
 - กำหนด Maven output timestamp สำหรับ JAR ผ่าน `pom.xml` หรือ build property ที่ตรวจสอบได้
 - lock dependency versions ที่ยังอาศัยค่าลอย
 - build จาก clean Git context โดย `.dockerignore` ตัด `.git`, `.env*`, logs, IDE state, local agents, diffs และ generated artifacts
-- build image เดิมสองครั้งแบบ no-cache แล้วเปรียบเทียบ application layer/config digest
-- หาก full image digest ต่างเพราะ provenance metadata ให้เปรียบเทียบ OCI image ที่ปิด provenance ชั่วคราวใน reproducibility test และเก็บ provenance จริงใน publish job
+- release reproducibility ผ่าน Buildx exporter ที่เปิด `rewrite-timestamp=true`
+- Docker Desktop Compose ใช้สำหรับ dev และไม่ถือเป็นหลักฐาน reproducibility ของ release image
+- เก็บ provenance จริงใน publish job และบันทึก digest เฉพาะเมื่อมีผลรายงานยืนยันแล้ว
 
 ### 3.3 Runtime security contract
 
@@ -269,21 +270,75 @@ Arm64 test ผ่านเมื่อ image build สำเร็จและ J
 
 ## 10. Definition of Done
 
-- [ ] base images และ CI actions ที่สำคัญถูก pin
-- [ ] runtime เป็น fixed non-root UID/GID
-- [ ] image ทำงานบน read-only root filesystem และใช้ `/tmp` tmpfs
-- [ ] JVM memory policy สอดคล้องกับ Kubernetes limits
-- [ ] Local/Cloud Compose health gates ผ่านโดยข้อมูลเดิมไม่หาย
-- [ ] amd64 และ arm64 image เริ่ม JVM/migration entrypoint ได้จริง
-- [ ] release ใช้ full SHA tag และ manifest digest ไม่มี `latest`
-- [ ] API และ migration ใช้ digest เดียวกัน
-- [ ] Gitleaks/dependency/Trivy gates หยุด pipeline ได้จริง
+- [x] base images และ CI actions ที่สำคัญถูก pin
+- [x] Dockerfile กำหนด fixed non-root UID/GID `10001:10001`
+- [x] Compose กำหนด read-only root filesystem, `/tmp` tmpfs และ runtime security controls
+- [x] image configuration กำหนด JVM memory policy ให้สอดคล้องกับ Kubernetes limits
+- [x] Final Local/Cloud runtime acceptance บน image ปัจจุบันผ่าน
+- [x] amd64 และ arm64 JVM/migration runtime acceptance ผ่าน
+- [x] release workflow บังคับ full SHA tag และ manifest digest โดยไม่ publish `latest`
+- [x] Cloud API และ migration ใช้ image เดียวกันใน final runtime acceptance
+- [x] Gitleaks/dependency/Trivy gates ถูกตั้งให้ block pipeline ตาม policy
+- [x] Trivy image scan พบ CRITICAL `0`
 - [ ] SBOM, provenance และ signature สร้างและ verify ผ่าน
-- [ ] repeated build comparison ผ่านหรือมีความต่างที่อธิบายและควบคุมได้
-- [ ] ไม่มี credentials ใน Git, build context, image layers, history หรือ CI logs
+- [x] Release reproducibility ผ่าน Buildx `rewrite-timestamp=true`; OCI manifest `sha256:3fea0574201e88eb29f9c4e92223dfa45ebd7aa5f95804951156630cfb8430bd`, archive SHA-256 `1601DFD961CD66EB946E1C28C22997BCEC20209206CC0096C39903AF70627F7`
+- [x] Cloud S3 required environment variables fail fast ใน Compose
+- [x] Gitleaks ตรวจ Git history ผ่าน และ build context/image ไม่มีไฟล์ credential
 - [ ] ส่ง image digest contract ให้ Component C/D แล้ว
 
-## 11. ความเสี่ยงที่ต้องเฝ้าระวัง
+Runtime และ release reproducibility acceptance ผ่านแล้วตามหลักฐานใน Implementation report; registry publish/attestation และ digest handoff ยังต้องรันบน GitHub Actions หลัง merge เข้า `main` เพราะต้องใช้ GHCR และ GitHub OIDC จริง ห้ามถือว่า workflow syntax ผ่านเท่ากับ acceptance ผ่าน
+
+## 11. Implementation report — 2026-10-16
+
+### B1 — Image hardening และ reproducibility
+
+- pin Temurin JDK/JRE 21.0.12.1 multi-architecture manifest digest
+- ยืนยัน dependency baseline เป็น Spring Boot `4.0.8`, Tomcat `11.0.25` และ Jackson BOM `2.21.7`/`3.1.7`
+- compile JAR บน `$BUILDPLATFORM` และเลือก architecture เฉพาะ runtime เพื่อลด QEMU build time
+- ใช้ Maven cache mount ที่ไม่ถูกบันทึกใน image layer
+- runtime ใช้ `10001:10001`, JRE-only, exec entrypoint และ percentage-based JVM memory policy
+- กำหนด OCI source/revision/version/created/licenses/title/description labels
+- Buildx release reproducibility ผ่านด้วย `rewrite-timestamp=true`; OCI manifest `sha256:3fea0574201e88eb29f9c4e92223dfa45ebd7aa5f95804951156630cfb8430bd` และ archive SHA-256 `1601DFD961CD66EB946E1C28C22997BCEC20209206CC0096C39903AF70627F7`
+- Docker Desktop Compose เป็น dev build และไม่ใช้ยืนยัน release reproducibility
+
+### B2 — Canonical Docker Desktop Compose
+
+- ใช้ local tag `dev` ที่ override ได้แทน `latest`
+- backend และ migration ใช้ common security policy: read-only root, `/tmp` tmpfs, drop capabilities, no-new-privileges, PID limit และ 45-second grace period
+- เพิ่ม readiness healthcheck และคง migration/seed dependency gates
+- pin PostgreSQL 16.15 และ S3Mock 5.1.0 ด้วย multi-architecture digest
+- bind PostgreSQL และ S3Mock กับ loopback host ports
+- cloud profile บังคับ `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_PUBLIC_BASE_URL`, `OBJECT_STORAGE_ACCESS_KEY` และ `OBJECT_STORAGE_SECRET_KEY` ด้วย required interpolation; CI ตั้ง dummy values สำหรับ Compose validation
+- named volume declarations คงชื่อเดิมไว้
+- Local final acceptance: readiness `UP`; migration และ seed exit `0`; counts `global_cards=2001`, `local_cards=20`; S3Mock มี 20 objects ที่ persist; volume มี 41 files / 15.1 MB; security controls ผ่าน
+- Cloud final acceptance: Neon migration exit `0`, readiness `UP`, backend และ migration ใช้ image เดียวกัน; หลัง restore cloud backend healthy ที่ `:8080`
+- amd64 image: `sha256:7b594f2ff8eb018b16fd41db327ab97e6e6b82bc16095ead57340d04aa512782`; Trivy image scan CRITICAL `0`
+- arm64 Java และ migration runner exit `0`; image `sha256:405c9f29042afae1bdf7121099456618f2860a8c2a4f01a0418c3f4cadea01e8`
+
+### B3 — CI และ software supply chain
+
+- PR CI ตรวจ Compose/Kustomize, Hadolint, hardened runtime behavior และ Trivy image gate
+- เปลี่ยน Gitleaks เป็น official open-source CLI image แบบ pin digest เพื่อไม่ผูกกับ organization license ของ GitHub Action
+- allow เฉพาะ fingerprint ของ Spring Boot generated test password ใน historical Surefire report; finding อื่นยัง block ตามเดิม
+- main workflow build/push `linux/amd64,linux/arm64` ด้วย full SHA tag และ reproducible image exporter
+- main workflow ถูกตั้งค่าให้สร้าง/ตรวจ SPDX SBOM สอง architecture, GitHub provenance/SBOM attestations และ keyless Cosign signature
+- เมื่อ publish ผ่าน workflow จะส่ง `image-contract.txt` ซึ่งมี image, full SHA tag, manifest digest, canonical reference และ commit
+
+### Verification evidence
+
+- Maven: 184 tests passed, 2 skipped
+- Dependency scan: 0 HIGH/CRITICAL findings
+- Trivy image scan: CRITICAL `0`
+- Release reproducibility: Buildx `rewrite-timestamp=true` ผ่าน; OCI manifest `sha256:3fea0574201e88eb29f9c4e92223dfa45ebd7aa5f95804951156630cfb8430bd`; archive SHA-256 `1601DFD961CD66EB946E1C28C22997BCEC20209206CC0096C39903AF70627F7`
+- Cloud Compose: required environment variables สำหรับ S3 ถูกตั้งเป็น fail-fast; CI Compose validation ตั้ง dummy values สำหรับ `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_PUBLIC_BASE_URL`, `OBJECT_STORAGE_ACCESS_KEY` และ `OBJECT_STORAGE_SECRET_KEY`
+- Gitleaks: 84 commits scanned, no leaks after one fingerprint-specific historical exception
+- Local runtime: image `sha256:7b594f2ff8eb018b16fd41db327ab97e6e6b82bc16095ead57340d04aa512782`; readiness `UP`, migration/seed exit `0`, counts `2001` global + `20` local, S3 `20` objects persisted, volume `41` files / `15.1 MB`, security controls ผ่าน
+- Cloud runtime: Neon migration exit `0`, readiness `UP`, backend/migration image เดียวกัน; restored cloud backend healthy ที่ `:8080`
+- arm64 runtime: Java และ migration exit `0`, image `sha256:405c9f29042afae1bdf7121099456618f2860a8c2a4f01a0418c3f4cadea01e8`
+- Final Local/Cloud and amd64/arm64 runtime acceptance: ผ่านตามรายการข้างต้น
+- Registry acceptance ที่ยังเหลือ: GHCR push, two-platform registry scan, SBOM/provenance attestation, Cosign/GitHub verification และส่ง digest จริงให้ Component C/D
+
+## 12. ความเสี่ยงที่ต้องเฝ้าระวัง
 
 - Alpine/musl และ native libraries อาจให้ behavior ต่างระหว่าง amd64/arm64 จึงต้อง smoke จริงทั้งสอง architecture
 - การเปิด read-only root อาจเผย path ที่ library พยายามเขียน ต้องอนุญาตเฉพาะ `/tmp` ไม่เปิดทั้ง filesystem
@@ -292,7 +347,7 @@ Arm64 test ผ่านเมื่อ image build สำเร็จและ J
 - scanner policy ที่เข้มทันทีอาจเจอหนี้เดิม ควรบันทึก exception แบบมีวันหมดอายุแทนการปิด gate
 - full image digest อาจต่างจาก provenance timestamp จึงต้องแยก reproducible artifact check ออกจาก signed release metadata
 
-## 12. Component A — การทดสอบที่ยังเหลือ
+## 13. Component A — การทดสอบที่ยังเหลือ
 
 รายการนี้ต้องทำบน Kubernetes cluster ที่ login ได้ มี image SHA จริง, Secret จริง, Neon PostgreSQL, Neon Object Storage และ Metrics API ก่อนปิด Component A
 

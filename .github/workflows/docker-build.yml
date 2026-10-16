@@ -1,49 +1,319 @@
-name: Build and Push Docker Image
+name: Build, Verify and Publish Container Image
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: container-publish-${{ github.sha }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   packages: write
+  id-token: write
+  attestations: write
+
+env:
+  IMAGE_NAME: ghcr.io/mudst-2026-luntungsadungyong/tcg-store-backend
 
 jobs:
-  build-and-push:
-    name: Docker Build & Push to GHCR
+  build-verify-publish:
+    name: Multi-architecture build and supply-chain verification
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
+    outputs:
+      image-name: ${{ env.IMAGE_NAME }}
+      image-tag: sha-${{ github.sha }}
+      image-digest: ${{ steps.build.outputs.digest }}
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout exact release commit
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Verify application and database migrations
+        run: ./mvnw --batch-mode verify
+
+      - name: Validate Compose profiles
+        env:
+          APP_JWT_SECRET: ci-only-secret-that-is-at-least-32-bytes
+          NEON_JDBC_URL: jdbc:postgresql://example.invalid/neondb
+          NEON_DB_USERNAME: ci-only
+          NEON_DB_PASSWORD: ci-only
+          OBJECT_STORAGE_ENDPOINT: https://storage.example.invalid
+          OBJECT_STORAGE_REGION: us-east-1
+          OBJECT_STORAGE_BUCKET: tcg-product-images-ci
+          OBJECT_STORAGE_PUBLIC_BASE_URL: https://storage.example.invalid/tcg-product-images-ci
+          OBJECT_STORAGE_PATH_STYLE: "true"
+          OBJECT_STORAGE_ACCESS_KEY: ci-only-access-key
+          OBJECT_STORAGE_SECRET_KEY: ci-only-secret-key
+        run: |
+          docker compose -f docker-compose.desktop.yml --profile local config --quiet
+          docker compose -f docker-compose.desktop.yml --profile cloud config --quiet
+
+      - name: Detect committed secrets
+        run: >-
+          docker run --rm
+          -v "$PWD:/repo"
+          -w /repo
+          ghcr.io/gitleaks/gitleaks:v8.30.0@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9
+          git --redact /repo
+
+      - name: Scan source and configuration
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.4.1
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
+      - name: Enforce immutable commit SHA tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_IMAGE: ${{ env.IMAGE_NAME }}
+        run: |
+          set -euo pipefail
+          package_path="${PACKAGE_IMAGE#ghcr.io/}"
+          package_owner="${package_path%%/*}"
+          package_name="${package_path#*/}"
+          endpoint="orgs/${package_owner}/packages/container/${package_name}/versions?per_page=100"
+          error_file="${RUNNER_TEMP}/package-versions-error.txt"
+          if tags=$(gh api --paginate --jq '.[].metadata.container.tags[]?' "$endpoint" 2>"$error_file"); then
+            if grep -Fxq "sha-${GITHUB_SHA}" <<<"$tags"; then
+              echo "Refusing to overwrite existing immutable tag ${PACKAGE_IMAGE}:sha-${GITHUB_SHA}" >&2
+              exit 1
+            fi
+          elif grep -Eq 'HTTP 404|HTTP 404:' "$error_file"; then
+            echo "Container package does not exist yet; first SHA tag is available."
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Read reproducible build metadata
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Verify reproducible amd64 OCI output
+        env:
+          SOURCE_EPOCH: ${{ steps.source.outputs.epoch }}
+          SOURCE_CREATED: ${{ steps.source.outputs.created }}
+        run: |
+          set -euo pipefail
+          common_args=(
+            --platform linux/amd64
+            --provenance=false
+            --no-cache
+            --build-arg "SOURCE_DATE_EPOCH=${SOURCE_EPOCH}"
+            --build-arg "OCI_CREATED=${SOURCE_CREATED}"
+            --build-arg "OCI_REVISION=${GITHUB_SHA}"
+            --build-arg "OCI_VERSION=sha-${GITHUB_SHA}"
+          )
+          docker buildx build "${common_args[@]}" \
+            --output "type=oci,dest=${RUNNER_TEMP}/repro-a.tar,rewrite-timestamp=true" .
+          docker buildx build "${common_args[@]}" \
+            --output "type=oci,dest=${RUNNER_TEMP}/repro-b.tar,rewrite-timestamp=true" .
+          cmp "${RUNNER_TEMP}/repro-a.tar" "${RUNNER_TEMP}/repro-b.tar"
+
+      - name: Build and push immutable multi-architecture image
+        id: build
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          outputs: type=image,push=true,rewrite-timestamp=true
+          build-args: |
+            SOURCE_DATE_EPOCH=${{ steps.source.outputs.epoch }}
+            OCI_CREATED=${{ steps.source.outputs.created }}
+            OCI_REVISION=${{ github.sha }}
+            OCI_VERSION=sha-${{ github.sha }}
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+
+      - name: Resolve immutable platform digests
+        id: platform
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect --raw "$IMAGE_REF" > "${RUNNER_TEMP}/manifest.json"
+          amd64_digest=$(jq -er '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' "${RUNNER_TEMP}/manifest.json")
+          arm64_digest=$(jq -er '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest' "${RUNNER_TEMP}/manifest.json")
+          echo "amd64=${amd64_digest}" >> "$GITHUB_OUTPUT"
+          echo "arm64=${arm64_digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Scan amd64 release image
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.amd64 }}
+        run: >-
+          trivy image --exit-code 1 --ignore-unfixed
+          --severity CRITICAL --scanners vuln "$IMAGE_REF"
+
+      - name: Scan arm64 release image
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.arm64 }}
+        run: >-
+          trivy image --exit-code 1 --ignore-unfixed
+          --severity CRITICAL --scanners vuln "$IMAGE_REF"
+
+      - name: Generate amd64 SPDX SBOM
+        uses: anchore/sbom-action@v0.24.3
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.amd64 }}
+          format: spdx-json
+          output-file: sbom-amd64.spdx.json
+          artifact-name: sbom-amd64.spdx.json
+          upload-release-assets: false
+
+      - name: Generate arm64 SPDX SBOM
+        uses: anchore/sbom-action@v0.24.3
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.arm64 }}
+          format: spdx-json
+          output-file: sbom-arm64.spdx.json
+          artifact-name: sbom-arm64.spdx.json
+          upload-release-assets: false
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest amd64 SBOM
+        uses: actions/attest@v4.2.1
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.platform.outputs.amd64 }}
+          sbom-path: sbom-amd64.spdx.json
+          push-to-registry: true
+
+      - name: Attest arm64 SBOM
+        uses: actions/attest@v4.2.1
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.platform.outputs.arm64 }}
+          sbom-path: sbom-arm64.spdx.json
+          push-to-registry: true
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign immutable image digest
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "$IMAGE_REF"
+
+      - name: Verify image signature
+        env:
+          IMAGE_REF: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: >-
+          cosign verify "$IMAGE_REF"
+          --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}"
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+      - name: Verify GitHub provenance attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_REF: oci://${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: >-
+          gh attestation verify "$IMAGE_REF"
+          --repo "$GITHUB_REPOSITORY"
+          --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/docker-build.yml"
+          --source-digest "$GITHUB_SHA"
+
+      - name: Verify GitHub SPDX SBOM attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AMD64_REF: oci://${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.amd64 }}
+          ARM64_REF: oci://${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.arm64 }}
+        run: |
+          set -euo pipefail
+          for image_ref in "$AMD64_REF" "$ARM64_REF"; do
+            gh attestation verify "$image_ref" \
+              --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/docker-build.yml" \
+              --source-digest "$GITHUB_SHA" \
+              --predicate-type "https://spdx.dev/Document/v2.3"
+          done
+
+      - name: Write immutable image contract
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          AMD64_DIGEST: ${{ steps.platform.outputs.amd64 }}
+          ARM64_DIGEST: ${{ steps.platform.outputs.arm64 }}
+        run: |
+          set -euo pipefail
+          {
+            echo "image=${IMAGE_NAME}"
+            echo "tag=sha-${GITHUB_SHA}"
+            echo "digest=${IMAGE_DIGEST}"
+            echo "reference=${IMAGE_NAME}@${IMAGE_DIGEST}"
+            echo "commit=${GITHUB_SHA}"
+            echo "linux_amd64_digest=${AMD64_DIGEST}"
+            echo "linux_arm64_digest=${ARM64_DIGEST}"
+          } | tee image-contract.txt
+
+      - name: Upload image contract
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: container-image-contract-${{ github.sha }}
+          path: image-contract.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish job summary
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          AMD64_DIGEST: ${{ steps.platform.outputs.amd64 }}
+          ARM64_DIGEST: ${{ steps.platform.outputs.arm64 }}
+        run: |
+          {
+            echo "## Immutable container release"
+            echo ""
+            echo "- Image: \`${IMAGE_NAME}\`"
+            echo "- Tag: \`sha-${GITHUB_SHA}\`"
+            echo "- Digest: \`${IMAGE_DIGEST}\`"
+            echo "- Platforms: \`linux/amd64\`, \`linux/arm64\`"
+            echo "- amd64 digest: \`${AMD64_DIGEST}\`"
+            echo "- arm64 digest: \`${ARM64_DIGEST}\`"
+            echo "- SBOMs: amd64 and arm64 SPDX JSON"
+            echo "- Signature and GitHub attestations: verified"
+          } >> "$GITHUB_STEP_SUMMARY"

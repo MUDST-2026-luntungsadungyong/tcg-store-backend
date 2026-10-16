@@ -1,0 +1,3 @@
+# Historical Spring Boot test report containing an ephemeral generated password.
+# The value was created for an in-memory test context and was never a deployable credential.
+d4fd55f67cbb8ddc1938404f419404ec21c3ccc5:tcg-store-backend/target/surefire-reports/TEST-com.mythix.tcg.TcgStoreBackendApplicationTests.xml:generic-api-key:101

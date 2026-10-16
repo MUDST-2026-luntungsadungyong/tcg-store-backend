@@ -1,6 +1,6 @@
 package com.mythix.tcg.order.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.mythix.tcg.auth.security.JwtService;
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.cart.domain.CartItem;
@@ -20,7 +20,7 @@ import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
@@ -127,6 +127,18 @@ class CheckoutControllerIntegrationTests {
             .andExpect(jsonPath("$.id").isString())
             .andExpect(jsonPath("$.items.length()").value(1))
             .andExpect(jsonPath("$.items[0].listingId").value(product.getId().toString()));
+    }
+
+    @Test
+    void checkoutRejectsClientSuppliedFields() throws Exception {
+        mockMvc.perform(post(CHECKOUT_PATH)
+                .header("Authorization", bearer(buyerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"totalAmount\":0}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+            .andExpect(jsonPath("$.fieldErrors.totalAmount")
+                .value("Checkout request does not accept client-supplied fields"));
     }
 
     @Test

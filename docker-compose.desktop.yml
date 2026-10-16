@@ -1,16 +1,38 @@
 name: tcg-store-service
 
 x-backend-image: &backend-image
-  image: tcg-store-service-backend:latest
+  image: ${BACKEND_IMAGE_NAME:-tcg-store-service-backend}:${BACKEND_IMAGE_TAG:-dev}
   build:
     context: .
+    args:
+      SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-1704067200}
+      OCI_CREATED: ${OCI_CREATED:-2024-01-01T00:00:00Z}
+      OCI_REVISION: ${OCI_REVISION:-dev}
+      OCI_VERSION: ${OCI_VERSION:-dev}
   pull_policy: build
 
+x-backend-security: &backend-security
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  pids_limit: 256
+  stop_grace_period: 45s
+
 x-backend-common: &backend-common
-  <<: *backend-image
+  <<: [*backend-image, *backend-security]
   restart: unless-stopped
   ports:
     - "${SERVER_PORT:-8080}:8080"
+  healthcheck:
+    test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health/readiness"]
+    interval: 10s
+    timeout: 3s
+    retries: 6
+    start_period: 60s
 
 x-migration-entrypoint: &migration-entrypoint
   - java
@@ -30,11 +52,11 @@ x-backend-common-environment: &backend-common-environment
 services:
   postgres-local:
     container_name: tcg-store-service-postgres-local
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine3.24@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     profiles: [local]
     restart: unless-stopped
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-tcg_store}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -50,7 +72,7 @@ services:
 
   migrations-local:
     container_name: tcg-store-service-migrations-local
-    <<: *backend-image
+    <<: [*backend-image, *backend-security]
     profiles: [local]
     environment:
       SPRING_PROFILES_ACTIVE: dev,migration
@@ -66,7 +88,7 @@ services:
 
   seed-local:
     container_name: tcg-store-service-seed-local
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine3.24@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     profiles: [local]
     environment:
       PGHOST: postgres-local
@@ -114,7 +136,7 @@ services:
       com.tcg.runtime: local
 
   migrations-cloud:
-    <<: *backend-image
+    <<: [*backend-image, *backend-security]
     container_name: tcg-store-service-migrations-cloud
     profiles: [cloud]
     environment:
@@ -142,11 +164,11 @@ services:
       NEON_POOL_MIN_IDLE: ${NEON_POOL_MIN_IDLE:-0}
       OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
       OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-2}
-      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-}
-      OBJECT_STORAGE_PUBLIC_BASE_URL: ${OBJECT_STORAGE_PUBLIC_BASE_URL:-}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required for cloud S3 image storage}
+      OBJECT_STORAGE_PUBLIC_BASE_URL: ${OBJECT_STORAGE_PUBLIC_BASE_URL:?OBJECT_STORAGE_PUBLIC_BASE_URL is required for cloud S3 image URLs}
       OBJECT_STORAGE_PATH_STYLE: ${OBJECT_STORAGE_PATH_STYLE:-true}
-      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-}
-      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?OBJECT_STORAGE_ACCESS_KEY is required for cloud S3 image storage}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?OBJECT_STORAGE_SECRET_KEY is required for cloud S3 image storage}
     depends_on:
       migrations-cloud:
         condition: service_completed_successfully
@@ -173,7 +195,7 @@ services:
 
   s3mock:
     container_name: tcg-store-service-s3mock-local
-    image: adobe/s3mock:5.1.0
+    image: adobe/s3mock:5.1.0@sha256:65cf60155a2e235fe7d5bf6c633747d6fc7ed93f9f5a6727d86470026b83c2a2
     profiles: [local]
     restart: unless-stopped
     environment:

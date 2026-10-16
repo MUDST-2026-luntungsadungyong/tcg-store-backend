@@ -1,6 +1,6 @@
 # แผนทำ Backend ให้รองรับ Kubernetes และการกระจายโหลด
 
-สถานะเอกสาร: Step 1–2 implemented; remaining work grouped by component
+สถานะเอกสาร: Step 1–2 implemented; Component B runtime และ release reproducibility acceptance ผ่านแล้ว; registry publish/attestation และ digest handoff ยัง pending
 ขอบเขต: `tcg-store-backend`, Docker, Kubernetes, Neon PostgreSQL และ object storage
 เป้าหมาย: ทำให้ Spring Boot backend รันหลาย replicas ได้อย่างปลอดภัย และมีเส้นทาง deploy/rollback ที่ทำซ้ำได้
 
@@ -138,6 +138,8 @@ Exit criteria:
 รายละเอียด: [Component A — Runtime reliability and horizontal scaling](./kubernetes-component-a-runtime-reliability.md)
 
 ### Step 4 — Harden Docker image และ local Compose
+
+สถานะ: Implementation, Local/Cloud และ amd64/arm64 runtime acceptance ผ่าน; release reproducibility ผ่าน Buildx `rewrite-timestamp=true`; รอ publish/sign/attest บน `main`
 
 เป้าหมาย: ได้ image ที่ reproducible, เล็ก, ปลอดภัย และรันได้ทั้ง amd64/arm64
 
@@ -358,7 +360,18 @@ Dependency: เริ่มได้ทันทีหลัง Step 2 และ
 
 รวม Step 4 และส่วน build/security ของ Step 8
 
-สถานะ: Planned — พร้อมแจกงานตาม work packages ในเอกสารรายละเอียด
+สถานะ: Implementation และ final Local/Cloud, amd64/arm64 runtime acceptance ผ่าน; รอ GitHub Actions main-branch run เพื่อยืนยัน registry publish, SBOM, provenance, signature และ digest handoff
+
+ผลที่ยืนยันแล้ว:
+
+- Spring Boot `4.0.8`, Tomcat `11.0.25`, Jackson BOM `2.21.7`/`3.1.7`; Maven 184 tests passed, 2 skipped; dependency scan 0 HIGH/CRITICAL
+- Local image `sha256:7b594f2ff8eb018b16fd41db327ab97e6e6b82bc16095ead57340d04aa512782`: Trivy CRITICAL 0, readiness UP, migration/seed exit 0, counts 2001 global + 20 local, S3 20 objects persisted, volume 41 files / 15.1 MB และ security controls ผ่าน
+- Cloud: Neon migration exit 0, readiness UP, backend/migration ใช้ image เดียวกัน; หลัง restore backend healthy ที่ `:8080`
+- arm64 Java และ migration exit 0 ด้วย image `sha256:405c9f29042afae1bdf7121099456618f2860a8c2a4f01a0418c3f4cadea01e8`
+- Release reproducibility ผ่าน Buildx `rewrite-timestamp=true`; OCI manifest `sha256:3fea0574201e88eb29f9c4e92223dfa45ebd7aa5f95804951156630cfb8430bd`, archive SHA-256 `1601DFD961CD66EB946E1C28C22997BCEC20209206CC0096C39903AF70627F7`. Docker Desktop Compose ไม่ใช่หลักฐาน reproducibility
+- Cloud Compose บังคับ `OBJECT_STORAGE_BUCKET`, `OBJECT_STORAGE_PUBLIC_BASE_URL`, `OBJECT_STORAGE_ACCESS_KEY` และ `OBJECT_STORAGE_SECRET_KEY` แบบ fail-fast; CI ตั้งค่า dummy สำหรับ validation
+
+ยัง pending: registry publish และ verification, SBOM/provenance/signature และส่ง digest ที่ publish จริงให้ Component C/D
 
 ขอบเขต:
 
@@ -366,7 +379,7 @@ Dependency: เริ่มได้ทันทีหลัง Step 2 และ
 - ทำ multi-architecture image สำหรับ amd64/arm64
 - เพิ่ม SBOM, dependency/image/secret scan และ immutable SHA/digest publishing
 - เพิ่ม Compose health dependency และตรวจ read-only filesystem
-- ทำ image reproducibility และ vulnerability gates
+- ทำ release image reproducibility ผ่าน Buildx `rewrite-timestamp=true` และ vulnerability gates; Desktop Compose build ไม่ใช้เป็น reproducibility evidence
 
 ไฟล์หลัก: `Dockerfile`, `.dockerignore`, `docker-compose.desktop.yml`, `pom.xml` เฉพาะ reproducible-build metadata, `.github/workflows/ci.yml` และ image-publish workflow เท่านั้น
 

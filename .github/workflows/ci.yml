@@ -15,10 +15,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
           java-version: "21"
@@ -33,10 +33,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
           java-version: "21"
@@ -65,10 +65,10 @@ jobs:
           --health-retries 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
           java-version: "21"
@@ -97,10 +97,10 @@ jobs:
           --health-retries 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Set up Java 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
           java-version: "21"
@@ -202,7 +202,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
 
       - name: Validate canonical Compose profiles
         env:
@@ -211,8 +211,10 @@ jobs:
           NEON_DB_USERNAME: ci-only
           NEON_DB_PASSWORD: ci-only
           OBJECT_STORAGE_ENDPOINT: https://storage.example.invalid
+          OBJECT_STORAGE_REGION: us-east-1
           OBJECT_STORAGE_BUCKET: tcg-product-images-ci
           OBJECT_STORAGE_PUBLIC_BASE_URL: https://storage.example.invalid/tcg-product-images-ci
+          OBJECT_STORAGE_PATH_STYLE: "true"
           OBJECT_STORAGE_ACCESS_KEY: ci-only-access-key
           OBJECT_STORAGE_SECRET_KEY: ci-only-secret-key
         run: |
@@ -221,18 +223,59 @@ jobs:
           kubectl kustomize infra/kubernetes/overlays/neon >/dev/null
           kubectl kustomize infra/kubernetes/overlays/neon/migration >/dev/null
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.5.0
+        with:
+          dockerfile: Dockerfile
 
-      - name: Build Docker image (dry-run test)
-        uses: docker/build-push-action@v5
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Read reproducible build metadata
+        id: source
+        run: |
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image for smoke tests
+        uses: docker/build-push-action@v7.4.0
         with:
           context: .
           file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
           push: false
           tags: tcg-store-backend:ci-test
+          build-args: |
+            SOURCE_DATE_EPOCH=${{ steps.source.outputs.epoch }}
+            OCI_CREATED=${{ steps.source.outputs.created }}
+            OCI_REVISION=${{ github.sha }}
+            OCI_VERSION=sha-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Verify hardened runtime identity and filesystem
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect tcg-store-backend:ci-test --format '{{.Config.User}}')" = "10001:10001"
+          docker run --rm \
+            --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777 \
+            --security-opt no-new-privileges \
+            --cap-drop ALL \
+            --pids-limit 256 \
+            --entrypoint /bin/sh \
+            tcg-store-backend:ci-test \
+            -ec 'test "$(id -u)" = 10001; test ! -w /app; test -w /tmp; java -version'
+
+      - name: Scan built image for critical vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: tcg-store-backend:ci-test
+          format: table
+          ignore-unfixed: true
+          severity: CRITICAL
+          exit-code: "1"
 
   security-scan:
     name: Security & Secret Scan (Gitleaks & Trivy)
@@ -240,22 +283,30 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
+      - name: Review dependency changes
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v5.0.0
+        with:
+          fail-on-severity: high
+
       - name: Run Gitleaks Secret Detection
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+        run: >-
+          docker run --rm
+          -v "$PWD:/repo"
+          -w /repo
+          ghcr.io/gitleaks/gitleaks:v8.30.0@sha256:691af3c7c5a48b16f187ce3446d5f194838f91238f27270ed36eef6359a574d9
+          git --redact /repo
 
       - name: Run Trivy Vulnerability Scanner (Filesystem)
-        uses: aquasecurity/trivy-action@master
-        continue-on-error: true
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'fs'
+          scan-ref: '.'
           ignore-unfixed: true
           format: 'table'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          exit-code: '1'
