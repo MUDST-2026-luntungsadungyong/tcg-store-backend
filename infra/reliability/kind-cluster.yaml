@@ -1,0 +1,13 @@
+# Local acceptance topology only. All three Kind nodes share one physical host;
+# this does not provide physical-host or control-plane HA.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: tcg-component-a
+nodes:
+  - role: control-plane
+  - role: worker
+    labels:
+      tcg-store.test/worker: "a"
+  - role: worker
+    labels:
+      tcg-store.test/worker: "b"

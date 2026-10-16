@@ -5,11 +5,11 @@ x-backend-image: &backend-image
   build:
     context: .
     args:
+      MAVEN_CACHE_ID: tcg-pr39-desktop-clean-20261016
       SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-1704067200}
       OCI_CREATED: ${OCI_CREATED:-2024-01-01T00:00:00Z}
       OCI_REVISION: ${OCI_REVISION:-dev}
       OCI_VERSION: ${OCI_VERSION:-dev}
-  pull_policy: build
 
 x-backend-security: &backend-security
   read_only: true
@@ -26,12 +26,12 @@ x-backend-common: &backend-common
   <<: [*backend-image, *backend-security]
   restart: unless-stopped
   ports:
-    - "${SERVER_PORT:-8080}:8080"
+    - "127.0.0.1:${SERVER_PORT:-8080}:8080"
   healthcheck:
     test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health/readiness"]
     interval: 10s
     timeout: 3s
-    retries: 6
+    retries: 18
     start_period: 60s
 
 x-migration-entrypoint: &migration-entrypoint
@@ -56,7 +56,7 @@ services:
     profiles: [local]
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-25432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-tcg_store}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -111,6 +111,7 @@ services:
     profiles: [local]
     environment:
       <<: *backend-common-environment
+      APP_JWT_SECRET: ${LOCAL_APP_JWT_SECRET:?LOCAL_APP_JWT_SECRET is required for local runtime}
       SPRING_PROFILES_ACTIVE: dev
       DB_URL: jdbc:postgresql://postgres-local:5432/${POSTGRES_DB:-tcg_store}
       DB_USERNAME: ${POSTGRES_USER:-postgres}
@@ -120,8 +121,8 @@ services:
       OBJECT_STORAGE_BUCKET: tcg-product-images
       OBJECT_STORAGE_PUBLIC_BASE_URL: http://localhost:${S3MOCK_API_PORT:-9090}/tcg-product-images
       OBJECT_STORAGE_PATH_STYLE: "true"
-      OBJECT_STORAGE_ACCESS_KEY: s3mock-local-access
-      OBJECT_STORAGE_SECRET_KEY: s3mock-local-secret
+      OBJECT_STORAGE_ACCESS_KEY: ${LOCAL_OBJECT_STORAGE_ACCESS_KEY:?LOCAL_OBJECT_STORAGE_ACCESS_KEY is required}
+      OBJECT_STORAGE_SECRET_KEY: ${LOCAL_OBJECT_STORAGE_SECRET_KEY:?LOCAL_OBJECT_STORAGE_SECRET_KEY is required}
     depends_on:
       seed-local:
         condition: service_completed_successfully
@@ -183,15 +184,21 @@ services:
   frontend:
     container_name: tcg-store-service-frontend
     profiles: [local, cloud]
+    image: ${DESKTOP_FRONTEND_IMAGE:-tcg-store-service-frontend:dev}
     build:
-      context: ../tcg-store-frontend
-      dockerfile: Dockerfile
+      context: ${FRONTEND_SOURCE_DIR:-.local/pr39-work/tcg-store-frontend}
+      dockerfile: ${FRONTEND_DOCKERFILE:-../../../docker/desktop/frontend.Dockerfile}
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api}
+        VITE_API_BASE_URL: /api
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-3000}:80"
-    # Frontend calls the selected backend through localhost:8080.
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
+    healthcheck:
+      test: [CMD, wget, --spider, -q, 'http://127.0.0.1/']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    # /api is proxied by Nginx to the selected backend's tcg-backend-service alias.
 
   s3mock:
     container_name: tcg-store-service-s3mock-local

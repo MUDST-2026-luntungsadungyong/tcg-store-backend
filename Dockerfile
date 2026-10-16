@@ -6,16 +6,17 @@ ARG TEMURIN_JRE_IMAGE=eclipse-temurin:21.0.12.1_1-jre-alpine-3.24@sha256:51ab5e3
 # BuildKit host and only select the target architecture for the runtime image.
 FROM --platform=$BUILDPLATFORM ${TEMURIN_JDK_IMAGE} AS build
 WORKDIR /workspace
+ARG MAVEN_CACHE_ID=tcg-maven
 
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,id=${MAVEN_CACHE_ID},target=/root/.m2 \
     chmod +x mvnw \
     && ./mvnw --batch-mode --no-transfer-progress dependency:go-offline
 
 COPY src src
 ARG SOURCE_DATE_EPOCH=1704067200
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,id=${MAVEN_CACHE_ID},target=/root/.m2 \
     ./mvnw --batch-mode --no-transfer-progress clean package -DskipTests \
     -Dproject.build.outputTimestamp=${SOURCE_DATE_EPOCH} \
     && set -- target/*.jar \

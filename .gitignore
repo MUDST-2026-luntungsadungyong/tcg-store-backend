@@ -43,6 +43,7 @@ uploads/
 *.class
 node_modules/
 .neon
+.local/
 
 ### Kubernetes validation tooling ###
 __pycache__/

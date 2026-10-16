@@ -1,0 +1,14 @@
+# Strategic merge deletion patch used to remove fault-only Pod components.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tcg-store-backend
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: db-fault-proxy
+          $patch: delete
+      volumes:
+        - name: db-fault-proxy-config
+          $patch: delete

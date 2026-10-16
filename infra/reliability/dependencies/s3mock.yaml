@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3mock-acceptance
+spec:
+  selector:
+    app.kubernetes.io/name: s3mock-acceptance
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3mock-acceptance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3mock-acceptance
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: s3mock-acceptance
+    spec:
+      containers:
+        - name: s3mock
+          image: adobe/s3mock:5.1.0@sha256:65cf60155a2e235fe7d5bf6c633747d6fc7ed93f9f5a6727d86470026b83c2a2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: initialBuckets
+              value: tcg-store-acceptance
+          ports:
+            - name: http
+              containerPort: 9090
+          readinessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 3
+            timeoutSeconds: 1
+            failureThreshold: 30
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 512Mi}

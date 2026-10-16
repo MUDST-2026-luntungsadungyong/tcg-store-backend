@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcg-db-fault-proxy-config
+data:
+  proxies.json: |-
+    [
+      {
+        "name": "acceptance-postgres",
+        "listen": "127.0.0.1:15432",
+        "upstream": "postgres-acceptance.tcg-store-acceptance.svc.cluster.local:5432",
+        "enabled": true
+      }
+    ]
