@@ -126,10 +126,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'docker load failed.' }
           $metadata = Get-Content -LiteralPath $env:METADATA_FILE -Raw
           if ($metadata -notmatch [regex]::Escape("source_commit=${env:GITHUB_SHA}")) { throw 'Image artifact commit does not match workflow commit.' }
-          $revision = docker image inspect "${env:IMAGE_NAME}:${env:IMAGE_TAG}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
-          if ($LASTEXITCODE -ne 0 -or $revision.Trim() -cne $env:GITHUB_SHA) { throw "Loaded image revision '$revision' does not match $env:GITHUB_SHA." }
+          $imageInfo = docker image inspect "${env:IMAGE_NAME}:${env:IMAGE_TAG}" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or @($imageInfo).Count -ne 1) { throw 'Loaded image inspection failed.' }
+          $revision = [string]$imageInfo[0].Config.Labels.'org.opencontainers.image.revision'
+          if ($revision -cne $env:GITHUB_SHA) { throw "Loaded image revision '$revision' does not match $env:GITHUB_SHA." }
           docker tag "${env:IMAGE_NAME}:${env:IMAGE_TAG}" "${env:IMAGE_NAME}:dev"
-          docker image inspect "${env:IMAGE_NAME}:dev" --format 'LOCAL_IMAGE_ID={{.Id}} REVISION={{index .Config.Labels "org.opencontainers.image.revision"}}'
+          if ($LASTEXITCODE -ne 0) { throw 'Tagging the loaded image failed.' }
+          $devImageInfo = docker image inspect "${env:IMAGE_NAME}:dev" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or @($devImageInfo).Count -ne 1) { throw 'Tagged image inspection failed.' }
+          $devRevision = [string]$devImageInfo[0].Config.Labels.'org.opencontainers.image.revision'
+          Write-Output "LOCAL_IMAGE_ID=$($devImageInfo[0].Id) REVISION=$devRevision"
 
       - name: Load image into every Kind node
         shell: powershell
