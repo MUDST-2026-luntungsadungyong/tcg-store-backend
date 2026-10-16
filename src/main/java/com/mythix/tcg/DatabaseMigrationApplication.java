@@ -3,6 +3,7 @@ package com.mythix.tcg;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.flywaydb.core.Flyway;
 
 /**
  * Runs Flyway and JPA schema validation with the same artifact used by the API,
@@ -18,7 +19,9 @@ public final class DatabaseMigrationApplication {
             .web(WebApplicationType.NONE)
             .profiles("migration")
             .run(args)) {
-            // Context startup runs Flyway before Hibernate validates the resulting schema.
+            // Fail closed even on an existing schema if migration auto-configuration
+            // is accidentally removed or disabled in a future runtime artifact.
+            context.getBean(Flyway.class).validate();
         }
     }
 }

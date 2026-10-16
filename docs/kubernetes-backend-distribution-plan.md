@@ -92,7 +92,7 @@ Exit criteria:
 
 ### Step 2 — ทำ versioned database migration
 
-สถานะ: Implemented
+สถานะ: Implemented; แก้ Spring Boot 4 Flyway integration แล้วและ real local acceptance ผ่าน 6 scenarios รวม fresh/repeat/legacy/restore/checksum rejection/failure gate; Neon snapshot → local PG18 restore ผ่าน ยังรอ restore เข้า Neon branch แยกและ Kubernetes release acceptance ดู [ผล Step 1–2](./kubernetes-step-1-2-live-acceptance-results.md)
 
 เป้าหมาย: schema เปลี่ยนแบบตรวจสอบย้อนหลังและ deploy ซ้ำได้
 

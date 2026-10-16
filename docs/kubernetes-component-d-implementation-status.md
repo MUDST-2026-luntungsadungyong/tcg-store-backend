@@ -10,6 +10,8 @@ Platform inputs/วิธีใช้ release flow: [Release operations](./kuber
 
 แผนปิด live acceptance ตั้งแต่ Step 1 ถึง Component D: [Step 1–Component D live acceptance plan](./kubernetes-live-acceptance-plan.md)
 
+ผลทดสอบจริง Step 1–2 วันที่ 2026-10-16: [Live acceptance results](./kubernetes-step-1-2-live-acceptance-results.md) — แก้ Flyway integration แล้ว; local migration 6 scenarios และ S3 validate-only สอง backend ผ่าน พร้อม cloud S3/Neon snapshot-local restore; ยังรอ Neon branch/Kubernetes/cloud replica acceptance
+
 ## Work board
 
 Agents ชุดก่อนหยุดเพราะ usage limit และถูกปิดแล้ว งานบางส่วนที่เขียนไว้ยังต้องตรวจ ไม่ถือว่า complete จากการมีไฟล์อย่างเดียว ชุดใหม่ใช้ Luna 6 และทำงานบน checkout หลักร่วมกัน โดยแบ่ง write scope ไม่ซ้อนกัน

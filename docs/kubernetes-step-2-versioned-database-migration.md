@@ -1,13 +1,13 @@
 # Step 2 — Versioned database migration
 
-สถานะเอกสาร: Implemented
+สถานะเอกสาร: Implemented; แก้ Boot 4 Flyway integration แล้ว — local fresh/repeat/legacy/restore/checksum rejection/failure gate ผ่าน 6 scenarios; Neon snapshot → local PG18 restore ผ่าน ยังรอ provider-side Neon branch/Kubernetes acceptance ดู [ผล Step 1–2](./kubernetes-step-1-2-live-acceptance-results.md)
 Parent plan: [แผนทำ Backend ให้รองรับ Kubernetes และการกระจายโหลด](./kubernetes-backend-distribution-plan.md)
 
 ## 1. เป้าหมาย
 
 ให้ schema ของ PostgreSQL เปลี่ยนผ่าน Flyway แบบมีลำดับ ตรวจ checksum ย้อนหลัง รันซ้ำได้ และหยุด deployment ก่อน rollout หาก migration ไม่สำเร็จ โดย migration และ API ต้องใช้ backend image version เดียวกัน
 
-โปรเจกต์ pin Flyway `11.20.2` แทน version ที่ Spring Boot 3.3 จัดการโดยปริยาย เพื่อรองรับ Neon PostgreSQL 18 โดยไม่มี unsupported-database warning
+โปรเจกต์ใช้ Spring Boot `4.0.8` ผ่าน `spring-boot-starter-flyway` และ pin Flyway `11.20.2` พร้อม PostgreSQL module ตัว migration runner ต้องพบ Flyway bean และ validate สำเร็จก่อน exit 0
 
 ## 2. โครงสร้างที่ใช้งาน
 
@@ -143,3 +143,13 @@ Kubernetes release gate:
 - Local Compose: migration/seed gates จบสำเร็จและฐานเดิม 20 listings ไม่เสียหาย
 - Neon: migration gate จบ exit 0 บน PostgreSQL 18.6, Flyway validate version 9 ผ่านโดยไม่มี unsupported-database warning และ backend readiness เป็น `UP`
 - Compose Local/Cloud และ Kustomize application/migration overlays render ผ่าน
+
+## 9. Boot 4 integration fix and retest — 2026-10-16
+
+- `spring-boot-starter-flyway` เพิ่ม Boot 4 Flyway integration กลับเข้า runtime; คง `flyway-database-postgresql` และ Flyway `11.20.2`
+- Migration runner ต้องพบ Flyway bean และ validate สำเร็จก่อน exit 0
+- Real PostgreSQL acceptance ผ่าน 6 scenarios: fresh V1–V9, repeat/seed, baseline V8 → V9, backup/restore, checksum drift rejection และ Compose migration failure gate
+- S3 local สอง backend ทดสอบผ่าน migration จริง ใช้ `ddl-auto=validate` ทั้งคู่ ไม่มี Hibernate schema-create fallback
+- Neon snapshot → isolated PostgreSQL 18 restore ผ่านทั้ง checksum/counts 8 ตารางและ Flyway validation ด้วย fixed image
+- Full Maven suite ผ่าน 197 tests, 0 failures/errors, 2 external-DB skips; ไม่แก้ migration SQL V1–V9
+- ยังรอ restore/fresh/upgrade บน Neon branch แยกและ Kubernetes release acceptance ตาม [รายงานรวม](./kubernetes-step-1-2-live-acceptance-results.md)

@@ -29,7 +29,8 @@ Neon PostgreSQL และ Neon object storage เป็นคนละบริ�
 - Python renderer/release/smoke/dashboard suites ผ่านรวม 119 tests
 - Kubernetes strict schema validation ผ่าน 55 resources
 - Deployment adapter, Prometheus rules และ workflow lint ผ่านในเครื่อง
-- ยังไม่มีหลักฐานว่ารูปสินค้าเดิมถูกย้ายเข้า Neon bucket จริง
+- ตรวจจริง 2026-10-16 พบ cloud objects 22 รายการตรงกับ managed image references 22 รายการ อ่านครบและไม่มี missing/orphan; cloud PUT/GET/public GET/DELETE probe ผ่าน ดู [ผล Step 1–2](./kubernetes-step-1-2-live-acceptance-results.md)
+- Step 2 เคยพบ image ขาด Spring Boot 4 Flyway integration; แก้แล้วและ retest local fresh/repeat/legacy/restore/checksum drift/failure gate ผ่าน 6 scenarios พร้อม S3 validate-only สอง replicas ดูรายงานผลข้างต้น ยังรอ provider-side Neon branch/Kubernetes acceptance
 - ยังไม่ได้ deploy งานรอบนี้ไป staging/production และยังไม่ได้ใช้ fixture/mock ปิด live acceptance
 - Full browser mutation journey ยังไม่ครบ มี API harness และ browser read-only checks เท่านั้น
 
@@ -76,7 +77,7 @@ Neon PostgreSQL และ Neon object storage เป็นคนละบริ�
 | Component C | Server-side admission จริง, Secret delivery, DNS/TLS, HTTP→HTTPS, Ingress, upload 8 MiB, CORS, rate limit, NetworkPolicy allow/deny, DNS/Neon/S3 connectivity |
 | Component D | Deploy staging จริง, monitoring collector, Prometheus/Grafana/Alertmanager, observation window อย่างน้อย 600 วินาที, promotion production, rollback/recovery และ restore rehearsal |
 | Frontend | Browser journey จริง: login → seller upload → catalog → cart → checkout → authorization |
-| Cloud S3 | ต้องมีหลักฐานว่า product images ถูกย้ายเข้า Neon bucket จริงและ database references ชี้ object ที่อ่านได้ |
+| Cloud S3 | Inventory/reference audit และ disposable object roundtrip ผ่านแล้ว 22/22; เหลือ historical source mapping/checksum และ cloud API/replica acceptance ตามผล Step 1–2 |
 
 ## 5. Required inputs and ownership
 
