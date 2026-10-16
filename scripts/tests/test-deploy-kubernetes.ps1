@@ -81,11 +81,15 @@ function global:kubectl {
             }
         }
         if ($joined -match 'get secret tcg-store-backend-secrets') {
-            return @(
+            $templateArgument = @($capturedArguments | Where-Object { $_ -like 'go-template=*' })
+            if ($templateArgument.Count -ne 1 -or $templateArgument[0].Contains('"')) {
+                throw 'Secret key template must avoid embedded quotes for Windows PowerShell native calls.'
+            }
+            return (@(
                 'neon-jdbc-url', 'neon-db-username', 'neon-db-password',
                 'neon-migration-jdbc-url', 'neon-migration-db-username', 'neon-migration-db-password',
                 'app-jwt-secret', 'object-storage-access-key', 'object-storage-secret-key'
-            )
+            ) -join ' ') + ' '
         }
         if ($joined -match 'create --dry-run=client') {
             $objects = @(
