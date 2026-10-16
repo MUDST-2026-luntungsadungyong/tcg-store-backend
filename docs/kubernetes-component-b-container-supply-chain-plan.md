@@ -1,6 +1,6 @@
 # Component B — Container and software supply-chain plan
 
-สถานะ: Runtime และ release reproducibility acceptance ผ่าน; main-branch registry publish/attestation และ digest handoff ยัง pending
+สถานะ: Runtime, reproducibility และ branch-candidate registry acceptance ผ่าน; protected-main release run ยัง pending
 
 วันที่จัดทำ: 2026-10-16
 
@@ -280,13 +280,13 @@ Arm64 test ผ่านเมื่อ image build สำเร็จและ J
 - [x] Cloud API และ migration ใช้ image เดียวกันใน final runtime acceptance
 - [x] Gitleaks/dependency/Trivy gates ถูกตั้งให้ block pipeline ตาม policy
 - [x] Trivy image scan พบ CRITICAL `0`
-- [ ] SBOM, provenance และ signature สร้างและ verify ผ่าน
+- [x] Branch candidate สร้างและ verify SBOM, provenance และ signature ผ่าน
 - [x] Release reproducibility ผ่าน Buildx `rewrite-timestamp=true`; OCI manifest `sha256:3fea0574201e88eb29f9c4e92223dfa45ebd7aa5f95804951156630cfb8430bd`, archive SHA-256 `1601DFD961CD66EB946E1C28C22997BCEC20209206CC0096C39903AF70627F7`
 - [x] Cloud S3 required environment variables fail fast ใน Compose
 - [x] Gitleaks ตรวจ Git history ผ่าน และ build context/image ไม่มีไฟล์ credential
-- [ ] ส่ง image digest contract ให้ Component C/D แล้ว
+- [x] สร้าง branch-candidate image digest contract สำหรับ handoff ให้ Component C/D แล้ว
 
-Runtime และ release reproducibility acceptance ผ่านแล้วตามหลักฐานใน Implementation report; registry publish/attestation และ digest handoff ยังต้องรันบน GitHub Actions หลัง merge เข้า `main` เพราะต้องใช้ GHCR และ GitHub OIDC จริง ห้ามถือว่า workflow syntax ผ่านเท่ากับ acceptance ผ่าน
+Runtime, release reproducibility และ registry acceptance บน branch ผ่านแล้วตามหลักฐานใน Implementation report; ต้องให้ workflow รันใหม่จาก protected `main` หลัง merge และใช้ digest ที่รอบนั้นสร้างเป็น final release เท่านั้น ห้าม promote branch-candidate digest ไป production
 
 ## 11. Implementation report — 2026-10-16
 
@@ -336,7 +336,8 @@ Runtime และ release reproducibility acceptance ผ่านแล้วต
 - Cloud runtime: Neon migration exit `0`, readiness `UP`, backend/migration image เดียวกัน; restored cloud backend healthy ที่ `:8080`
 - arm64 runtime: Java และ migration exit `0`, image `sha256:405c9f29042afae1bdf7121099456618f2860a8c2a4f01a0418c3f4cadea01e8`
 - Final Local/Cloud and amd64/arm64 runtime acceptance: ผ่านตามรายการข้างต้น
-- Registry acceptance ที่ยังเหลือ: rerun จาก commit ที่มี Cosign OCI fallback, verify SBOM/provenance/signature จาก registry และส่ง digest contract จริงให้ Component C/D; protected-main run หลัง merge ยังเป็น final release gate
+- Registry acceptance บน branch: ผ่านทั้ง multi-architecture scan, SBOM, provenance, signature และ digest contract ใน run `38895063231`
+- Registry acceptance ที่ยังเหลือ: protected-main run หลัง merge เพื่อสร้าง final trusted digest; branch-candidate digest ห้าม promote ไป production
 
 ### B4 — Registry acceptance run 1 และ provider limitation
 
@@ -345,6 +346,17 @@ Runtime และ release reproducibility acceptance ผ่านแล้วต
 - run หยุดที่ `actions/attest-build-provenance` เพราะ GitHub ตอบว่า Artifact Attestations ไม่พร้อมใช้กับ organization plan ปัจจุบัน จึงไม่มี signature, accepted image contract หรือ digest handoff จาก run นี้
 - candidate digest จาก run แรกถือเป็น **unaccepted** และห้ามใช้ deploy แม้ว่าตัว image จะอยู่ใน GHCR
 - workflow และ release verifier เปลี่ยนเป็น keyless Cosign signature พร้อม SLSA provenance attestation ที่ index digest และ SPDX JSON attestations ที่ child digest ทั้งสอง architecture; verification pin workflow identity, OIDC issuer และ exact Git commit SHA
+
+### B5 — Registry acceptance runs 2–3
+
+- run `38892776558` จาก commit `60ea6f1dfa1559ac31d3908f400b2b2cc5098ae4` ผ่าน build, push, scan, SBOM generation, Cosign SLSA/SPDX attestation, signature, signature verification และ provenance verification แต่การ verify SBOM เขียน payload ขนาดใหญ่ลง GitHub log จนค้าง จึงถูกยกเลิกและ digest รอบนี้ถือเป็น **unaccepted**
+- ปรับ workflow ให้แยก verification ของ amd64/arm64, จำกัด Cosign timeout ที่ 90 วินาที, จำกัด GitHub step ที่ 4 นาที และไม่เขียน payload SBOM ลง log โดยไม่ลด identity/OIDC/commit-SHA checks
+- run `38895063231` จาก commit `bf60440f0aad803100780f2ed99da7932b842c49` ผ่านครบ 41 steps และสร้าง artifact `container-image-contract-bf60440f0aad803100780f2ed99da7932b842c49`
+- branch-candidate manifest digest: `sha256:90a75922fe9b141b5977b773817d7257171704a30bb64c14699099f0e678d903`
+- `linux/amd64` child digest: `sha256:ddbd1c1c25abc595789b57159ba024f0c63e94e2afdf9930cf234f3085bfb4ee`
+- `linux/arm64` child digest: `sha256:31582d84a280162579ad8091743a49e5545a933fd6b7752eceac54ec80f3dd38`
+- image reference: `ghcr.io/mudst-2026-luntungsadungyong/tcg-store-backend@sha256:90a75922fe9b141b5977b773817d7257171704a30bb64c14699099f0e678d903`
+- digest นี้ใช้เป็นหลักฐาน branch acceptance เท่านั้น; final Component C/D deployment contract ต้องมาจาก protected-main run หลัง merge
 
 ## 12. ความเสี่ยงที่ต้องเฝ้าระวัง
 
