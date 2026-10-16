@@ -231,13 +231,14 @@ if ($CIMode) {
     $availableSecretKeys = @($readiness.keyNames)
 } else {
     # Manual local/operator flow requires Secret get permission. CI never uses it.
-    $secretKeysTemplate = '{{range $key, $value := .data}}{{$key}}{{"\n"}}{{end}}'
+    # Avoid embedded quotes: Windows PowerShell strips them in native arguments.
+    $secretKeysTemplate = '{{range $key, $value := .data}}{{$key}} {{end}}'
     $secretKeyOutput = Invoke-Kubectl -Arguments @(
         '--context', $Context, '--namespace', $namespace,
         'get', 'secret', 'tcg-store-backend-secrets',
         '-o', "go-template=$secretKeysTemplate"
     )
-    $availableSecretKeys = @($secretKeyOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+    $availableSecretKeys = @((($secretKeyOutput -join ' ') -split '\s+') | Where-Object { $_ })
 }
 $missingSecretKeys = @($requiredSecretKeys | Where-Object { $_ -notin $availableSecretKeys })
 Assert-Condition ($missingSecretKeys.Count -eq 0) "Required Secret key names are missing: $($missingSecretKeys -join ', '). Secret values were not read."
