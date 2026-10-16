@@ -2087,7 +2087,7 @@ SELECT setval('cart_items_id_seq', (SELECT MAX(id) FROM cart_items));
 -- 7. Insert Sample Orders (With Idempotency & Financial Revenue Breakdown)
 INSERT INTO orders (id, buyer_id, order_number, idempotency_key, status, total_amount, platform_fee, seller_net_amount, created_at, updated_at) VALUES
 (1, 1, 'ORD-2026-001', 'idemp-mythix-001-abc', 'FULFILLED', 1700.00, 85.00, 1615.00, NOW() - INTERVAL '3 days', NOW() - INTERVAL '1 day'),
-(2, 6, 'ORD-2026-002', 'idemp-mythix-002-def', 'PAID', 990.00, 49.50, 940.50, NOW() - INTERVAL '5 hours', NOW() - INTERVAL '4 hours');
+(2, 6, 'ORD-2026-002', 'idemp-mythix-002-def', 'CONFIRMED', 990.00, 49.50, 940.50, NOW() - INTERVAL '5 hours', NOW() - INTERVAL '4 hours');
 
 SELECT setval('orders_id_seq', (SELECT MAX(id) FROM orders));
 
@@ -2102,10 +2102,10 @@ SELECT setval('order_items_id_seq', (SELECT MAX(id) FROM order_items));
 -- 9. Insert Order Status Logs (Timeline History & Fulfillment Display)
 INSERT INTO order_status_logs (id, order_id, from_status, to_status, changed_by, changed_by_role, note, created_at) VALUES
 (1, 1, NULL, 'PENDING', 1, 'BUYER', 'Created order via Cart Checkout', NOW() - INTERVAL '3 days'),
-(2, 1, 'PENDING', 'PAID', NULL, 'SYSTEM', 'Payment confirmed via PromptPay QR THB 1,700.00', NOW() - INTERVAL '3 days' + INTERVAL '3 minutes'),
-(3, 1, 'PAID', 'FULFILLED', 2, 'SELLER', 'Order shipped via Kerry Express Track: KERRY99887766', NOW() - INTERVAL '1 day'),
+(2, 1, 'PENDING', 'CONFIRMED', NULL, 'SYSTEM', 'Payment confirmed via PromptPay QR THB 1,700.00', NOW() - INTERVAL '3 days' + INTERVAL '3 minutes'),
+(3, 1, 'CONFIRMED', 'FULFILLED', 2, 'SELLER', 'Order shipped via Kerry Express Track: KERRY99887766', NOW() - INTERVAL '1 day'),
 (4, 2, NULL, 'PENDING', 6, 'BUYER', 'Placed order via Direct Buy Now', NOW() - INTERVAL '5 hours'),
-(5, 2, 'PENDING', 'PAID', NULL, 'SYSTEM', 'Credit card transaction authorized THB 990.00', NOW() - INTERVAL '4 hours');
+(5, 2, 'PENDING', 'CONFIRMED', NULL, 'SYSTEM', 'Credit card transaction authorized THB 990.00', NOW() - INTERVAL '4 hours');
 
 SELECT setval('order_status_logs_id_seq', (SELECT MAX(id) FROM order_status_logs));
 

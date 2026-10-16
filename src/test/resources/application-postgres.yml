@@ -17,3 +17,12 @@ app:
   jwt:
     secret: test-only-secret-key-that-is-at-least-thirty-two-bytes-long
     expiration-minutes: 60
+  seller:
+    product-images:
+      object-storage-endpoint: http://localhost:9090
+      object-storage-region: us-east-1
+      object-storage-bucket: tcg-product-images-test
+      object-storage-public-base-url: http://localhost:9090/tcg-product-images-test
+      object-storage-path-style: true
+      object-storage-access-key: test-only-access-key
+      object-storage-secret-key: test-only-secret-key
