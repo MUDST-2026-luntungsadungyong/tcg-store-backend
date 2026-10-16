@@ -15,4 +15,5 @@ images:
 
 patches:
   - path: migration-hardening.yaml
+  - path: image-pull-secret.yaml
   - path: migration-secret-contract.yaml

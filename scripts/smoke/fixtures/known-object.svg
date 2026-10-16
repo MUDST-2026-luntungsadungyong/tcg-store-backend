@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="TCG staging smoke fixture">
+  <rect width="64" height="64" rx="8" fill="#14213d"/>
+  <path d="M16 18h32v28H16z" fill="#fca311"/>
+  <path d="M22 25h20v4H22zm0 10h20v4H22z" fill="#14213d"/>
+</svg>

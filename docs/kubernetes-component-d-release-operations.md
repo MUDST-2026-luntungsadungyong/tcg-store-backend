@@ -12,6 +12,12 @@
 4. Runner มี Python/PyYAML ตาม pinned requirements, PowerShell, kubectl, Docker Buildx, GitHub CLI และ Cosign รุ่นที่ platform ตรวจแล้ว ให้สิทธิ์ registry/attestation ที่จำเป็นเท่านั้น
 5. จัด protected persistent release-state path และ platform collector แยกจาก application ไม่วาง credentials หรือ Secret snapshots ใน bundle/artifact
 
+Private GHCR images require a namespace-scoped `kubernetes.io/dockerconfigjson` Secret named
+`tcg-store-ghcr-pull` in both `tcg-store-staging` and `tcg-store-production`. The staging and
+production API and migration workloads reference this name through `imagePullSecrets`. A platform
+operator or external-secret controller must provision it before deployment with a read-only GHCR
+credential; the release workflow must not render, read, or persist the registry credential.
+
 การตรวจ attestations ใช้ read permission ไม่ต้องให้ workflow นี้ publish/sign artifact ใหม่ ให้ platform ตรวจ GitHub token scope และ registry authentication ที่ใช้งานจริงตาม [GitHub attestation permissions](https://docs.github.com/en/rest/repos/attestations#list-attestations) และ [GitHub CLI verification](https://cli.github.com/manual/gh_attestation_verify) โดยเฉพาะ private repository/registry
 
 ## Environment variables ของ GitHub Environment
@@ -32,6 +38,11 @@ Secret readiness metadata ประกอบด้วย schema/issuer/environme
 CI identity ต้องถูกปฏิเสธการ get/list Secret และสร้าง Namespace; bootstrap/Secret delivery อยู่นอก workflow นี้ รายละเอียด runtime/migration roles และ key names อยู่ใน [C acceptance](./kubernetes-component-c-acceptance.md)
 
 Smoke credentials และ known test-owned object URL ส่งผ่าน protected runner/secret channel ตาม [smoke runbook](./runbooks/full-stack-smoke.md) ไม่ใช้ workflow inputs/command arguments สำหรับ password/token; CORS origin รับจาก validated release configuration
+
+For staging, configure `TCG_SMOKE_BUYER_EMAIL`, `TCG_SMOKE_BUYER_PASSWORD`,
+`TCG_SMOKE_KNOWN_OBJECT_URL`, and `TCG_SMOKE_STORAGE_HOST` as `staging` GitHub Environment
+secrets. The workflow maps those four names explicitly into the preflight and smoke process only;
+do not store them as repository variables because variables are not masked.
 
 ## Collector / observation contract
 
