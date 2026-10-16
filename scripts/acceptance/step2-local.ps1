@@ -169,7 +169,7 @@ try {
         } else {
         $cardCount = Get-Scalar 'tcg_acceptance' 'SELECT COUNT(*) FROM global_cards;'
         $userCount = Get-Scalar 'tcg_acceptance' 'SELECT COUNT(*) FROM users;'
-        if ($repeatCount -ne '9' -or [int]$cardCount -lt 2000 -or [int]$userCount -lt 9) {
+        if ($repeatCount -ne '10' -or [int]$cardCount -lt 2000 -or [int]$userCount -lt 9) {
             throw "Repeat/seed assertions failed: migrations=$repeatCount, card rows=$cardCount, user rows=$userCount."
         }
         "Repeat retained 9 migrations; seeded row checks passed (cards=$cardCount, users=$userCount)."
