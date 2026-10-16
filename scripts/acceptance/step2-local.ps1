@@ -148,8 +148,8 @@ try {
             throw "runner exit=$runnerCode; $($script:lastMigrationFailure); Flyway history table exists=$historyExists; public table count=$tableCount."
         }
         $count = Get-Scalar 'tcg_acceptance' 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;'
-        if ($count -ne '9') { throw "Expected 9 successful migration records; observed $count." }
-        "Flyway V1–V9 recorded successfully; migration application exited zero."
+        if ($count -ne '10') { throw "Expected 10 successful migration records; observed $count." }
+        "Flyway V1–V10 recorded successfully; migration application exited zero."
     }
 
     Set-Status 'Seed separation and repeat migration' {
@@ -229,7 +229,7 @@ try {
 
     Set-Status 'Checksum drift is rejected on an existing schema' {
         Invoke-Docker -DockerArgs @('exec', $containerName, 'createdb', '-U', 'postgres', '-T', 'tcg_acceptance', 'tcg_checksum') -FailureLabel 'Cloning isolated checksum fixture'
-        Invoke-Docker -DockerArgs @('exec', $containerName, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'tcg_checksum', '-c', "UPDATE flyway_schema_history SET checksum = checksum + 1 WHERE version = '9' AND type = 'SQL';") -FailureLabel 'Injecting isolated checksum drift'
+        Invoke-Docker -DockerArgs @('exec', $containerName, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'postgres', '-d', 'tcg_checksum', '-c', "UPDATE flyway_schema_history SET checksum = checksum + 1 WHERE version = '10' AND type = 'SQL';") -FailureLabel 'Injecting isolated checksum drift'
         $driftCode = Invoke-Migration 'tcg_checksum' -CaptureFailure
         if ($driftCode -eq 0 -or $script:lastMigrationFailure -ne 'Flyway migration or validation') {
             throw 'Migration runner did not reject checksum drift through Flyway validation.'

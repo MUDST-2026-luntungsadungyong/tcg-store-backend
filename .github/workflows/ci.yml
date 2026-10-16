@@ -135,14 +135,14 @@ jobs:
           echo "Running Flyway against a fresh database..."
           run_migration
           FRESH_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
-          test "$FRESH_COUNT" -eq 9
+          test "$FRESH_COUNT" -eq 10
 
           echo "Applying development seed separately..."
           psql -v ON_ERROR_STOP=1 -f infra/postgres/init/02-data.sql
           psql -v ON_ERROR_STOP=1 -f infra/postgres/init/03-profile-avatar.sql
           run_migration
           REPEAT_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
-          test "$REPEAT_COUNT" -eq 9
+          test "$REPEAT_COUNT" -eq 10
 
           echo "Verifying database integrity and seed separation..."
           TABLE_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
@@ -183,6 +183,8 @@ jobs:
           test "$BASELINE_COUNT" -eq 1
           V9_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='9' AND success;")
           test "$V9_COUNT" -eq 1
+          V10_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='10' AND success;")
+          test "$V10_COUNT" -eq 1
           UPGRADED_CARD_COUNT=$(psql -t -A -d tcg_store_upgrade -c 'SELECT COUNT(*) FROM local_cards;')
           test "$UPGRADED_CARD_COUNT" -eq "$LEGACY_CARD_COUNT"
           LEGACY_TABLE_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN ('cards', 'products');")
