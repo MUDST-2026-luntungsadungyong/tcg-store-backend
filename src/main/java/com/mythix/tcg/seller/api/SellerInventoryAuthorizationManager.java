@@ -20,8 +20,8 @@ public class SellerInventoryAuthorizationManager
     private final UserRepository userRepository;
 
     @Override
-    public AuthorizationDecision check(
-        Supplier<Authentication> authenticationSupplier,
+    public AuthorizationDecision authorize(
+        Supplier<? extends Authentication> authenticationSupplier,
         RequestAuthorizationContext context
     ) {
         Authentication authentication = authenticationSupplier.get();

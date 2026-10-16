@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tcg-store-backend.invalid/schemas/release-receipt-v2.json",
+  "title": "TCG backend release receipt v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "releaseId", "environment", "sourceCommit", "buildRunId", "deployRunId", "image", "bundleHash", "configHash", "previousReleaseId", "migrationCompatibility", "phase", "status", "timestamps", "evidence"],
+  "properties": {
+    "schemaVersion": {"const": 2},
+    "releaseId": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"},
+    "environment": {"enum": ["staging", "production"]},
+    "sourceCommit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "buildRunId": {"type": "integer", "minimum": 1},
+    "deployRunId": {"type": "integer", "minimum": 1},
+    "image": {
+      "type": "object", "additionalProperties": false,
+      "required": ["repository", "indexDigest", "platformDigests", "verification"],
+      "properties": {
+        "repository": {"const": "ghcr.io/mudst-2026-luntungsadungyong/tcg-store-backend"},
+        "indexDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "platformDigests": {
+          "type": "object", "additionalProperties": false, "required": ["linux/amd64", "linux/arm64"],
+          "properties": {"linux/amd64": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "linux/arm64": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+        },
+        "verification": {
+          "type": "object", "additionalProperties": false, "required": ["signature", "provenance", "sbom"],
+          "properties": {"signature": {"const": true}, "provenance": {"const": true}, "sbom": {"const": true}}
+        }
+      }
+    },
+    "bundleHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "configHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "previousReleaseId": {"type": ["string", "null"], "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"},
+    "migrationCompatibility": {"enum": ["backward-compatible", "unknown", "incompatible"]},
+    "phase": {"enum": ["verification", "render", "admission", "prerequisites", "migration", "rollout", "smoke", "observation", "staging", "production", "rollback", "recovery"]},
+    "status": {"enum": ["accepted", "rejected", "rolled-back", "recovery-required"]},
+    "timestamps": {
+      "type": "object", "additionalProperties": false, "required": ["startedAt", "completedAt"],
+      "properties": {"startedAt": {"type": "string", "format": "date-time"}, "completedAt": {"type": "string", "format": "date-time"}}
+    },
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["bundleSchemaVersion", "bundleHashAlgorithm", "configHashAlgorithm"],
+      "dependentRequired": {"secretReadinessCheckedAt": ["secretReadinessIssuer"], "secretReadinessIssuer": ["secretReadinessCheckedAt"]},
+      "properties": {
+        "bundleSchemaVersion": {"const": 2},
+        "bundleHashAlgorithm": {"const": "sha256-filename-nul-bytes-v1"},
+        "configHashAlgorithm": {"const": "sha256-canonical-configmap-json-v1"},
+        "migrationResult": {"enum": ["passed", "failed", "not-run", "blocked"]},
+        "rolloutResult": {"enum": ["passed", "failed", "not-run", "blocked"]},
+        "smokeResult": {"enum": ["passed", "failed", "not-run", "blocked"]},
+        "observationWindowSeconds": {"type": "integer", "minimum": 0, "maximum": 86400},
+        "previousReceiptId": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$"},
+        "previousBundleHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "approvalReference": {"type": "string", "maxLength": 200},
+        "secretReadinessCheckedAt": {"type": "string", "format": "date-time"},
+        "secretReadinessIssuer": {"const": "platform-operator"},
+        "inventoryHash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "inventory": {"type": "array", "maxItems": 500, "items": {"$ref": "#/$defs/resource"}}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"environment": {"const": "staging"}}},
+      "then": {"properties": {"evidence": {"properties": {"inventory": {"items": {"properties": {"namespace": {"const": "tcg-store-staging"}}}}}}}}
+    },
+    {
+      "if": {"properties": {"environment": {"const": "production"}}},
+      "then": {"properties": {"evidence": {"properties": {"inventory": {"items": {"properties": {"namespace": {"const": "tcg-store-production"}}}}}}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "accepted"}}},
+      "then": {"properties": {"evidence": {
+        "required": ["migrationResult", "rolloutResult", "smokeResult", "observationWindowSeconds", "inventory", "inventoryHash"],
+        "properties": {"observationWindowSeconds": {"minimum": 600}}
+      }}}
+    }
+  ],
+  "$defs": {
+    "resource": {
+      "type": "object", "additionalProperties": false, "required": ["apiVersion", "kind", "namespace", "name"],
+      "properties": {
+        "apiVersion": {"enum": ["apps/v1", "v1", "networking.k8s.io/v1", "autoscaling/v2", "policy/v1", "traefik.io/v1alpha1"]},
+        "kind": {"enum": ["Deployment", "Service", "ConfigMap", "Ingress", "NetworkPolicy", "HorizontalPodAutoscaler", "PodDisruptionBudget", "Middleware", "ServersTransport"]},
+        "namespace": {"enum": ["tcg-store-staging", "tcg-store-production"]},
+        "name": {"type": "string", "minLength": 1}
+      },
+      "oneOf": [
+        {"properties": {"apiVersion": {"const": "apps/v1"}, "kind": {"const": "Deployment"}}},
+        {"properties": {"apiVersion": {"const": "v1"}, "kind": {"enum": ["Service", "ConfigMap"]}}},
+        {"properties": {"apiVersion": {"const": "networking.k8s.io/v1"}, "kind": {"enum": ["Ingress", "NetworkPolicy"]}}},
+        {"properties": {"apiVersion": {"const": "autoscaling/v2"}, "kind": {"const": "HorizontalPodAutoscaler"}}},
+        {"properties": {"apiVersion": {"const": "policy/v1"}, "kind": {"const": "PodDisruptionBudget"}}},
+        {"properties": {"apiVersion": {"const": "traefik.io/v1alpha1"}, "kind": {"enum": ["Middleware", "ServersTransport"]}}}
+      ]
+    }
+  }
+}

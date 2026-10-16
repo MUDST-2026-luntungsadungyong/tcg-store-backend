@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tcg-store-production
+  labels:
+    app.kubernetes.io/part-of: tcg-store
+    app.kubernetes.io/environment: production

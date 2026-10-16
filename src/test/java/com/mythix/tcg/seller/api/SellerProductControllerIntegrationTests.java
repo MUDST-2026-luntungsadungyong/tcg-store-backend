@@ -1,7 +1,7 @@
 package com.mythix.tcg.seller.api;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.mythix.tcg.auth.security.JwtService;
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.order.domain.Order;
@@ -14,8 +14,9 @@ import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -23,6 +24,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
+import software.amazon.awssdk.services.s3.S3Client;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -44,6 +46,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 @Transactional
 class SellerProductControllerIntegrationTests {
+
+    @MockitoBean
+    private S3Client productImageS3Client;
 
     private static final String PRODUCTS_PATH = "/api/seller/products";
     private static final String LISTINGS_ALIAS_PATH = "/api/seller/listings";
@@ -437,7 +442,7 @@ class SellerProductControllerIntegrationTests {
                 .header("Authorization", bearer(sellerToken)))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.image").value(org.hamcrest.Matchers.matchesPattern(
-                "http://localhost:8080/uploads/products/[0-9a-f-]+\\.png"
+                "https://images.test/products/[0-9a-f-]+\\.png"
             )))
             .andExpect(jsonPath("$.condition").value("NM"))
             .andExpect(jsonPath("$.stock").value(4));

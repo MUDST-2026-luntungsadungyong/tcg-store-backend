@@ -1,9 +1,17 @@
 .git
 .github
+.agents
+.ai-memory
+.claude
 .idea
 .vscode
 target
+node_modules
+.local
 *.log
 .env*
+*.diff
+*.dump
 README.md
 docs
+skills-lock.json

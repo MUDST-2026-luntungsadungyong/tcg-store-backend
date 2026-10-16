@@ -1,0 +1,20 @@
+groups:
+  - name: tcg-store-backend-recording
+    interval: 30s
+    rules:
+      - record: tcg:http_requests:rate5m
+        expr: sum by (environment) (rate(http_server_requests_seconds_count{job="tcg-store-backend"}[5m]))
+      - record: tcg:http_5xx:rate5m
+        expr: sum by (environment) (rate(http_server_requests_seconds_count{job="tcg-store-backend",status=~"5.."}[5m]))
+      - record: tcg:http_5xx:ratio5m
+        expr: tcg:http_5xx:rate5m / tcg:http_requests:rate5m
+      - record: tcg:http_read:p95_latency_seconds
+        expr: histogram_quantile(0.95, sum by (le, environment) (rate(http_server_requests_seconds_bucket{job="tcg-store-backend",method="GET",uri=~"/api/(products|cards)(/.*)?"}[10m])))
+      - record: tcg:hikari:connections_in_use_ratio
+        expr: sum by (environment) (hikaricp_connections_active{job="tcg-store-backend"}) / sum by (environment) (hikaricp_connections_max{job="tcg-store-backend"})
+      - record: tcg:s3:operation_errors:rate5m
+        expr: sum by (environment, operation) (rate(tcg_storage_operations_total{job="tcg-store-backend",outcome="error"}[5m]))
+      - record: tcg:s3:operation:p95_latency_seconds
+        expr: histogram_quantile(0.95, sum by (le, environment, operation) (rate(tcg_storage_operation_duration_seconds_bucket{job="tcg-store-backend"}[5m])))
+      - record: tcg:neon:connections_quota_ratio
+        expr: tcg_neon_connections_used{environment=~"staging|production"} / tcg_neon_connections_limit{environment=~"staging|production"}

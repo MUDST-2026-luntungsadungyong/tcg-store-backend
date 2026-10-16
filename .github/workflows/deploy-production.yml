@@ -1,0 +1,135 @@
+name: Promote verified release to production
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Exact successful trusted docker-build workflow run ID
+        required: true
+        type: string
+      release_id:
+        description: Release identity accepted by staging
+        required: true
+        type: string
+      staging_run_id:
+        description: Exact successful deploy-staging workflow_dispatch run ID on main
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+concurrency:
+  group: tcg-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, tcg-deploy]
+    timeout-minutes: 45
+    environment:
+      name: production
+    steps:
+      - name: Checkout protected release source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up pinned Python
+        uses: actions/setup-python@v6.1.0
+        with:
+          python-version: '3.13'
+      - name: Install pinned PyYAML dependency
+        shell: pwsh
+        run: python -m pip install --disable-pip-version-check --requirement scripts/kubernetes/requirements.txt
+
+      - name: Download receipt artifact from the exact staging run
+        shell: pwsh
+        env:
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:STAGING_RUN_ID -notmatch '^[1-9][0-9]*$') { throw 'staging_run_id must be numeric.' }
+          if ($env:RELEASE_ID -notmatch '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$') { throw 'release_id is invalid.' }
+          $receiptDir = Join-Path $env:RUNNER_TEMP ("trusted-staging-receipt-" + [Guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $receiptDir -Force | Out-Null
+          gh run download $env:STAGING_RUN_ID --repo $env:GITHUB_REPOSITORY `
+            --name "release-receipt-$($env:RELEASE_ID)" --dir $receiptDir
+          if ($LASTEXITCODE -ne 0) { throw 'Could not retrieve the named receipt artifact from the exact staging run.' }
+          $receipt = Join-Path $receiptDir "$($env:RELEASE_ID).json"
+          $bundle = Join-Path $receiptDir 'bundle'
+          if (-not (Test-Path -LiteralPath $receipt -PathType Leaf) -or -not (Test-Path -LiteralPath (Join-Path $bundle 'bundle.json') -PathType Leaf)) { throw 'Staging receipt and retained bundle artifact are incomplete.' }
+          "STAGING_RECEIPT_PATH=$receipt" >> $env:GITHUB_ENV
+          "STAGING_BUNDLE_PATH=$bundle" >> $env:GITHUB_ENV
+
+      - name: Validate trusted runner inputs and explicit kube context
+        shell: pwsh
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          TCG_KUBE_CONTEXT: ${{ vars.TCG_KUBE_CONTEXT }}
+          TCG_RELEASE_CONFIG: ${{ vars.TCG_RELEASE_CONFIG }}
+          TCG_SECRET_READINESS: ${{ vars.TCG_SECRET_READINESS }}
+          TCG_OBSERVATION: ${{ vars.TCG_OBSERVATION }}
+          TCG_RELEASE_STATE_ROOT: ${{ vars.TCG_RELEASE_STATE_ROOT }}
+          TCG_RELEASE_PROGRESS_ROOT: ${{ vars.TCG_RELEASE_PROGRESS_ROOT }}
+          TCG_API_URL: ${{ vars.TCG_API_URL }}
+          TCG_MIGRATION_COMPATIBILITY: ${{ vars.TCG_MIGRATION_COMPATIBILITY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($name in @('TCG_KUBE_CONTEXT', 'TCG_RELEASE_CONFIG', 'TCG_SECRET_READINESS', 'TCG_OBSERVATION', 'TCG_RELEASE_STATE_ROOT', 'TCG_RELEASE_PROGRESS_ROOT', 'TCG_API_URL', 'TCG_MIGRATION_COMPATIBILITY', 'TCG_SMOKE_BUYER_EMAIL', 'TCG_SMOKE_BUYER_PASSWORD', 'TCG_SMOKE_KNOWN_OBJECT_URL', 'TCG_SMOKE_STORAGE_HOST')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Trusted runner input $name is not configured." }
+          }
+          if ($env:BUILD_RUN_ID -notmatch '^[1-9][0-9]*$' -or $env:STAGING_RUN_ID -notmatch '^[1-9][0-9]*$') { throw 'Run IDs must be numeric.' }
+          if ($env:RELEASE_ID -notmatch '^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$') { throw 'release_id is invalid.' }
+          foreach ($tool in @('python', 'pwsh', 'kubectl', 'gh', 'cosign', 'docker')) { if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Required release tool $tool is unavailable." } }
+          docker buildx version
+          if ($LASTEXITCODE -ne 0) { throw 'Docker Buildx is required for OCI index inspection.' }
+          kubectl --context $env:TCG_KUBE_CONTEXT get namespace tcg-store-production --request-timeout=10s
+          if ($LASTEXITCODE -ne 0) { throw 'Production credential broker/context preflight failed.' }
+          foreach ($verb in @('get', 'list')) {
+            $result = kubectl --context $env:TCG_KUBE_CONTEXT auth can-i $verb secrets -n tcg-store-production 2>$null
+            $exit = $LASTEXITCODE
+            if ($exit -notin @(0, 1) -or (($result -join '').Trim() -cne 'no')) { throw "CI identity must be denied Secret $verb (kubectl can-i exit 1 with 'no' is expected)." }
+          }
+          $result = kubectl --context $env:TCG_KUBE_CONTEXT auth can-i create namespaces 2>$null
+          $exit = $LASTEXITCODE
+          if ($exit -notin @(0, 1) -or (($result -join '').Trim() -cne 'no')) { throw 'CI identity must not bootstrap namespaces.' }
+
+      - name: Promote the exact staging digest
+        shell: pwsh
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+          STAGING_RECEIPT_ID: ${{ inputs.release_id }}
+          GH_TOKEN: ${{ github.token }}
+          TCG_KUBE_CONTEXT: ${{ vars.TCG_KUBE_CONTEXT }}
+          TCG_RELEASE_CONFIG: ${{ vars.TCG_RELEASE_CONFIG }}
+          TCG_SECRET_READINESS: ${{ vars.TCG_SECRET_READINESS }}
+          TCG_OBSERVATION: ${{ vars.TCG_OBSERVATION }}
+          TCG_RELEASE_STATE_ROOT: ${{ vars.TCG_RELEASE_STATE_ROOT }}
+          TCG_RELEASE_PROGRESS_ROOT: ${{ vars.TCG_RELEASE_PROGRESS_ROOT }}
+          TCG_API_URL: ${{ vars.TCG_API_URL }}
+          TCG_MIGRATION_COMPATIBILITY: ${{ vars.TCG_MIGRATION_COMPATIBILITY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python scripts/release/orchestrate.py `
+            --environment production --repository $env:GITHUB_REPOSITORY `
+            --build-run-id $env:BUILD_RUN_ID --release-id $env:RELEASE_ID `
+            --staging-run-id $env:STAGING_RUN_ID --staging-receipt $env:STAGING_RECEIPT_PATH `
+            --staging-bundle $env:STAGING_BUNDLE_PATH `
+            --staging-receipt-id $env:STAGING_RECEIPT_ID `
+            --config $env:TCG_RELEASE_CONFIG --context $env:TCG_KUBE_CONTEXT `
+            --readiness-file $env:TCG_SECRET_READINESS --observation-file $env:TCG_OBSERVATION `
+            --state-root $env:TCG_RELEASE_STATE_ROOT --progress-root $env:TCG_RELEASE_PROGRESS_ROOT `
+            --base-url $env:TCG_API_URL `
+            --migration-compatibility $env:TCG_MIGRATION_COMPATIBILITY
+          if ($LASTEXITCODE -ne 0) { throw 'Production promotion did not reach accepted state.' }

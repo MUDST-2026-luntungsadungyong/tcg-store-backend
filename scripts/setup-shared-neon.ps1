@@ -28,7 +28,8 @@ if ($LASTEXITCODE -ne 0) {
     --project-id $ProjectId `
     --branch $Branch `
     --file $NeonEnvFile `
-    --service postgres
+    --service postgres `
+    --service object-storage
 
 if ($LASTEXITCODE -ne 0) {
     throw "Neon env pull failed."
@@ -39,4 +40,4 @@ if ($LASTEXITCODE -ne 0) {
     -OutputFile $OutputFile
 
 Write-Output "Shared Neon development environment is ready."
-Write-Output "Start it with: docker compose -f docker-compose.neon.yml up -d --build"
+Write-Output "Start it with: docker compose -f docker-compose.desktop.yml --profile cloud up --build -d backend-cloud frontend"

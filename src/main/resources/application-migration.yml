@@ -1,0 +1,27 @@
+spring:
+  main:
+    web-application-type: none
+  flyway:
+    enabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+logging:
+  level:
+    org.flywaydb: INFO
+
+# The migration process loads the application context so Hibernate can validate
+# entity mappings after Flyway. These inert values keep that validation independent
+# from JWT and object-storage credentials; no web server or S3 request is started.
+app:
+  jwt:
+    secret: migration-only-secret-that-is-at-least-32-bytes
+  seller:
+    product-images:
+      object-storage-region: us-east-1
+      object-storage-bucket: migration-unused
+      object-storage-public-base-url: http://127.0.0.1/migration-unused
+      object-storage-path-style: true
+      object-storage-access-key: migration-unused
+      object-storage-secret-key: migration-unused

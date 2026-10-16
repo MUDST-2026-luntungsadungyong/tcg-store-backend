@@ -37,7 +37,7 @@ public class SellerProductService {
     private final SellerOrderItemRepository orderItemRepository;
     private final CardRepository cardRepository;
     private final UserRepository userRepository;
-    private final SellerProductImageStorage imageStorage;
+    private final SellerProductImageStore imageStorage;
 
     @Transactional(readOnly = true)
     public List<SellerProductResponse> findAll(
@@ -198,9 +198,6 @@ public class SellerProductService {
     }
 
     private void validateImageUrl(String imageUrl) {
-        if (imageUrl.startsWith("/uploads/products/")) {
-            return;
-        }
         try {
             URI uri = URI.create(imageUrl);
             boolean validScheme = "http".equalsIgnoreCase(uri.getScheme())

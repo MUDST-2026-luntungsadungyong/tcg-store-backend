@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tcg-store-local
+
+resources:
+  - prerequisites
+  - ../../base
+
+images:
+  - name: tcg-store-backend
+    newName: tcg-store-service-backend
+    newTag: dev
+
+patches:
+  - path: patches/deployment-hardening.yaml
+  - path: patches/service-api-selector.yaml
+  - path: patches/remove-hpa.yaml
+  - path: patches/remove-pdb.yaml

@@ -1,0 +1,226 @@
+name: tcg-store-service
+
+x-backend-image: &backend-image
+  image: ${BACKEND_IMAGE_NAME:-tcg-store-service-backend}:${BACKEND_IMAGE_TAG:-dev}
+  build:
+    context: .
+    args:
+      MAVEN_CACHE_ID: tcg-pr39-desktop-clean-20261016
+      SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH:-1704067200}
+      OCI_CREATED: ${OCI_CREATED:-2024-01-01T00:00:00Z}
+      OCI_REVISION: ${OCI_REVISION:-dev}
+      OCI_VERSION: ${OCI_VERSION:-dev}
+
+x-backend-security: &backend-security
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=128m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  pids_limit: 256
+  stop_grace_period: 45s
+
+x-backend-common: &backend-common
+  <<: [*backend-image, *backend-security]
+  restart: unless-stopped
+  ports:
+    - "127.0.0.1:${SERVER_PORT:-8080}:8080"
+  healthcheck:
+    test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/actuator/health/readiness"]
+    interval: 10s
+    timeout: 3s
+    retries: 18
+    start_period: 60s
+
+x-migration-entrypoint: &migration-entrypoint
+  - java
+  - -Dloader.main=com.mythix.tcg.DatabaseMigrationApplication
+  - -cp
+  - /app/app.jar
+  - org.springframework.boot.loader.launch.PropertiesLauncher
+
+x-backend-common-environment: &backend-common-environment
+  APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:5174}
+  APP_JWT_SECRET: ${APP_JWT_SECRET:?APP_JWT_SECRET is required}
+  APP_JWT_EXPIRATION_MINUTES: ${APP_JWT_EXPIRATION_MINUTES:-1440}
+  APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+  JPA_SHOW_SQL: ${JPA_SHOW_SQL:-false}
+  FLYWAY_ENABLED: "false"
+
+services:
+  postgres-local:
+    container_name: tcg-store-service-postgres-local
+    image: postgres:16.15-alpine3.24@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    profiles: [local]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-25432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tcg_store}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      TZ: Asia/Bangkok
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-tcg_store}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrations-local:
+    container_name: tcg-store-service-migrations-local
+    <<: [*backend-image, *backend-security]
+    profiles: [local]
+    environment:
+      SPRING_PROFILES_ACTIVE: dev,migration
+      FLYWAY_ENABLED: "true"
+      DB_URL: jdbc:postgresql://postgres-local:5432/${POSTGRES_DB:-tcg_store}
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    depends_on:
+      postgres-local:
+        condition: service_healthy
+    entrypoint: *migration-entrypoint
+    restart: "no"
+
+  seed-local:
+    container_name: tcg-store-service-seed-local
+    image: postgres:16.15-alpine3.24@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    profiles: [local]
+    environment:
+      PGHOST: postgres-local
+      PGPORT: 5432
+      PGDATABASE: ${POSTGRES_DB:-tcg_store}
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./infra/postgres/init:/seed:ro
+      - ./scripts/seed-local-database.sh:/scripts/seed-local-database.sh:ro
+    depends_on:
+      migrations-local:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "/scripts/seed-local-database.sh"]
+    restart: "no"
+
+  backend-local:
+    <<: *backend-common
+    container_name: tcg-store-service-backend-local
+    profiles: [local]
+    environment:
+      <<: *backend-common-environment
+      APP_JWT_SECRET: ${LOCAL_APP_JWT_SECRET:?LOCAL_APP_JWT_SECRET is required for local runtime}
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres-local:5432/${POSTGRES_DB:-tcg_store}
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      OBJECT_STORAGE_ENDPOINT: http://s3mock:9090
+      OBJECT_STORAGE_REGION: us-east-1
+      OBJECT_STORAGE_BUCKET: tcg-product-images
+      OBJECT_STORAGE_PUBLIC_BASE_URL: http://localhost:${S3MOCK_API_PORT:-9090}/tcg-product-images
+      OBJECT_STORAGE_PATH_STYLE: "true"
+      OBJECT_STORAGE_ACCESS_KEY: ${LOCAL_OBJECT_STORAGE_ACCESS_KEY:?LOCAL_OBJECT_STORAGE_ACCESS_KEY is required}
+      OBJECT_STORAGE_SECRET_KEY: ${LOCAL_OBJECT_STORAGE_SECRET_KEY:?LOCAL_OBJECT_STORAGE_SECRET_KEY is required}
+    depends_on:
+      seed-local:
+        condition: service_completed_successfully
+      s3mock:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - tcg-backend-local
+          - tcg-backend-service
+    labels:
+      com.tcg.runtime: local
+
+  migrations-cloud:
+    <<: [*backend-image, *backend-security]
+    container_name: tcg-store-service-migrations-cloud
+    profiles: [cloud]
+    environment:
+      SPRING_PROFILES_ACTIVE: neon,migration
+      FLYWAY_ENABLED: "true"
+      NEON_JDBC_URL: ${NEON_JDBC_URL:?NEON_JDBC_URL is required}
+      NEON_DB_USERNAME: ${NEON_DB_USERNAME:?NEON_DB_USERNAME is required}
+      NEON_DB_PASSWORD: ${NEON_DB_PASSWORD:?NEON_DB_PASSWORD is required}
+      NEON_POOL_MAX_SIZE: ${NEON_POOL_MAX_SIZE:-5}
+      NEON_POOL_MIN_IDLE: ${NEON_POOL_MIN_IDLE:-0}
+    entrypoint: *migration-entrypoint
+    restart: "no"
+
+  backend-cloud:
+    <<: *backend-common
+    container_name: tcg-store-service-backend-cloud
+    profiles: [cloud]
+    environment:
+      <<: *backend-common-environment
+      SPRING_PROFILES_ACTIVE: neon
+      NEON_JDBC_URL: ${NEON_JDBC_URL:?NEON_JDBC_URL is required}
+      NEON_DB_USERNAME: ${NEON_DB_USERNAME:?NEON_DB_USERNAME is required}
+      NEON_DB_PASSWORD: ${NEON_DB_PASSWORD:?NEON_DB_PASSWORD is required}
+      NEON_POOL_MAX_SIZE: ${NEON_POOL_MAX_SIZE:-5}
+      NEON_POOL_MIN_IDLE: ${NEON_POOL_MIN_IDLE:-0}
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-2}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required for cloud S3 image storage}
+      OBJECT_STORAGE_PUBLIC_BASE_URL: ${OBJECT_STORAGE_PUBLIC_BASE_URL:?OBJECT_STORAGE_PUBLIC_BASE_URL is required for cloud S3 image URLs}
+      OBJECT_STORAGE_PATH_STYLE: ${OBJECT_STORAGE_PATH_STYLE:-true}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?OBJECT_STORAGE_ACCESS_KEY is required for cloud S3 image storage}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?OBJECT_STORAGE_SECRET_KEY is required for cloud S3 image storage}
+    depends_on:
+      migrations-cloud:
+        condition: service_completed_successfully
+    networks:
+      default:
+        aliases:
+          - tcg-backend-cloud
+          - tcg-backend-service
+    labels:
+      com.tcg.runtime: cloud
+
+  frontend:
+    container_name: tcg-store-service-frontend
+    profiles: [local, cloud]
+    image: ${DESKTOP_FRONTEND_IMAGE:-tcg-store-service-frontend:dev}
+    build:
+      context: ${FRONTEND_SOURCE_DIR:-.local/pr39-work/tcg-store-frontend}
+      dockerfile: ${FRONTEND_DOCKERFILE:-../../../docker/desktop/frontend.Dockerfile}
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:80"
+    healthcheck:
+      test: [CMD, wget, --spider, -q, 'http://127.0.0.1/']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    # /api is proxied by Nginx to the selected backend's tcg-backend-service alias.
+
+  s3mock:
+    container_name: tcg-store-service-s3mock-local
+    image: adobe/s3mock:5.1.0@sha256:65cf60155a2e235fe7d5bf6c633747d6fc7ed93f9f5a6727d86470026b83c2a2
+    profiles: [local]
+    restart: unless-stopped
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: tcg-product-images
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports:
+      - "127.0.0.1:${S3MOCK_API_PORT:-9090}:9090"
+    volumes:
+      - s3mock_data:/s3mockroot
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/favicon.ico"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres_data:
+    name: tcg-store-service_postgres_data
+  s3mock_data:
+    name: tcg-store-service_s3mock_data

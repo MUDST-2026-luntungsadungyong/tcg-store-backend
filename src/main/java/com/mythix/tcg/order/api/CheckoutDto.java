@@ -1,7 +1,7 @@
 package com.mythix.tcg.order.api;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;

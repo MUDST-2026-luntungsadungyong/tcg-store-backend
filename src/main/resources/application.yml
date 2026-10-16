@@ -1,5 +1,6 @@
 server:
   port: ${SERVER_PORT:8080}
+  shutdown: graceful
   error:
     include-message: never
     include-stacktrace: never
@@ -7,6 +8,8 @@ server:
 spring:
   application:
     name: tcg-store-backend
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:30s}
   servlet:
     multipart:
       max-file-size: 5MB
@@ -16,6 +19,16 @@ spring:
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+    locations: classpath:db/migration
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
+    # Existing pre-Flyway environments are treated as the old V8 shape so V9
+    # always gets a chance to normalize legacy cards/products table names.
+    baseline-version: "8"
+    baseline-description: pre-flyway-v8-schema
+    validate-on-migrate: true
+    clean-disabled: true
   jpa:
     hibernate:
       ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:validate}
@@ -26,25 +39,47 @@ spring:
         format_sql: true
 
 logging:
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        application: ${spring.application.name}
+        environment: ${APP_ENVIRONMENT:local}
   level:
     root: INFO
     com.mythix.tcg: ${APP_LOG_LEVEL:INFO}
+    com.zaxxer.hikari.pool.HikariPool: WARN
+    org.hibernate.orm.connections.pooling: WARN
+    org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration: ERROR
 
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       probes:
         enabled: true
       show-details: never
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
   health:
     livenessstate:
       enabled: true
     readinessstate:
       enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${APP_ENVIRONMENT:local}
+    distribution:
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
 
 app:
   cors:
@@ -57,5 +92,10 @@ app:
     expiration-minutes: ${APP_JWT_EXPIRATION_MINUTES:60}
   seller:
     product-images:
-      storage-directory: ${SELLER_PRODUCT_IMAGE_DIR:uploads/products}
-      public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8080}
+      object-storage-endpoint: ${OBJECT_STORAGE_ENDPOINT:}
+      object-storage-region: ${OBJECT_STORAGE_REGION:us-east-2}
+      object-storage-bucket: ${OBJECT_STORAGE_BUCKET:}
+      object-storage-public-base-url: ${OBJECT_STORAGE_PUBLIC_BASE_URL:}
+      object-storage-path-style: ${OBJECT_STORAGE_PATH_STYLE:true}
+      object-storage-access-key: ${OBJECT_STORAGE_ACCESS_KEY:}
+      object-storage-secret-key: ${OBJECT_STORAGE_SECRET_KEY:}

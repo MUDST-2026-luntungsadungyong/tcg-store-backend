@@ -8,20 +8,23 @@
 
 ## 📁 1. โครงสร้างไฟล์และหน้าที่ของแต่ละไฟล์
 
-ระบบจัดการฐานข้อมูลประกอบด้วย 3 ไฟล์หลักที่ทำงานประสานกัน:
+ระบบจัดการฐานข้อมูลแยก schema migration ออกจากข้อมูลตัวอย่าง:
 
 ```text
 tcg-store-backend/
-├── docker-compose.yml
+├── docker-compose.desktop.yml
+├── src/main/resources/db/migration/
+│   ├── V1__baseline_schema.sql
+│   └── V2__...sql ถึง V9__...sql
 └── infra/postgres/init/
-    ├── 01-schema.sql
-    └── 02-data.sql
+    ├── 02-data.sql
+    └── 03-profile-avatar.sql
 ```
 
 | ชื่อไฟล์ | เปรียบเทียบเข้าใจง่าย | หน้าที่ทางเทคนิค |
 |---|---|---|
-| 📄 **`docker-compose.yml`** | **"ผู้จัดการร้าน / สวิตช์ไฟ"** | สั่งให้ Docker ดึง Image `postgres:16-alpine` มาเปิดเป็น Container โดยไม่ต้องลงโปรแกรม PostgreSQL ลงเครื่องจริง, แมป Port `5432`, และสร้าง Persistent Volume |
-| 📄 **`infra/postgres/init/01-schema.sql`** | **"พิมพ์เขียวสร้างบ้าน (โครงสร้าง)"** | สั่งสร้างตารางทั้ง 8 ตารางตาม ER Diagram (`cards`, `users`, `seller_profiles`, `products`, `cart_items`, `orders`, `order_items`, `collection_items`) พร้อม Primary Key, Foreign Key และ Constraint ป้องกันสต๊อกติดลบ |
+| 📄 **`docker-compose.desktop.yml`** | **"ผู้จัดการร้าน / สวิตช์ไฟ"** | สั่งให้ Docker เปิด PostgreSQL, backend local/cloud, frontend และ S3Mock ตาม service/profile ที่เลือก พร้อม Persistent Volume |
+| 📁 **`src/main/resources/db/migration`** | **"พิมพ์เขียวและสมุดประวัติการต่อเติม"** | Flyway รันไฟล์ `V1`–`V9` ตามลำดับ บันทึก checksum ใน `flyway_schema_history` และหยุด backend หาก schema ไม่ถูกต้อง |
 | 📄 **`infra/postgres/init/02-data.sql`** | **"รถขนเฟอร์นิเจอร์เข้าบ้าน"** | คำสั่ง `INSERT` ข้อมูลการ์ด Pokémon จริง 2,000 ใบ, บัญชีทดสอบ Buyer/Seller และสินค้าพร้อมขาย เพื่อให้ทีมหยิบไปทดสอบหน้าเว็บได้ทันที |
 
 ---
@@ -64,19 +67,19 @@ tcg-store-backend/
 * เปิดโปรแกรม **Docker Desktop** บนคอมพิวเตอร์ของคุณ
 * รอจนกว่าไอคอนรูปปลาวาฬที่มุมซ้ายล่างของ Docker Desktop จะเป็น **สีเขียว (Engine Running)**
 
-### ขั้นตอนที่ 2: เริ่มต้นเปิดฐานข้อมูล
+### ขั้นตอนที่ 2: เริ่ม Local stack
 เปิด Terminal (PowerShell หรือ Command Prompt) ในโฟลเดอร์โปรเจกต์:
-```bash
-docker compose up -d
+```powershell
+./scripts/use-local.ps1 -Build
 ```
-> 💡 **พารามิเตอร์ `-d` (Detached Mode):** สั่งให้เซิร์ฟเวอร์รันในเบื้องหลัง Terminal จะไม่ค้าง สามารถพิมพ์คำสั่งอื่นต่อได้ทันที
+คำสั่งนี้เปิด PostgreSQL และ S3Mock ก่อน จากนั้นรัน `migrations-local`, ลง seed เฉพาะฐานที่ยังว่าง แล้วจึงเปิด backend และ frontend หาก migration ไม่ผ่าน backend จะไม่เริ่มทำงาน
 
 ### ขั้นตอนที่ 3: ตรวจสอบสถานะการทำงาน
 พิมพ์คำสั่ง:
 ```bash
-docker compose ps
+docker compose -f docker-compose.desktop.yml --profile local ps
 ```
-จะเห็นผลลัพธ์แสดงว่า Container ชื่อ `tcg_postgres` มีสถานะเป็น **`Up` (healthy)** บน Port `0.0.0.0:5432->5432/tcp`
+จะเห็นผลลัพธ์แสดงว่า Container ชื่อ `tcg-store-service-postgres-local` มีสถานะเป็น **`Up` (healthy)** บน Port `0.0.0.0:5432->5432/tcp`
 
 ---
 
@@ -90,6 +93,8 @@ docker compose ps
 * **Username:** `postgres`
 * **Password:** `postgres`
 * **JDBC URL:** `jdbc:postgresql://localhost:5432/tcg_store`
+
+คู่มือนี้อธิบาย local PostgreSQL เท่านั้น หากกำลังใช้ Neon Compose ให้สลับกลับด้วย `./scripts/use-local.ps1 -Build` ซึ่งจะหยุด Neon stack ก่อนเริ่ม local stack ดู [Environment setup](environment-setup.md) สำหรับขั้นตอนสลับ runtime
 
 ---
 
@@ -119,7 +124,7 @@ spring:
 
 | คำสั่ง | ผลลัพธ์ | เมื่อไหร่ที่ควรใช้ |
 |---|---|---|
-| `docker compose up -d` | สตาร์ทฐานข้อมูลขึ้นมาทำงาน | ตอนเริ่มทำงานในแต่ละวัน |
-| `docker compose down` | ปิดฐานข้อมูล (ข้อมูลใน Volume ไม่หาย) | ตอนเลิกงาน / ปิดคอม |
-| `docker compose logs -f` | ดูข้อความ Log ของเซิร์ฟเวอร์แบบ Real-time | ตอนต้องการดีบักปัญหา |
-| `docker compose down -v` | **ล้างข้อมูลทั้งหมดทิ้งรวมถึง Volume** | เมื่อต้องการ Reset ฐานข้อมูลให้กลับไปเริ่มต้นใหม่เหมือนวันแรก |
+| `docker compose -f docker-compose.desktop.yml --profile local up -d postgres-local` | สตาร์ทฐานข้อมูล local | ตอนเริ่มทำงานในแต่ละวัน |
+| `docker compose -f docker-compose.desktop.yml --profile local stop postgres-local` | ปิดฐานข้อมูลโดยเก็บ volume | ตอนเลิกงาน / ปิดคอม |
+| `docker compose -f docker-compose.desktop.yml --profile local logs -f postgres-local` | ดูข้อความ log ของ PostgreSQL | ตอนต้องการดีบักปัญหา |
+| `docker compose -f docker-compose.desktop.yml --profile local down -v` | **ล้างข้อมูลทั้งหมดใน Compose volumes** | ใช้เฉพาะเมื่อต้องการ reset และยืนยันแล้วว่าสำรองข้อมูลไว้ |

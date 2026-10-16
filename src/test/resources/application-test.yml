@@ -1,6 +1,8 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:tcg_store_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    # Give each Spring test context its own database. Reusing one named H2
+    # database lets a closing create-drop context remove another context's schema.
+    url: jdbc:h2:mem:tcg_store_test_${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
     username: sa
     password:
     driver-class-name: org.h2.Driver
@@ -17,3 +19,12 @@ app:
   jwt:
     secret: test-only-secret-key-that-is-at-least-thirty-two-bytes-long
     expiration-minutes: 60
+  seller:
+    product-images:
+      object-storage-endpoint: http://127.0.0.1:9090
+      object-storage-region: us-east-1
+      object-storage-bucket: tcg-product-images-test
+      object-storage-public-base-url: https://images.test
+      object-storage-path-style: true
+      object-storage-access-key: test-access-key
+      object-storage-secret-key: test-secret-key

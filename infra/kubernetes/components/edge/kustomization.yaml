@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - ingress.yaml
+  - ingress-auth.yaml
+  - middleware.yaml
+  - servers-transport.yaml
+
+patches:
+  - path: service-transport-patch.yaml
+    target:
+      group: ""
+      version: v1
+      kind: Service
+      name: tcg-store-backend

@@ -48,7 +48,7 @@ cd tcg-store-backend
 Copy-Item .env.example .env
 ```
 
-docker-compose.yml จะหยุดทันทีหากไม่มี APP_JWT_SECRET; ค่าที่อยู่ใน .env.example เป็นค่า development เท่านั้นและต้องเปลี่ยนก่อนใช้ใน shared/production
+Compose จะหยุดทันทีหากไม่มี APP_JWT_SECRET; ค่าที่อยู่ใน .env.example เป็นค่า development เท่านั้นและต้องเปลี่ยนก่อนใช้ใน shared/production
 
 หรือบน macOS/Linux:
 
@@ -56,32 +56,49 @@ docker-compose.yml จะหยุดทันทีหากไม่มี APP
 cp .env.example .env
 ```
 
-รัน backend และ PostgreSQL ด้วย Docker:
+เริ่มต้นด้วย backend และ PostgreSQL ใน local Docker (คำสั่งนี้จะสั่ง migration สำหรับ volume เดิมก่อนเริ่ม backend):
 
 ```bash
-docker compose up --build -d
-docker compose ps
+docker compose -f docker-compose.desktop.yml --profile local up --build -d postgres-local backend-local frontend
+docker compose -f docker-compose.desktop.yml ps
 ```
 
 จากนั้นตรวจ `http://localhost:8080/api/health` (หรือ port ที่ตั้งใน `SERVER_PORT`)
 
-Compose เก็บ PostgreSQL data และไฟล์รูปสินค้าที่อัปโหลดไว้ใน named volumes `tcg_postgres_data` และ `tcg_backend_uploads`
+Compose เก็บ PostgreSQL data ใน `tcg-store-service_postgres_data` และเก็บรูปผ่าน S3Mock ใน `tcg-store-service_s3mock_data` โดย S3Mock จะเปิดอัตโนมัติพร้อม Local backend
 
-หากต้องการรัน backend จาก source เพื่อพัฒนา ให้เปิดเฉพาะ PostgreSQL:
+เริ่ม Cloud backend ที่ใช้ Neon ให้ปิด local backend ก่อน (ทั้งคู่ใช้ host port 8080):
+
+```powershell
+docker compose -f docker-compose.desktop.yml --profile cloud up --build -d backend-cloud frontend
+```
+
+Local backend ใช้ S3Mock เสมอและไม่มี filesystem fallback ส่วน Cloud backend ใช้ S3-compatible Object Storage จากค่า `OBJECT_STORAGE_*`; ห้ามเปิด Local และ Cloud backend พร้อมกันเพราะใช้ host port 8080 ร่วมกัน
+
+หากต้องการรัน backend จาก source แทน Docker ให้เปิด PostgreSQL และ S3Mock:
 
 ```bash
-docker compose up -d postgres
+docker compose -f docker-compose.desktop.yml --profile local up -d postgres-local s3mock
 ```
 
 แล้วรัน backend:
 
 ```powershell
+$env:OBJECT_STORAGE_ENDPOINT="http://localhost:9090"
+$env:OBJECT_STORAGE_REGION="us-east-1"
+$env:OBJECT_STORAGE_BUCKET="tcg-product-images"
+$env:OBJECT_STORAGE_PUBLIC_BASE_URL="http://localhost:9090/tcg-product-images"
+$env:OBJECT_STORAGE_PATH_STYLE="true"
+$env:OBJECT_STORAGE_ACCESS_KEY="s3mock-local-access"
+$env:OBJECT_STORAGE_SECRET_KEY="s3mock-local-secret"
 .\mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-macOS/Linux ใช้ `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev` จากนั้นตรวจ `http://localhost:8080/api/health`
+macOS/Linux ให้ export ค่า `OBJECT_STORAGE_*` ชุดเดียวกัน แล้วใช้ `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev` จากนั้นตรวจ `http://localhost:8080/api/health`
 
 > PostgreSQL รันไฟล์ใน `infra/postgres/init` เฉพาะครั้งแรกที่สร้าง volume หากแก้ schema แล้วใช้ volume เดิม การเปลี่ยนแปลงจะไม่ถูกรันซ้ำ
+
+หากกำลังใช้ Neon ให้สลับไป local ด้วย `./scripts/use-local.ps1 -Build` ซึ่งจะหยุด Neon stack ก่อนเริ่ม local stack หากต้องการ Neon ให้ใช้ `./scripts/use-neon.ps1 -Build` หลัง `neon login`; ดู [Environment setup](docs/environment-setup.md) สำหรับขั้นตอนสลับ runtime
 
 ## เชื่อมกับ frontend
 
@@ -94,7 +111,7 @@ VITE_ENABLE_MOCK_API=false
 
 backend อนุญาต CORS จาก `http://localhost:5173` เป็นค่าเริ่มต้น หาก frontend รันจาก origin อื่นให้ตั้ง `APP_CORS_ALLOWED_ORIGINS`. รายการ endpoint/field ที่ตรวจเทียบจาก frontend จริงอยู่ใน [Frontend–backend API contract](docs/api-contract.md)
 
-เมื่อรัน Spring Boot ตรงจาก shell ค่า override ต้องอยู่ใน process environment; Spring Boot ไม่อ่านไฟล์ `.env` เอง ค่า default ใน `application.yml` ใช้กับ local setup นี้ได้โดยไม่ต้อง export เพิ่ม
+เมื่อรัน Spring Boot ตรงจาก shell ค่า database และ object storage ต้องอยู่ใน process environment; Spring Boot ไม่อ่านไฟล์ `.env` เอง ส่วน Docker Compose จะจัดค่า local S3Mock หรือ Neon Object Storage ให้ตาม profile ที่เลือก
 
 ## Environment variables
 
@@ -108,6 +125,13 @@ backend อนุญาต CORS จาก `http://localhost:5173` เป็น�
 | `POSTGRES_USER` | `postgres` | local Compose user |
 | `POSTGRES_PASSWORD` | `postgres` | local Compose password |
 | `POSTGRES_PORT` | `5432` | host port ของ PostgreSQL |
+| `OBJECT_STORAGE_ENDPOINT` | required | S3-compatible endpoint; Local Compose ใช้ S3Mock และ Cloud ใช้ Neon Object Storage |
+| `OBJECT_STORAGE_REGION` | `us-east-2` | region สำหรับ S3 client |
+| `OBJECT_STORAGE_BUCKET` | `tcg-product-images` | bucket สำหรับรูปสินค้าที่อัปโหลด |
+| `OBJECT_STORAGE_PUBLIC_BASE_URL` | required | public URL prefix ของ bucket |
+| `OBJECT_STORAGE_PATH_STYLE` | `true` | ใช้ path-style URL สำหรับ S3-compatible provider |
+| `OBJECT_STORAGE_ACCESS_KEY` | required | S3 access key; ห้าม commit |
+| `OBJECT_STORAGE_SECRET_KEY` | required | S3 secret key; ห้าม commit |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | comma-separated trusted origins |
 | `APP_JWT_SECRET` | required (or explicit `dev` profile) | HMAC secret for signing JWT; startup fails fast when missing outside the local `dev` profile |
 | `APP_JWT_EXPIRATION_MINUTES` | `60` | JWT expiration time in minutes |
@@ -137,7 +161,7 @@ tcg-store-backend/
 │   ├── collection/            # personal collection
 │   └── common/                # config and health
 ├── src/test/
-├── docker-compose.yml
+├── docker-compose.desktop.yml
 ├── Dockerfile
 ├── pom.xml
 └── CONTRIBUTING.md
@@ -152,11 +176,13 @@ tcg-store-backend/
 | `.\mvnw.cmd spring-boot:run` | รัน application บน Windows |
 | `.\mvnw.cmd test` | รัน unit/integration tests ด้วย test profile |
 | `.\mvnw.cmd verify` | รัน quality gate เดียวกับ CI |
-| `docker compose up --build -d` | build และเปิด backend พร้อม PostgreSQL |
-| `docker compose up -d postgres` | เปิดเฉพาะ local PostgreSQL สำหรับรัน backend จาก source |
-| `docker compose logs -f backend` | ดู backend logs |
-| `docker compose logs -f postgres` | ดู database logs |
-| `docker compose down` | หยุด containers โดยเก็บ volume |
+| `docker compose -f docker-compose.desktop.yml --profile local up -d postgres-local backend-local frontend` | เปิด Local PostgreSQL, backend และ frontend |
+| `docker compose -f docker-compose.desktop.yml --profile cloud up -d backend-cloud frontend` | เปิด backend ที่เชื่อม Neon และ frontend |
+| `docker compose -f docker-compose.desktop.yml --profile local logs -f backend-local` | ดู Local backend logs |
+| `docker compose -f docker-compose.desktop.yml --profile local logs -f postgres-local` | ดู PostgreSQL logs |
+| `docker compose -f docker-compose.desktop.yml --profile local --profile cloud stop` | หยุดทุก service โดยเก็บ volume |
+
+สำหรับสลับ runtime ให้ใช้ helper ใน [Environment setup](docs/environment-setup.md) ซึ่งเลือก services จาก Compose file กลางเดียว
 
 ## Jira scope และ API contract
 
@@ -165,13 +191,15 @@ tcg-store-backend/
 - [Backend architecture](docs/architecture.md) — package rules, ownership และ critical transaction flows
 - [Local database guide](docs/local-database.md) — รายละเอียดฐานข้อมูลเดิม
 - [Environment setup](docs/environment-setup.md) — สร้าง `.env`, ขอสิทธิ์/credential อย่างปลอดภัย และเลือก local, Neon หรือ TiDB
+- [Component D implementation status](docs/kubernetes-component-d-implementation-status.md) — logs/metrics, release workflows, ผลทดสอบ และ live acceptance ที่ยังเหลือ
+- [Kubernetes release operations](docs/kubernetes-component-d-release-operations.md) — platform inputs, staging artifact/promotion, monitoring evidence และ recovery boundaries
 - [Contributing guide](CONTRIBUTING.md) — branch, code, test และ PR conventions
 
 ## Known gaps
 
 - JWT authentication/filter ยังไม่ถูก implement; endpoint ที่ต้อง auth จึงยังไม่พร้อม
 - controller เดิมของ card master ยังคืน JPA entity/Spring `Page` โดยตรง ควรเปลี่ยนเป็น DTO/envelope ตอนทำ SCRUM-10
-- local SQL bootstrap ยังไม่ใช่ production migration system; ควรเพิ่ม Flyway/Liquibase ก่อนหลาย environment
+- Flyway migration gate, probes/graceful shutdown และ hardened multi-arch image มี implementation แล้ว; Kubernetes environments/secure edge อยู่ใน [Component C](docs/kubernetes-component-c-platform-edge-plan.md) และยังต้องผ่าน acceptance บน cluster จริง
 - Jira กับ frontend ยังมีชื่อบางจุดไม่ตรงกัน (`USER`/`CUSTOMER`, `/orders/my-orders`/`/orders/me`, `totalPrice`/`totalAmount`) และถูกบันทึกเป็น open decisions ใน API contract
 
 ## การร่วมพัฒนา

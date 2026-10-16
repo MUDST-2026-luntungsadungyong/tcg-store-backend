@@ -1,0 +1,65 @@
+services:
+  postgres:
+    container_name: tcg-accept-20261016-gate-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tcg_gate
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: tcg-local-acceptance-only
+    tmpfs:
+      - /var/lib/postgresql/data:rw,noexec,nosuid,size=768m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tcg_gate"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  prepare:
+    container_name: tcg-accept-20261016-gate-prepare
+    image: postgres:16-alpine
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: tcg_gate
+      PGUSER: postgres
+      PGPASSWORD: tcg-local-acceptance-only
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["psql -v ON_ERROR_STOP=1 -c 'CREATE TABLE users (id integer);'"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migration:
+    container_name: tcg-accept-20261016-gate-migration
+    image: ${TCG_ACCEPT_BACKEND_IMAGE:-tcg-accept-20261016-backend:current}
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/tcg_gate
+      DB_USERNAME: postgres
+      DB_PASSWORD: tcg-local-acceptance-only
+      FLYWAY_ENABLED: "true"
+      SPRING_PROFILES_ACTIVE: migration
+    entrypoint:
+      - java
+      - '-Dloader.main=com.mythix.tcg.DatabaseMigrationApplication'
+      - -cp
+      - /app/app.jar
+      - org.springframework.boot.loader.launch.PropertiesLauncher
+    depends_on:
+      prepare:
+        condition: service_completed_successfully
+    restart: "no"
+
+  api:
+    container_name: tcg-accept-20261016-gate-api
+    image: ${TCG_ACCEPT_BACKEND_IMAGE:-tcg-accept-20261016-backend:current}
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/tcg_gate
+      DB_USERNAME: postgres
+      DB_PASSWORD: tcg-local-acceptance-only
+      FLYWAY_ENABLED: "false"
+      SPRING_PROFILES_ACTIVE: dev
+      APP_JWT_SECRET: local-acceptance-only-secret-value-long-enough-for-validation
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    restart: "no"

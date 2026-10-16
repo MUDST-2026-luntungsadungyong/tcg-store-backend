@@ -5,3 +5,5 @@ resources:
   - serviceaccount.yaml
   - deployment.yaml
   - service.yaml
+  - poddisruptionbudget.yaml
+  - horizontalpodautoscaler.yaml

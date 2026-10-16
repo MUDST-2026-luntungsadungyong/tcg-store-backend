@@ -1,0 +1,161 @@
+rule_files:
+  - ../rules/recording.yml
+  - ../rules/alerts.yml
+
+evaluation_interval: 30s
+tests:
+  - name: no backend scrape data eventually pages as unknown availability
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: TCGStoreBackendScrapeMissing
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: TCGStoreBackendScrapeMissing
+        exp_alerts:
+          - exp_labels:
+              app: tcg-store-backend
+              environment: staging
+              job: tcg-store-backend
+              severity: critical
+            exp_annotations:
+              summary: No staging backend scrape target is visible
+              description: Prometheus has no discovered backend endpoint for staging. This is unknown availability, not a healthy API.
+
+  - name: scrape target recovery clears no-data alert
+    interval: 1m
+    input_series:
+      - series: 'up{job="tcg-store-backend",environment="staging",app="tcg-store-backend"}'
+        values: '_ _ 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: TCGStoreBackendScrapeMissing
+        exp_alerts: []
+
+  - name: missing cluster exporter is reported as unknown
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: TCGStoreBackendClusterMetricsUnknownStaging
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: TCGStoreBackendClusterMetricsUnknownStaging
+        exp_alerts:
+          - exp_labels:
+              app: tcg-store-backend
+              deployment: tcg-store-backend
+              environment: staging
+              namespace: tcg-store-staging
+              severity: warning
+            exp_annotations:
+              summary: Staging Kubernetes workload telemetry is unknown
+              description: No kube-state-metrics deployment availability series is present. Replica, restart, and OOM signals are unknown, not healthy.
+
+  - name: observed cluster metrics clear the unknown signal
+    interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_available{namespace="tcg-store-staging",deployment="tcg-store-backend"}'
+        values: '_ _ _ _ _ 2 2'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: TCGStoreBackendClusterMetricsUnknownStaging
+        exp_alerts: []
+
+  - name: zero staging replicas fire critical availability and recovery clears
+    interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_available{namespace="tcg-store-staging",deployment="tcg-store-backend"}'
+        values: '2 0 0 0 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: TCGStoreBackendUnavailableStaging
+        exp_alerts:
+          - exp_labels:
+              app: tcg-store-backend
+              deployment: tcg-store-backend
+              environment: staging
+              namespace: tcg-store-staging
+              severity: critical
+            exp_annotations:
+              summary: No staging backend replicas are available
+              description: kube-state-metrics reports zero available backend replicas for two minutes. This is a critical availability signal.
+      - eval_time: 5m
+        alertname: TCGStoreBackendUnavailableStaging
+        exp_alerts: []
+
+  - name: missing storage activity stays explicitly unknown
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: TCGStoreBackendStorageMetricsUnknownStaging
+        exp_alerts:
+          - exp_labels:
+              app: tcg-store-backend
+              environment: staging
+              job: tcg-store-backend
+              severity: warning
+            exp_annotations:
+              summary: Staging object storage telemetry is unknown
+              description: No bounded storage operation counter or histogram bucket has been observed. Perform an approved known-fixture operation to establish storage telemetry; missing data is not healthy.
+
+  - name: observed storage operation clears unknown signal
+    interval: 1m
+    input_series:
+      - series: 'tcg_storage_operations_total{job="tcg-store-backend",environment="staging",operation="read",outcome="success"}'
+        values: '_ _ _ _ _ 1 2'
+      - series: 'tcg_storage_operation_duration_seconds_bucket{job="tcg-store-backend",environment="staging",operation="read",outcome="success",le="+Inf"}'
+        values: '_ _ _ _ _ 1 2'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: TCGStoreBackendStorageMetricsUnknownStaging
+        exp_alerts: []
+
+  - name: sustained five-x-x errors fire and recover
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="tcg-store-backend",environment="staging",status="200",method="GET",uri="/api/products"}'
+        values: '100 200 300 400 500 600 700 800 900'
+      - series: 'http_server_requests_seconds_count{job="tcg-store-backend",environment="staging",status="500",method="GET",uri="/api/products"}'
+        values: '0 10 20 30 40 50 50 50 50 50 50 50'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: TCGStoreBackendHigh5xxRatio
+        exp_alerts:
+          - exp_labels:
+              app: tcg-store-backend
+              environment: staging
+              severity: warning
+            exp_annotations:
+              summary: Backend 5xx ratio is above one percent
+              description: More than one percent of at least 100 requests failed with HTTP 5xx during the five-minute window.
+      - eval_time: 12m
+        alertname: TCGStoreBackendHigh5xxRatio
+        exp_alerts: []
+
+  - name: missing Neon exporter is unknown for staging and production
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: TCGNeonQuotaUnknownStaging
+        exp_alerts:
+          - exp_labels:
+              app: tcg-store-backend
+              environment: staging
+              severity: warning
+            exp_annotations:
+              summary: Staging Neon quota is unknown
+              description: No approved external exporter is supplying both tcg_neon_connections_used and tcg_neon_connections_limit. Unknown is not healthy.
+      - eval_time: 6m
+        alertname: TCGNeonQuotaUnknownProduction
+        exp_alerts:
+          - exp_labels:
+              app: tcg-store-backend
+              environment: production
+              severity: warning
+            exp_annotations:
+              summary: Production Neon quota is unknown
+              description: No approved external exporter is supplying both tcg_neon_connections_used and tcg_neon_connections_limit. Unknown is not healthy.
