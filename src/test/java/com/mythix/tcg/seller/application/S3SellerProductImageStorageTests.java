@@ -42,7 +42,7 @@ class S3SellerProductImageStorageTests {
             bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
         ));
 
-        assertThat(url).matches(
+        assertThat(url).as("public URL contains only a generated managed key").matches(
             "https://images\\.example\\.test/products/"
                 + "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\.png"
         );

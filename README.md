@@ -191,13 +191,15 @@ tcg-store-backend/
 - [Backend architecture](docs/architecture.md) — package rules, ownership และ critical transaction flows
 - [Local database guide](docs/local-database.md) — รายละเอียดฐานข้อมูลเดิม
 - [Environment setup](docs/environment-setup.md) — สร้าง `.env`, ขอสิทธิ์/credential อย่างปลอดภัย และเลือก local, Neon หรือ TiDB
+- [Component D implementation status](docs/kubernetes-component-d-implementation-status.md) — logs/metrics, release workflows, ผลทดสอบ และ live acceptance ที่ยังเหลือ
+- [Kubernetes release operations](docs/kubernetes-component-d-release-operations.md) — platform inputs, staging artifact/promotion, monitoring evidence และ recovery boundaries
 - [Contributing guide](CONTRIBUTING.md) — branch, code, test และ PR conventions
 
 ## Known gaps
 
 - JWT authentication/filter ยังไม่ถูก implement; endpoint ที่ต้อง auth จึงยังไม่พร้อม
 - controller เดิมของ card master ยังคืน JPA entity/Spring `Page` โดยตรง ควรเปลี่ยนเป็น DTO/envelope ตอนทำ SCRUM-10
-- Flyway migration gate พร้อมใช้แล้วทั้ง Local, Cloud และ Kubernetes; งานถัดไปคือ probes/graceful shutdown, hardened multi-arch image และ environment overlays
+- Flyway migration gate, probes/graceful shutdown และ hardened multi-arch image มี implementation แล้ว; Kubernetes environments/secure edge อยู่ใน [Component C](docs/kubernetes-component-c-platform-edge-plan.md) และยังต้องผ่าน acceptance บน cluster จริง
 - Jira กับ frontend ยังมีชื่อบางจุดไม่ตรงกัน (`USER`/`CUSTOMER`, `/orders/my-orders`/`/orders/me`, `totalPrice`/`totalAmount`) และถูกบันทึกเป็น open decisions ใน API contract
 
 ## การร่วมพัฒนา

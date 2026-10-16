@@ -91,33 +91,19 @@ neon login
 
 ## Deploy บน Kubernetes
 
-1. Build และ push image ด้วย immutable SHA tag ผ่าน workflow เดิม
-2. แก้ `newTag` ให้เป็น SHA เดียวกันทั้ง `infra/kubernetes/overlays/neon/kustomization.yaml` และ `infra/kubernetes/overlays/neon/migration/kustomization.yaml`
-3. สร้าง Secret จากเครื่องมือจัดการ secret ของ cluster; ห้ามใช้ `secret.example.yaml` เป็น production secret:
+ใช้ overlays แยก environment จาก Component C เป็นเส้นทางหลัก:
 
-```powershell
-kubectl create namespace tcg-store
-kubectl -n tcg-store create secret generic tcg-store-backend-secrets `
-  --from-literal=neon-jdbc-url="$env:NEON_JDBC_URL" `
-  --from-literal=neon-db-username="$env:NEON_DB_USERNAME" `
-  --from-literal=neon-db-password="$env:NEON_DB_PASSWORD" `
-  --from-literal=app-jwt-secret="$env:APP_JWT_SECRET" `
-  --from-literal=object-storage-access-key="$env:OBJECT_STORAGE_ACCESS_KEY" `
-  --from-literal=object-storage-secret-key="$env:OBJECT_STORAGE_SECRET_KEY"
-```
+- `infra/kubernetes/overlays/local` — Kubernetes local พร้อม optional [PostgreSQL/S3Mock dependencies](./kubernetes-local-dependencies.md)
+- `infra/kubernetes/overlays/staging` — namespace `tcg-store-staging`
+- `infra/kubernetes/overlays/production` — namespace `tcg-store-production`
 
-4. แก้ origin ใน `configmap.yaml`, ตรวจ manifest ทั้งสองชุด แล้ว deploy ผ่าน migration gate:
+ดู [deployment inputs และ acceptance](./kubernetes-component-c-acceptance.md) และ [platform contract](./kubernetes-component-c-platform-contract.md) ก่อน render/deploy ต้องรับ published immutable digest จาก Component B แล้ว inject ให้ API กับ migration จาก release input เดียวกัน
 
-```powershell
-kubectl kustomize infra/kubernetes/overlays/neon
-kubectl kustomize infra/kubernetes/overlays/neon/migration
-./scripts/deploy-neon-kubernetes.ps1
-kubectl -n tcg-store get pods,svc
-```
+สร้าง Secret นอก Git ตาม key contract รวมถึง `neon-migration-*` สำหรับ direct migration endpoint และ migration role แยกจาก runtime role ใช้ Secret provider หรือ protected env file; ห้าม include `secret.example.yaml` ใน release
 
-สคริปต์จะรอ migration Job สำเร็จก่อน apply/rollout Deployment หาก Flyway หรือ Hibernate validation ล้มเหลว deployment รุ่นใหม่จะไม่ถูกเริ่ม
+Deploy adapter `scripts/deploy-kubernetes.ps1` รับ rendered bundle และบังคับระบุ context/environment/release ID รอ migration Job สำเร็จก่อน apply API และไม่ลบ Job เก่าโดยอัตโนมัติ Production ต้องผ่าน schema, policy และ admission validation ก่อน deploy
 
-ถ้าใช้ External Secrets หรือ Sealed Secrets ใน cluster จริง ให้เปลี่ยน `secret.example.yaml` เป็น resource ของเครื่องมือนั้นก่อน deploy
+`overlays/neon` และ `scripts/deploy-neon-kubernetes.ps1` คงไว้เป็น legacy compatibility สำหรับ namespace `tcg-store` เท่านั้น ไม่ใช่เส้นทาง production ใหม่ และยังมี placeholder ที่ต้องแก้ก่อนใช้
 
 ## ขอบเขตและ rollback
 
@@ -132,5 +118,5 @@ kubectl -n tcg-store get pods,svc
 
 1. สร้าง Neon staging branch แยกจาก shared development และทำ backup/restore rehearsal
 2. เพิ่ม S3 upload/read/delete acceptance test ใน CI environment ที่มี bucket ทดสอบ
-3. เพิ่ม startup/liveness/readiness fault tests และ graceful shutdown
-4. เพิ่ม ingress/TLS หลังมี hostname จริงของ backend และ frontend
+3. รัน Component A live-cluster acceptance สำหรับ probes, graceful rollout, rollback และ HPA
+4. ทดสอบ Component C Ingress/TLS และ NetworkPolicy บน cluster/CNI จริงหลังมี DNS และ issuer

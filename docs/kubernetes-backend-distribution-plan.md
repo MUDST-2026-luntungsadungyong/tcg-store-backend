@@ -1,6 +1,6 @@
 # แผนทำ Backend ให้รองรับ Kubernetes และการกระจายโหลด
 
-สถานะเอกสาร: Step 1–2 implemented; Component B runtime และ release reproducibility acceptance ผ่านแล้ว; registry publish/attestation และ digest handoff ยัง pending
+สถานะเอกสาร: Step 1–2 และ A/B/C implementation พร้อม; B/C local verification ผ่าน; D planned; ยังรอ B registry publish/attestation, real platform inputs และ A/C/D live-cluster acceptance
 ขอบเขต: `tcg-store-backend`, Docker, Kubernetes, Neon PostgreSQL และ object storage
 เป้าหมาย: ทำให้ Spring Boot backend รันหลาย replicas ได้อย่างปลอดภัย และมีเส้นทาง deploy/rollback ที่ทำซ้ำได้
 
@@ -19,9 +19,9 @@ Backend ปัจจุบันเป็น modular monolith ที่ใช้
 สิ่งที่ยังขวางการกระจายหลาย Pods:
 
 1. Readiness, graceful shutdown และ rollout behavior ยังไม่ได้ทดสอบกับ dependency failure จริง
-2. ยังไม่มี staging/production overlays และ Ingress/TLS
-3. Release image ยังต้อง harden, scan และ build multi-architecture
-4. ยังต้องเพิ่ม reliability controls, observability และ production rollout automation
+2. Staging/production overlays และ Ingress/TLS มี implementation แล้ว แต่ยังต้องทดสอบกับ DNS/TLS/CNI จริง
+3. Image hardening และ multi-architecture runtime ผ่านในเครื่อง แต่ยังรอ published digest/signature/attestation evidence จาก main pipeline
+4. ต้องทำ Component D instrumentation/observability, trusted release/promotion และ recovery พร้อม live acceptance ของ reliability controls
 
 แผนละเอียดของงานแรกอยู่ที่ [Step 1 — Object storage](./kubernetes-step-1-object-storage-plan.md)
 
@@ -169,6 +169,8 @@ Exit criteria:
 
 ### Step 5 — แยก Kubernetes environments
 
+สถานะ: Implemented — local/staging/production overlays และ release bundle validation ผ่านในเครื่อง; รอ published digest, environment inputs และ live-cluster acceptance
+
 เป้าหมาย: base เดียว deploy ได้หลาย environment โดย config ไม่ปะปนกัน
 
 โครงสร้างเป้าหมาย:
@@ -203,6 +205,8 @@ Exit criteria:
 - Secret value ไม่ปรากฏใน rendered artifact ที่เก็บใน CI logs
 
 ### Step 6 — เพิ่ม Ingress, TLS และ network controls
+
+สถานะ: Implemented ใน manifests — Traefik HTTPS/API-auth routes และ NetworkPolicy ผ่าน schema/policy checks; รอ DNS/TLS/CNI acceptance บน cluster จริง
 
 เป้าหมาย: เปิด backend สู่ internet ผ่าน HTTPS อย่างจำกัด
 
@@ -398,6 +402,8 @@ Dependency: เริ่มได้ทันทีหลัง Step 2 และ
 
 รวม Step 5 และ Step 6
 
+สถานะ: Implementation และ local verification ผ่าน — หลัง D integration มี 30 regression tests, strict schema ของ release bundles 48 resources และ local dependencies 7 resources รวม 55 resources ไม่มี skipped; เพิ่ม schema v2/CI-bootstrap split, monitoring ingress และ ownership/telemetry environment validation โดยยังรอ published digest จาก B, inputs/platform จริง และ live-cluster acceptance
+
 ขอบเขต:
 
 - แยก local/staging/production overlays พร้อม namespace, sizing และ labels
@@ -416,9 +422,13 @@ Acceptance:
 
 Dependency: เริ่มได้ทันทีหลัง Step 2 โดยใช้ image placeholder contract จาก Component B; ผสาน final digest หลัง Component B เสร็จ
 
+รายละเอียด: [Component C — Kubernetes environments and secure edge](./kubernetes-component-c-platform-edge-plan.md)
+
 ### Component D — Observability, release orchestration and cloud rollout
 
 รวมส่วน observability/deployment ของ Step 8 และ Step 9
+
+สถานะ: Main implementation/offline verification ผ่านจาก Luna 6 จำนวน 6 agents และ main review; Python 119 tests ผ่าน, Maven 195 tests มี 2 external-DB skips, strict schemas 55 resources ผ่าน ยังไม่ได้ deploy, full browser journey ยังไม่ implement ครบ และ live acceptance ของ A/B/C/D ยังไม่ปิด ดู [implementation status](./kubernetes-component-d-implementation-status.md)
 
 ขอบเขต:
 
@@ -433,10 +443,12 @@ Acceptance:
 
 - dashboard/alerts ครอบคลุม availability, 5xx, latency, restart, OOM และ DB quota
 - staging ผ่านก่อน production และ production ต้องมี approval
-- smoke test fail แล้ว rollback อัตโนมัติ
+- smoke test fail แล้วคืน prior verified bundle เฉพาะเมื่อ schema backward-compatible; migration failure/unknown schema ต้อง recovery-required และ telemetry no-data ต้อง hold
 - restore rehearsal และ full-stack checklist ผ่าน
 
 Dependency: เริ่ม instrumentation contract ขนานได้ แต่ deployment/rollout integration ต้องรอ Component A, B และ C
+
+รายละเอียด: [Component D — Observability, release orchestration and cloud rollout](./kubernetes-component-d-observability-release-plan.md)
 
 ### Parallel execution map
 

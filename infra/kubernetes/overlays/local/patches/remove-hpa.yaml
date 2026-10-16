@@ -1,0 +1,5 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tcg-store-backend
+$patch: delete

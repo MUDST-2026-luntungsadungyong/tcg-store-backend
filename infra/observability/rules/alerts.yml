@@ -1,0 +1,225 @@
+groups:
+  - name: tcg-store-backend-alerts
+    interval: 30s
+    rules:
+      - alert: TCGStoreBackendScrapeMissing
+        expr: absent(up{job="tcg-store-backend",environment="staging"})
+        for: 2m
+        labels:
+          app: tcg-store-backend
+          environment: staging
+          severity: critical
+        annotations:
+          summary: No staging backend scrape target is visible
+          description: Prometheus has no discovered backend endpoint for staging. This is unknown availability, not a healthy API.
+
+      - alert: TCGStoreBackendScrapeMissingProduction
+        expr: absent(up{job="tcg-store-backend",environment="production"})
+        for: 2m
+        labels:
+          app: tcg-store-backend
+          environment: production
+          severity: critical
+        annotations:
+          summary: No production backend scrape target is visible
+          description: Prometheus has no discovered backend endpoint for production. This is unknown availability, not a healthy API.
+
+      - alert: TCGStoreBackendScrapeDown
+        expr: up{job="tcg-store-backend"} == 0
+        for: 2m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: A backend scrape endpoint is unavailable
+          description: Prometheus discovered a backend endpoint but could not scrape its metrics endpoint.
+
+      - alert: TCGStoreBackendClusterMetricsUnknownStaging
+        expr: absent(kube_deployment_status_replicas_available{namespace="tcg-store-staging",deployment="tcg-store-backend"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: staging
+          severity: warning
+        annotations:
+          summary: Staging Kubernetes workload telemetry is unknown
+          description: No kube-state-metrics deployment availability series is present. Replica, restart, and OOM signals are unknown, not healthy.
+
+      - alert: TCGStoreBackendClusterMetricsUnknownProduction
+        expr: absent(kube_deployment_status_replicas_available{namespace="tcg-store-production",deployment="tcg-store-backend"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: production
+          severity: warning
+        annotations:
+          summary: Production Kubernetes workload telemetry is unknown
+          description: No kube-state-metrics deployment availability series is present. Replica, restart, and OOM signals are unknown, not healthy.
+
+      - alert: TCGStoreBackendReplicaDeficit
+        expr: kube_deployment_status_replicas_available{namespace=~"tcg-store-(staging|production)",deployment="tcg-store-backend"} < 2
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: Fewer than two backend replicas are available
+          description: Kubernetes state metrics show fewer than two available replicas for five minutes.
+
+      - alert: TCGStoreBackendUnavailableStaging
+        expr: kube_deployment_status_replicas_available{namespace="tcg-store-staging",deployment="tcg-store-backend"} < 1
+        for: 2m
+        labels:
+          app: tcg-store-backend
+          environment: staging
+          severity: critical
+        annotations:
+          summary: No staging backend replicas are available
+          description: kube-state-metrics reports zero available backend replicas for two minutes. This is a critical availability signal.
+
+      - alert: TCGStoreBackendUnavailableProduction
+        expr: kube_deployment_status_replicas_available{namespace="tcg-store-production",deployment="tcg-store-backend"} < 1
+        for: 2m
+        labels:
+          app: tcg-store-backend
+          environment: production
+          severity: critical
+        annotations:
+          summary: No production backend replicas are available
+          description: kube-state-metrics reports zero available backend replicas for two minutes. This is a critical availability signal.
+
+      - alert: TCGStoreBackendContainerRestarts
+        expr: sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total{namespace=~"tcg-store-(staging|production)",pod=~"tcg-store-backend-.*"}[10m])) >= 3
+        for: 1m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: Backend container restarted at least three times
+          description: Kubernetes state metrics show at least three container restarts in ten minutes for this backend pod.
+
+      - alert: TCGStoreBackendOOMKilled
+        expr: kube_pod_container_status_last_terminated_reason{namespace=~"tcg-store-(staging|production)",pod=~"tcg-store-backend-.*",reason="OOMKilled"} == 1
+        for: 0m
+        labels:
+          app: tcg-store-backend
+          severity: critical
+        annotations:
+          summary: Backend container was OOMKilled
+          description: Kubernetes state metrics report an OOMKilled last termination reason for this backend container.
+
+      - alert: TCGStoreBackendHigh5xxRatio
+        expr: (tcg:http_5xx:ratio5m > 0.01) and on (environment) (sum by (environment) (increase(http_server_requests_seconds_count{job="tcg-store-backend"}[5m])) >= 100)
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: Backend 5xx ratio is above one percent
+          description: More than one percent of at least 100 requests failed with HTTP 5xx during the five-minute window.
+
+      - alert: TCGStoreBackendHighReadLatency
+        expr: tcg:http_read:p95_latency_seconds > 1
+        for: 10m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: Product or card read p95 latency is above one second
+          description: The ten-minute p95 for GET /api/products or GET /api/cards routes is above the initial staging threshold.
+
+      - alert: TCGStoreBackendHikariPressure
+        expr: tcg:hikari:connections_in_use_ratio > 0.8 or hikaricp_connections_pending{job="tcg-store-backend"} > 0 or increase(hikaricp_connections_timeout_total{job="tcg-store-backend"}[5m]) > 0
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: Backend database connection pool is under pressure
+          description: Hikari usage exceeds 80 percent, connections are pending, or a pool timeout occurred.
+
+      - alert: TCGStoreBackendHikariMetricsUnknownStaging
+        expr: absent(hikaricp_connections_max{job="tcg-store-backend",environment="staging"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: staging
+          severity: warning
+        annotations:
+          summary: Staging database pool telemetry is unknown
+          description: No Hikari maximum-connection series is present for a scraped backend. Database pool pressure cannot be evaluated.
+
+      - alert: TCGStoreBackendHikariMetricsUnknownProduction
+        expr: absent(hikaricp_connections_max{job="tcg-store-backend",environment="production"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: production
+          severity: warning
+        annotations:
+          summary: Production database pool telemetry is unknown
+          description: No Hikari maximum-connection series is present for a scraped backend. Database pool pressure cannot be evaluated.
+
+      - alert: TCGStoreBackendStorageErrors
+        expr: tcg:s3:operation_errors:rate5m > 0
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: Object storage operations are failing
+          description: One or more bounded storage operation labels have reported errors during the five-minute rate window.
+
+      - alert: TCGStoreBackendStorageMetricsUnknownStaging
+        expr: absent(tcg_storage_operations_total{job="tcg-store-backend",environment="staging"}) or absent(tcg_storage_operation_duration_seconds_bucket{job="tcg-store-backend",environment="staging"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: staging
+          severity: warning
+        annotations:
+          summary: Staging object storage telemetry is unknown
+          description: No bounded storage operation counter or histogram bucket has been observed. Perform an approved known-fixture operation to establish storage telemetry; missing data is not healthy.
+
+      - alert: TCGStoreBackendStorageMetricsUnknownProduction
+        expr: absent(tcg_storage_operations_total{job="tcg-store-backend",environment="production"}) or absent(tcg_storage_operation_duration_seconds_bucket{job="tcg-store-backend",environment="production"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: production
+          severity: warning
+        annotations:
+          summary: Production object storage telemetry is unknown
+          description: No bounded storage operation counter or histogram bucket has been observed. Perform an approved known-fixture read to establish storage telemetry; missing data is not healthy.
+
+      - alert: TCGNeonQuotaHigh
+        expr: tcg:neon:connections_quota_ratio > 0.8
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          severity: warning
+        annotations:
+          summary: Neon project connection quota exceeds 80 percent
+          description: This signal must come from the approved external Neon quota exporter; Hikari pool metrics are not a project quota measurement.
+
+      - alert: TCGNeonQuotaUnknownStaging
+        expr: absent(tcg_neon_connections_used{environment="staging"}) or absent(tcg_neon_connections_limit{environment="staging"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: staging
+          severity: warning
+        annotations:
+          summary: Staging Neon quota is unknown
+          description: No approved external exporter is supplying both tcg_neon_connections_used and tcg_neon_connections_limit. Unknown is not healthy.
+
+      - alert: TCGNeonQuotaUnknownProduction
+        expr: absent(tcg_neon_connections_used{environment="production"}) or absent(tcg_neon_connections_limit{environment="production"})
+        for: 5m
+        labels:
+          app: tcg-store-backend
+          environment: production
+          severity: warning
+        annotations:
+          summary: Production Neon quota is unknown
+          description: No approved external exporter is supplying both tcg_neon_connections_used and tcg_neon_connections_limit. Unknown is not healthy.

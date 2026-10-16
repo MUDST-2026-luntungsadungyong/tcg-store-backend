@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: s3mock-local-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: s3mock-local
+  labels:
+    app.kubernetes.io/name: s3mock-local
+    app.kubernetes.io/component: local-dependency
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: s3mock-local
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: s3mock-local
+        app.kubernetes.io/component: local-dependency
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: s3mock
+          image: adobe/s3mock:5.1.0@sha256:65cf60155a2e235fe7d5bf6c633747d6fc7ed93f9f5a6727d86470026b83c2a2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS
+              value: tcg-product-images-local
+            - name: COM_ADOBE_TESTING_S3MOCK_STORE_ROOT
+              value: /s3mockroot
+            - name: COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT
+              value: "true"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          startupProbe:
+            httpGet:
+              path: /favicon.ico
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /favicon.ico
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /favicon.ico
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: s3mock-data
+              mountPath: /s3mockroot
+      volumes:
+        - name: s3mock-data
+          persistentVolumeClaim:
+            claimName: s3mock-local-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3mock-local
+  labels:
+    app.kubernetes.io/name: s3mock-local
+    app.kubernetes.io/component: local-dependency
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: s3mock-local
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+      protocol: TCP

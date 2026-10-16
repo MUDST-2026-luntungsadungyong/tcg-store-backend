@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tcg-store-backend
+spec:
+  selector:
+    app.kubernetes.io/component: api

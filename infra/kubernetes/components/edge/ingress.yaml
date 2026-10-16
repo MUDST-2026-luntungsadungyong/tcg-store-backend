@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tcg-store-backend
+  annotations:
+    cert-manager.io/issuer: tcg-store-issuer
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    traefik.ingress.kubernetes.io/router.middlewares: placeholder-tcg-edge-chain@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - api.replace.invalid
+      secretName: tcg-store-backend-tls
+  rules:
+    - host: api.replace.invalid
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: tcg-store-backend
+                port:
+                  number: 80

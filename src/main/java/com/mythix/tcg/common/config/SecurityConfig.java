@@ -59,6 +59,7 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                 .requestMatchers("/api/health", "/actuator/health", "/actuator/health/**", "/api/cards/**", "/api/products/**", "/api/stores/**", "/api/auth/register", "/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password", "/error").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/collections/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
@@ -77,7 +78,8 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(appProperties.cors().allowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Idempotency-Key"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Idempotency-Key", "X-Request-ID"));
+        config.setExposedHeaders(List.of("X-Request-ID"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

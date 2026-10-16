@@ -1,5 +1,6 @@
 package com.mythix.tcg.seller.application;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -41,8 +42,9 @@ public class SellerProductImageStorageConfiguration {
     @Bean
     SellerProductImageStore s3ProductImageStore(
         S3Client client,
-        SellerProductImageStorageProperties properties
+        SellerProductImageStorageProperties properties,
+        MeterRegistry meterRegistry
     ) {
-        return new S3SellerProductImageStorage(client, properties);
+        return new S3SellerProductImageStorage(client, properties, meterRegistry);
     }
 }

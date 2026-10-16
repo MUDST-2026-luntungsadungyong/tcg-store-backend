@@ -1,0 +1,151 @@
+{
+  "uid": "tcg-store-backend",
+  "title": "TCG Store Backend",
+  "tags": ["tcg-store", "backend", "internal"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "options": [],
+        "refresh": 1,
+        "hide": 0
+      },
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "custom",
+        "query": "staging,production",
+        "current": { "selected": false, "text": "staging", "value": "staging" },
+        "multi": false,
+        "includeAll": false,
+        "options": [
+          { "selected": true, "text": "staging", "value": "staging" },
+          { "selected": false, "text": "production", "value": "production" }
+        ],
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Scrape targets and ready pods",
+      "description": "Ready pod data requires kube-state-metrics. UNKNOWN means the source is missing; an up scrape alone does not prove cluster readiness.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(up{job=\"tcg-store-backend\",environment=\"$environment\"})", "legendFormat": "scrape targets up", "refId": "A" },
+        { "expr": "sum(kube_pod_status_ready{condition=\"true\",namespace=\"tcg-store-$environment\",pod=~\"tcg-store-backend-.*\"})", "legendFormat": "ready pods", "refId": "B" }
+      ],
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "short", "noValue": "UNKNOWN", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "wideLayout": true }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "HTTP request rate and 5xx",
+      "description": "No samples means there is no request telemetry for this interval; it is not a zero-error health result.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "tcg:http_requests:rate5m{environment=\"$environment\"}", "legendFormat": "requests/s", "refId": "A" },
+        { "expr": "tcg:http_5xx:rate5m{environment=\"$environment\"}", "legendFormat": "5xx/s", "refId": "B" }
+      ],
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "reqps", "noValue": "UNKNOWN", "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Product and card read p95 latency",
+      "description": "GET /api/products and GET /api/cards. UNKNOWN means no matching histogram samples were scraped.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "tcg:http_read:p95_latency_seconds{environment=\"$environment\"}", "legendFormat": "p95", "refId": "A" }],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s", "noValue": "UNKNOWN", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "JVM memory used",
+      "description": "UNKNOWN means the JVM memory exporter series is missing.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sum by (area) (jvm_memory_used_bytes{job=\"tcg-store-backend\",environment=\"$environment\"})", "legendFormat": "{{area}}", "refId": "A" }],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "bytes", "noValue": "UNKNOWN", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "showPoints": "never", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Hikari pool pressure",
+      "description": "Requires Hikari metrics. The matching alert reports missing pool telemetry as UNKNOWN.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(hikaricp_connections_active{job=\"tcg-store-backend\",environment=\"$environment\"})", "legendFormat": "active", "refId": "A" },
+        { "expr": "sum(hikaricp_connections_idle{job=\"tcg-store-backend\",environment=\"$environment\"})", "legendFormat": "idle", "refId": "B" },
+        { "expr": "sum(hikaricp_connections_pending{job=\"tcg-store-backend\",environment=\"$environment\"})", "legendFormat": "pending", "refId": "C" },
+        { "expr": "sum(hikaricp_connections_max{job=\"tcg-store-backend\",environment=\"$environment\"})", "legendFormat": "max", "refId": "D" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "short", "noValue": "UNKNOWN", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Object storage errors and p95 latency",
+      "description": "Requires observed storage counter and histogram series. UNKNOWN is not a healthy storage result.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "tcg:s3:operation_errors:rate5m{environment=\"$environment\"}", "legendFormat": "{{operation}} errors/s", "refId": "A" },
+        { "expr": "tcg:s3:operation:p95_latency_seconds{environment=\"$environment\"}", "legendFormat": "{{operation}} p95", "refId": "B" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "noValue": "UNKNOWN", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never", "spanNulls": false } }, "overrides": [{ "matcher": { "id": "byRegexp", "options": "p95" }, "properties": [{ "id": "unit", "value": "s" }] }] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Neon project connection quota",
+      "description": "Requires approved external tcg_neon_connections_used and tcg_neon_connections_limit metrics. UNKNOWN means quota is not measured.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "tcg:neon:connections_quota_ratio{environment=\"$environment\"}", "legendFormat": "quota used", "refId": "A" }],
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "noValue": "UNKNOWN", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.8 }, { "color": "red", "value": 0.9 }] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "wideLayout": true }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Available replicas, restarts and OOMKilled",
+      "description": "Requires kube-state-metrics. Missing cluster series raises a telemetry-unknown alert and displays UNKNOWN here.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "kube_deployment_status_replicas_available{namespace=\"tcg-store-$environment\",deployment=\"tcg-store-backend\"}", "legendFormat": "available", "refId": "A" },
+        { "expr": "sum by (namespace) (increase(kube_pod_container_status_restarts_total{namespace=\"tcg-store-$environment\",pod=~\"tcg-store-backend-.*\"}[10m]))", "legendFormat": "restarts/10m", "refId": "B" },
+        { "expr": "sum by (namespace) (kube_pod_container_status_last_terminated_reason{namespace=\"tcg-store-$environment\",pod=~\"tcg-store-backend-.*\",reason=\"OOMKilled\"})", "legendFormat": "OOMKilled", "refId": "C" }
+      ],
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "short", "noValue": "UNKNOWN", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never", "spanNulls": false } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    }
+  ],
+  "annotations": {
+    "list": [
+      { "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" }, "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)", "name": "Annotations & Alerts", "type": "dashboard" }
+    ]
+  }
+}

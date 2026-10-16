@@ -39,15 +39,25 @@ spring:
         format_sql: true
 
 logging:
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        application: ${spring.application.name}
+        environment: ${APP_ENVIRONMENT:local}
   level:
     root: INFO
     com.mythix.tcg: ${APP_LOG_LEVEL:INFO}
+    com.zaxxer.hikari.pool.HikariPool: WARN
+    org.hibernate.orm.connections.pooling: WARN
+    org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration: ERROR
 
 management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,prometheus
   endpoint:
     health:
       probes:
@@ -63,6 +73,13 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: ${APP_ENVIRONMENT:local}
+    distribution:
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
 
 app:
   cors:

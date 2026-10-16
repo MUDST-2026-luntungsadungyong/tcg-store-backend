@@ -43,3 +43,7 @@ uploads/
 *.class
 node_modules/
 .neon
+
+### Kubernetes validation tooling ###
+__pycache__/
+*.pyc

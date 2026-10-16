@@ -1,0 +1,12 @@
+{
+  "image": "ghcr.io/example/tcg-store-backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "api_host": "api.validation.test",
+  "frontend_origin": "https://shop.validation.test",
+  "object_storage_endpoint": "https://storage.validation.test",
+  "object_storage_region": "test-1",
+  "object_storage_bucket": "tcg-store-ci-fixture",
+  "object_storage_public_base_url": "https://cdn.validation.test/tcg-store-ci-fixture",
+  "object_storage_path_style": true,
+  "ingress_class": "traefik",
+  "tls_issuer": "ci-fixture-issuer"
+}

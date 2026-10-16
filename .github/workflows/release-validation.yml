@@ -1,0 +1,88 @@
+name: Validate Kubernetes release orchestration
+
+on:
+  pull_request:
+    paths:
+      - '.github/actionlint.yaml'
+      - '.github/workflows/deploy-staging.yml'
+      - '.github/workflows/deploy-production.yml'
+      - '.github/workflows/release-validation.yml'
+      - 'scripts/release/**'
+      - 'scripts/kubernetes/**'
+      - 'scripts/deploy-kubernetes.ps1'
+      - 'scripts/smoke/**'
+      - 'infra/observability/**'
+      - 'tests/test_locking.py'
+      - 'tests/test_recovery.py'
+      - 'tests/test_receipts.py'
+      - 'tests/test_verify_artifact.py'
+  push:
+    branches: [main]
+    paths:
+      - '.github/actionlint.yaml'
+      - '.github/workflows/deploy-staging.yml'
+      - '.github/workflows/deploy-production.yml'
+      - '.github/workflows/release-validation.yml'
+      - 'scripts/release/**'
+      - 'scripts/kubernetes/**'
+      - 'scripts/deploy-kubernetes.ps1'
+      - 'scripts/smoke/**'
+      - 'infra/observability/**'
+      - 'tests/test_locking.py'
+      - 'tests/test_recovery.py'
+      - 'tests/test_receipts.py'
+      - 'tests/test_verify_artifact.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout source revision
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up pinned Python
+        uses: actions/setup-python@v6.1.0
+        with:
+          python-version: '3.13'
+      - name: Set up pinned Go for actionlint
+        uses: actions/setup-go@v6.0.0
+        with:
+          go-version: '1.25.3'
+      - name: Install pinned offline validation dependencies
+        run: |
+          python -m pip install --disable-pip-version-check --requirement scripts/release/requirements-test.txt
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Download and verify pinned Linux promtool
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/prometheus-3.15.0.linux-amd64.tar.gz"
+          url="https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.linux-amd64.tar.gz"
+          curl --retry 3 --fail --location --silent --show-error "$url" --output "$archive"
+          echo '2a542df32eac02ee17b9d844fb2aa1de00dafa5476579ba8a3ba862e9d572ea0  '"$archive" | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/prometheus-3.15.0"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/prometheus-3.15.0" --strip-components=1
+          "$RUNNER_TEMP/prometheus-3.15.0/promtool" version | grep -F '3.15.0'
+          echo "PROMTOOL_PATH=$RUNNER_TEMP/prometheus-3.15.0/promtool" >> "$GITHUB_ENV"
+      - name: Validate workflow syntax and static policy
+        run: "$(go env GOPATH)/bin/actionlint -config-file .github/actionlint.yaml .github/workflows/deploy-staging.yml .github/workflows/deploy-production.yml .github/workflows/release-validation.yml"
+      - name: Validate Prometheus configuration, rules, and firing tests
+        run: |
+          "$PROMTOOL_PATH" check config infra/observability/prometheus.yml
+          "$PROMTOOL_PATH" check rules infra/observability/rules/recording.yml infra/observability/rules/alerts.yml
+          "$PROMTOOL_PATH" test rules infra/observability/tests/alerts.test.yml
+      - name: Run offline release core tests
+        run: python -m pytest -q tests/test_locking.py tests/test_recovery.py tests/test_receipts.py tests/test_verify_artifact.py
+      - name: Run mocked release orchestration tests
+        run: python -m unittest discover -s scripts/release/tests -p 'test_*.py' -v
+      - name: Run mocked API smoke tests
+        run: python -m unittest discover -s scripts/smoke/tests -p 'test_*.py' -v
+      - name: Run offline dashboard contract tests
+        run: python -m unittest discover -s infra/observability/tests -p 'test_*.py' -v

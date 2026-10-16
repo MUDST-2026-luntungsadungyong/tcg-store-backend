@@ -1,5 +1,8 @@
 package com.mythix.tcg.seller.application;
 
+import com.mythix.tcg.common.observability.S3OperationObservation;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -29,15 +32,25 @@ public class S3SellerProductImageStorage implements SellerProductImageStore {
     private final String bucket;
     private final String publicUrlPrefix;
     private final SellerProductImageValidator validator;
+    private final MeterRegistry meterRegistry;
 
     public S3SellerProductImageStorage(
         S3Client client,
         SellerProductImageStorageProperties properties
     ) {
+        this(client, properties, Metrics.globalRegistry);
+    }
+
+    public S3SellerProductImageStorage(
+        S3Client client,
+        SellerProductImageStorageProperties properties,
+        MeterRegistry meterRegistry
+    ) {
         this.client = client;
         this.bucket = properties.objectStorageBucket();
         this.publicUrlPrefix = stripTrailingSlashes(properties.objectStoragePublicBaseUrl()) + "/";
         this.validator = new SellerProductImageValidator();
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
@@ -45,7 +58,7 @@ public class S3SellerProductImageStorage implements SellerProductImageStore {
         SellerProductImageValidator.ValidatedImage validated = validator.validate(image);
         String key = OBJECT_PREFIX + UUID.randomUUID() + validated.extension();
         try {
-            client.putObject(
+            S3OperationObservation.record(meterRegistry, S3OperationObservation.Operation.UPLOAD, () -> client.putObject(
                 PutObjectRequest.builder()
                     .bucket(bucket)
                     .key(key)
@@ -53,7 +66,7 @@ public class S3SellerProductImageStorage implements SellerProductImageStore {
                     .cacheControl("public, max-age=31536000, immutable")
                     .build(),
                 RequestBody.fromBytes(validated.content())
-            );
+            ));
             removeOnRollback(key);
             return publicUrlPrefix + key;
         } catch (RuntimeException exception) {
@@ -79,7 +92,8 @@ public class S3SellerProductImageStorage implements SellerProductImageStore {
         }
 
         try {
-            client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+            S3OperationObservation.record(meterRegistry, S3OperationObservation.Operation.DELETE, () ->
+                client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()));
         } catch (RuntimeException exception) {
             throw new SellerProductImageStorageException("Could not remove the product image", exception);
         }
@@ -114,17 +128,19 @@ public class S3SellerProductImageStorage implements SellerProductImageStore {
 
     private void deleteAfterCommit(String key) {
         try {
-            client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+            S3OperationObservation.record(meterRegistry, S3OperationObservation.Operation.DELETE, () ->
+                client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()));
         } catch (RuntimeException exception) {
-            log.warn("Could not remove committed product image object {}/{}", bucket, key, exception);
+            log.warn("Could not remove committed product image object");
         }
     }
 
     private void deleteQuietly(String key) {
         try {
-            client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
+            S3OperationObservation.record(meterRegistry, S3OperationObservation.Operation.DELETE, () ->
+                client.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()));
         } catch (RuntimeException exception) {
-            log.warn("Could not clean up product image object {}/{}", bucket, key, exception);
+            log.warn("Could not clean up product image object");
         }
     }
 

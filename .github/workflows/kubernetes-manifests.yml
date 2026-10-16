@@ -1,0 +1,123 @@
+name: Kubernetes manifest validation
+
+on:
+  pull_request:
+    paths:
+      - "infra/kubernetes/**"
+      - "scripts/kubernetes/**"
+      - "scripts/deploy-kubernetes.ps1"
+      - "scripts/tests/test-deploy-kubernetes.ps1"
+      - ".github/workflows/kubernetes-manifests.yml"
+  push:
+    branches: [main, develop]
+    paths:
+      - "infra/kubernetes/**"
+      - "scripts/kubernetes/**"
+      - "scripts/deploy-kubernetes.ps1"
+      - "scripts/tests/test-deploy-kubernetes.ps1"
+      - ".github/workflows/kubernetes-manifests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  render-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [local, staging, production]
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Set up Python and dependencies
+        uses: actions/setup-python@v6.1.0
+        with:
+          python-version: "3.13"
+      - name: Install pinned Python dependencies
+        run: python -m pip install --requirement scripts/kubernetes/requirements.txt
+
+      - name: Install and checksum pinned kubectl
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl --fail --silent --show-error --location https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl --output "$RUNNER_TEMP/kubectl"
+          curl --fail --silent --show-error --location https://dl.k8s.io/release/v1.34.1/bin/linux/amd64/kubectl.sha256 --output "$RUNNER_TEMP/kubectl.sha256"
+          printf '%s  %s\n' "$(tr -d '\r\n' < "$RUNNER_TEMP/kubectl.sha256")" "$RUNNER_TEMP/kubectl" | sha256sum --check --status
+          install -m 0755 "$RUNNER_TEMP/kubectl" "$HOME/.local/bin/kubectl"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          test "$(kubectl version --client -o json | python -c 'import json,sys; print(json.load(sys.stdin)["clientVersion"]["gitVersion"])')" = "v1.34.1"
+
+      - name: Install and checksum pinned kubeconform
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz --output "$RUNNER_TEMP/kubeconform.tar.gz"
+          printf '%s  %s\n' c31518ddd122663b3f3aa874cfe8178cb0988de944f29c74a0b9260920d115d3 "$RUNNER_TEMP/kubeconform.tar.gz" | sha256sum --check --status
+          tar -xzf "$RUNNER_TEMP/kubeconform.tar.gz" -C "$RUNNER_TEMP" kubeconform
+          install -m 0755 "$RUNNER_TEMP/kubeconform" "$HOME/.local/bin/kubeconform"
+          echo "KUBECONFORM_PATH=$HOME/.local/bin/kubeconform" >> "$GITHUB_ENV"
+          test "$(kubeconform -v)" = "v0.7.0"
+
+      - name: Render local settings without release config
+        if: matrix.environment == 'local'
+        run: >-
+          python scripts/kubernetes/render.py
+          --environment local
+          --output-dir "$RUNNER_TEMP/kubernetes-rendered"
+          --validate
+
+      - name: Render synthetic staging fixture
+        if: matrix.environment == 'staging'
+        run: >-
+          python scripts/kubernetes/render.py
+          --environment staging
+          --config scripts/kubernetes/fixtures/ci-release.json
+          --output-dir "$RUNNER_TEMP/kubernetes-rendered"
+          --validate
+
+      - name: Render production template fixture
+        if: matrix.environment == 'production'
+        env:
+          TCG_K8S_FIXTURE_MODE: "1"
+        run: >-
+          python scripts/kubernetes/render.py
+          --environment production
+          --output-dir "$RUNNER_TEMP/kubernetes-rendered"
+          --validate
+          --allow-template
+
+      - name: Build local dependency validation target
+        run: kubectl kustomize infra/kubernetes/local-dependencies > "$RUNNER_TEMP/local-dependencies.yaml"
+
+      - name: Generate strict schemas from official Traefik v3.5 CRDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          schema_dir="$RUNNER_TEMP/traefik-schemas"
+          crd_file="$RUNNER_TEMP/traefik-crds-v3.5.0.yaml"
+          curl --fail --silent --show-error --location \
+            https://raw.githubusercontent.com/traefik/traefik/v3.5.0/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml \
+            --output "$crd_file"
+          python scripts/kubernetes/traefik_schema.py --input "$crd_file" --output-dir "$schema_dir"
+          echo "TCG_TRAEFIK_SCHEMA_DIR=$schema_dir" >> "$GITHUB_ENV"
+
+      - name: Run Kubernetes policy and CRD regression tests
+        run: python -m unittest discover -s scripts/kubernetes -p 'test_*.py' -v
+
+      - name: Run deployment helper preflight tests
+        shell: pwsh
+        run: ./scripts/tests/test-deploy-kubernetes.ps1
+
+      - name: Validate rendered resources with strict schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          render_dir="$RUNNER_TEMP/kubernetes-rendered/${{ matrix.environment }}"
+          schema_location="$TCG_TRAEFIK_SCHEMA_DIR/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json"
+          kubeconform -strict -summary -kubernetes-version 1.34.1 \
+            -schema-location default -schema-location "$schema_location" \
+            "$render_dir/application.yaml" "$render_dir/migration.yaml" "$render_dir/prerequisites.yaml" \
+            "$RUNNER_TEMP/local-dependencies.yaml"
