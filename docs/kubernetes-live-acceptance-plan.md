@@ -1,8 +1,11 @@
 # Step 1–Component D live acceptance plan
 
-วันที่จัดทำ: 2026-10-16  
-Repository: `C:/Users/Lenovo/tcg-store-backend`  
-Branch: `feat/kubernetes`  
+วันที่จัดทำ: 2026-10-16
+
+Repository: `C:/Users/Lenovo/tcg-store-backend`
+
+Branch: `feat/kubernetes`
+
 Pull request: [#39 — feat(kubernetes): prepare distributed backend releases](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/pull/39)
 
 ## 1. Context snapshot
