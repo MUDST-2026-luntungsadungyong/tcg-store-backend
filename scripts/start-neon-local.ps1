@@ -29,5 +29,5 @@ if ($LASTEXITCODE -ne 0) {
 
 $env:SPRING_PROFILES_ACTIVE = "neon"
 Write-Output "Starting the backend from source with the Neon profile. Credentials are not displayed."
-& .\mvnw.cmd spring-boot:run
+& .\mvnw.cmd compile spring-boot:run
 exit $LASTEXITCODE

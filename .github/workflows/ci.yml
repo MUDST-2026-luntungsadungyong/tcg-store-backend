@@ -214,6 +214,9 @@ jobs:
       - name: Validate canonical Compose profiles
         env:
           APP_JWT_SECRET: ci-only-secret-that-is-at-least-32-bytes
+          LOCAL_APP_JWT_SECRET: ci-only-local-secret-that-is-at-least-32-bytes
+          LOCAL_OBJECT_STORAGE_ACCESS_KEY: ci-only-local-access-key
+          LOCAL_OBJECT_STORAGE_SECRET_KEY: ci-only-local-secret-key
           NEON_JDBC_URL: jdbc:postgresql://example.invalid/neondb
           NEON_DB_USERNAME: ci-only
           NEON_DB_PASSWORD: ci-only
@@ -295,7 +298,7 @@ jobs:
           fetch-depth: 0
 
       - name: Review dependency changes
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
         uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: high

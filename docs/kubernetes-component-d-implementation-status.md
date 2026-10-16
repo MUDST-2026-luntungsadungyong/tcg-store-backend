@@ -51,9 +51,12 @@ State ใช้ Running → Review → Accepted locally; Accepted locally ไม
 - Release core: main รัน pytest 54 tests ผ่าน รวม wrong run/ref/repo/digest/ZIP/index/signature/attestation failures, receipt/bundle/inventory binding, time validation, Lease/CAS และ recovery decisions
 - Orchestration: main รัน unittest 21 tests ผ่าน (12 contracts + 9 integration cases ใช้ real receipts/recovery APIs); รวม success persistence, failed-bundle retention, reused release ID rejection, migration failure, safe prior config/application restore, read-only rollback smoke, no-data hold และ production same-digest/run-linkage แบบจำลอง
 - Smoke API: main รัน 10 mocked tests ผ่าน; browser discovery พบ 2 read-only tests แต่ยังไม่ได้รัน browser กับ deployed frontend
-- Workflow: main รัน actionlint ผ่านทั้ง staging/production/release-validation/kubernetes-manifests; GitHub Actions jobs ยังไม่ได้รันบน GitHub
+- Workflow: main รัน actionlint ผ่านทั้ง staging/production/release-validation/kubernetes-manifests; GitHub [release-validation run 38924310536](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/38924310536) ผ่านบน commit `939498586148bc04442ca7884cdec6fc86ede547` ครบ checksum/tooling, workflow policy, Prometheus, release core, orchestration, API smoke และ dashboard tests
+- Kubernetes CI: GitHub [kubernetes-manifests run 38924514444](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/38924514444) ผ่านบน commit `73c7e17240984e3e10479a512c41c249769e9b05` ครบ local/staging/production matrix พร้อม strict kubeconform และ Traefik schemas
 
 Python รวม 119 tests ผ่าน; full Maven มี 195 tests รวม 2 external-DB skips ไม่รวม promtool rule scenarios/PowerShell scenarios เป็น Python test count
+
+GitHub CI ข้างต้นเป็น offline/fixture validation ไม่ใช่หลักฐานการ deploy จริง ปัจจุบันเครื่องไม่มี Kubernetes context, Docker Desktop Kubernetes ยัง disabled และ repository ไม่มี GitHub staging/production environments, deployment variables/secrets หรือ self-hosted runner label `tcg-deploy` จึงยังรัน deployment workflows และ live acceptance ไม่ได้
 
 ## จุดที่ main review ส่งกลับแก้/รวมเพิ่ม
 
