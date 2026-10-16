@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS orders (
     buyer_id BIGINT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     order_number VARCHAR(50) NOT NULL UNIQUE,
     idempotency_key VARCHAR(100) NOT NULL UNIQUE,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PAID', 'FULFILLED', 'CANCELLED')),
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'CONFIRMED', 'SENT', 'FULFILLED', 'CANCELLED')),
     total_amount DECIMAL(12, 2) NOT NULL CHECK (total_amount >= 0),
     platform_fee DECIMAL(12, 2) NOT NULL DEFAULT 0.00 CHECK (platform_fee >= 0),
     seller_net_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
