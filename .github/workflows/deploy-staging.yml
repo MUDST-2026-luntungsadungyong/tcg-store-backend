@@ -56,6 +56,10 @@ jobs:
           TCG_RELEASE_PROGRESS_ROOT: ${{ vars.TCG_RELEASE_PROGRESS_ROOT }}
           TCG_API_URL: ${{ vars.TCG_API_URL }}
           TCG_MIGRATION_COMPATIBILITY: ${{ vars.TCG_MIGRATION_COMPATIBILITY }}
+          TCG_SMOKE_BUYER_EMAIL: ${{ secrets.TCG_SMOKE_BUYER_EMAIL }}
+          TCG_SMOKE_BUYER_PASSWORD: ${{ secrets.TCG_SMOKE_BUYER_PASSWORD }}
+          TCG_SMOKE_KNOWN_OBJECT_URL: ${{ secrets.TCG_SMOKE_KNOWN_OBJECT_URL }}
+          TCG_SMOKE_STORAGE_HOST: ${{ secrets.TCG_SMOKE_STORAGE_HOST }}
         run: |
           $ErrorActionPreference = 'Stop'
           foreach ($tool in @('python', 'pwsh', 'kubectl', 'gh', 'cosign', 'docker')) { if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "Required release tool $tool is unavailable." } }
@@ -91,6 +95,10 @@ jobs:
           TCG_RELEASE_PROGRESS_ROOT: ${{ vars.TCG_RELEASE_PROGRESS_ROOT }}
           TCG_API_URL: ${{ vars.TCG_API_URL }}
           TCG_MIGRATION_COMPATIBILITY: ${{ vars.TCG_MIGRATION_COMPATIBILITY }}
+          TCG_SMOKE_BUYER_EMAIL: ${{ secrets.TCG_SMOKE_BUYER_EMAIL }}
+          TCG_SMOKE_BUYER_PASSWORD: ${{ secrets.TCG_SMOKE_BUYER_PASSWORD }}
+          TCG_SMOKE_KNOWN_OBJECT_URL: ${{ secrets.TCG_SMOKE_KNOWN_OBJECT_URL }}
+          TCG_SMOKE_STORAGE_HOST: ${{ secrets.TCG_SMOKE_STORAGE_HOST }}
         run: |
           $ErrorActionPreference = 'Stop'
           python scripts/release/orchestrate.py `

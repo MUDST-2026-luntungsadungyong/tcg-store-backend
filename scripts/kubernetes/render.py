@@ -414,6 +414,8 @@ def validate_manifests(manifests: dict[str, list[dict]], environment: str, confi
             fail("backend Service must reference the namespace-scoped approved ServersTransport")
     podspecs = [deploys[0]["spec"]["template"]["spec"], jobs[0]["spec"]["template"]["spec"]]
     for pod in podspecs:
+        if environment != "local" and pod.get("imagePullSecrets") != [{"name": "tcg-store-ghcr-pull"}]:
+            fail("cloud workloads must use the approved private GHCR pull Secret")
         if pod.get("initContainers") or pod.get("ephemeralContainers"):
             fail("workloads cannot contain unvalidated init or ephemeral containers")
         if any(pod.get(key) is True for key in ("hostNetwork", "hostPID", "hostIPC")):

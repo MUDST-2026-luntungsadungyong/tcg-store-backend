@@ -55,6 +55,19 @@ class KubernetesRenderPolicyTests(unittest.TestCase):
         validate_manifests(self.rendered, "staging", self.config)
         self.assertEqual(2, sum(item.get("kind") == "Ingress" for item in self.rendered["application"]))
 
+    def test_cloud_workloads_require_private_registry_pull_secret(self):
+        deployment = next(item for item in self.rendered["application"] if item.get("kind") == "Deployment")
+        migration = next(item for item in self.rendered["migration"] if item.get("kind") == "Job")
+        expected = [{"name": "tcg-store-ghcr-pull"}]
+        self.assertEqual(expected, deployment["spec"]["template"]["spec"]["imagePullSecrets"])
+        self.assertEqual(expected, migration["spec"]["template"]["spec"]["imagePullSecrets"])
+
+        def mutate(documents):
+            workload = next(item for item in documents["application"] if item.get("kind") == "Deployment")
+            workload["spec"]["template"]["spec"].pop("imagePullSecrets")
+
+        self.assert_policy_rejects(mutate)
+
     def test_release_ownership_is_required_on_controlled_resources(self):
         def mutate(docs):
             config_map = next(item for item in docs["prerequisites"] if item.get("kind") == "ConfigMap")

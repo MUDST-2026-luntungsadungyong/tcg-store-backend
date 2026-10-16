@@ -17,6 +17,7 @@ images:
 
 patches:
   - path: patches/deployment-hardening.yaml
+  - path: patches/image-pull-secret.yaml
   - path: patches/service-api-selector.yaml
   - target:
       group: networking.k8s.io
