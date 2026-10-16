@@ -390,20 +390,21 @@ Implementation ทำขนานโดย Luna 6 จำนวน 5 workstreams 
 | การตรวจ | ผล |
 |---|---|
 | Kustomize API/migration/prerequisites ของ local/staging/production | ผ่าน 9 targets |
-| Python policy/regression tests พร้อม real kubeconform negative fixtures | ผ่าน 20 tests, ไม่มี skipped |
+| Python policy/regression tests หลัง Component D integration | ผ่าน 30 tests, ไม่มี skipped |
 | Final local release bundle schema | Valid 6, Invalid 0, Errors 0, Skipped 0 |
-| Final staging fixture bundle schema | Valid 20, Invalid 0, Errors 0, Skipped 0 |
-| Final production template bundle schema | Valid 20, Invalid 0, Errors 0, Skipped 0 |
+| Final staging fixture bundle schema | Valid 21, Invalid 0, Errors 0, Skipped 0 |
+| Final production template bundle schema | Valid 21, Invalid 0, Errors 0, Skipped 0 |
 | Optional local dependency schema | Valid 7, Invalid 0, Errors 0, Skipped 0 |
 | PowerShell deploy adapter suite | ผ่าน: fixture/mismatch preflight, explicit context, migration gate และ real local render/validate พร้อม mocked kubectl |
 | Local bundle preflight และ staging fixture rejection | ผ่าน |
 | GitHub workflow actionlint และ whitespace check | ผ่าน |
+| GitHub Kubernetes manifests workflow | ผ่านทุก matrix: local/staging/production — [run 38924514444](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/38924514444), commit `73c7e17240984e3e10479a512c41c249769e9b05` |
 
-Cloud schema/tests ใช้ synthetic fixtures; ไม่ใช่หลักฐานว่า published image, credentials, DNS, TLS หรือ CNI ของ production ทำงานแล้ว GitHub Actions workflow ถูกตรวจในเครื่องและยังไม่ได้รันบน GitHub ในงานนี้
+Cloud schema/tests ใช้ synthetic fixtures; ไม่ใช่หลักฐานว่า published image, credentials, DNS, TLS หรือ CNI ของ production ทำงานแล้ว GitHub workflow ข้างต้นยืนยัน rendering/policy/strict schema ใน CI เท่านั้น ไม่ใช่ live-cluster acceptance
 
 เครื่องมือที่ตรวจ: kubectl `v1.34.1` / Kustomize `v5.7.1`, Python `3.13`, PyYAML `6.0.3`, kubeconform `v0.7.0`, Traefik schema `v3.5.0`, actionlint `v1.7.12`
 
-ไม่ได้ deploy cluster หรือเปลี่ยน Docker services/volumes, Neon schema/data หรือ cloud bucket จริงใน Component C รอบนี้ และยังไม่ได้ commit
+ไม่ได้ deploy cluster หรือเปลี่ยน Docker services/volumes, Neon schema/data หรือ cloud bucket จริงใน Component C รอบนี้ เครื่องนี้ไม่มี Kubernetes context และ Docker Desktop Kubernetes ยัง disabled; repository ยังไม่มี staging/production environments, deployment variables/secrets หรือ self-hosted runner `tcg-deploy`
 
 ## 17. งานที่ยังเหลือก่อนปิด Component C และเชื่อม A/B/D
 
@@ -422,7 +423,7 @@ Cloud schema/tests ใช้ synthetic fixtures; ไม่ใช่หลัก�
 
 ## 18. Component D integration update
 
-ตัวเลขใน section 16 เป็น baseline ก่อน D integration ผลล่าสุดของ C ที่ main รันซ้ำ: 30 regression tests ไม่มี skip; release bundles 48 resources และ optional local dependencies 7 รวม 55 resources ผ่าน strict kubeconform
+ผลล่าสุดของ C ที่ main รันซ้ำ: 30 regression tests ไม่มี skip; release bundles 48 resources และ optional local dependencies 7 รวม 55 resources ผ่าน strict kubeconform ตัวเลข final bundles ใน section 16 อัปเดตเป็นผลหลัง D integration แล้ว
 
 Schema v2 เพิ่ม full/CI/bootstrap split, canonical bundle/config hashes, exact ownership labels และ `APP_ENVIRONMENT`; cloud เพิ่ม monitoring ingress ที่ต้อง match namespace และ Prometheus pod selectors พร้อมกัน Approved predecessor schema v1 ยัง validate เพื่อ recovery ได้ แต่ไม่ใช้ new CI deployment/automatic prune
 

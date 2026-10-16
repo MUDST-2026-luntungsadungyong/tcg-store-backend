@@ -402,7 +402,7 @@ Dependency: เริ่มได้ทันทีหลัง Step 2 และ
 
 รวม Step 5 และ Step 6
 
-สถานะ: Implementation และ local verification ผ่าน — หลัง D integration มี 30 regression tests, strict schema ของ release bundles 48 resources และ local dependencies 7 resources รวม 55 resources ไม่มี skipped; เพิ่ม schema v2/CI-bootstrap split, monitoring ingress และ ownership/telemetry environment validation โดยยังรอ published digest จาก B, inputs/platform จริง และ live-cluster acceptance
+สถานะ: Implementation, local verification และ GitHub manifest CI ผ่าน — หลัง D integration มี 30 regression tests, strict schema ของ release bundles 48 resources และ local dependencies 7 resources รวม 55 resources ไม่มี skipped; GitHub [run 38924514444](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/38924514444) ผ่าน local/staging/production matrix เพิ่ม schema v2/CI-bootstrap split, monitoring ingress และ ownership/telemetry environment validation โดยยังรอ published digest จาก B, inputs/platform จริง และ live-cluster acceptance
 
 ขอบเขต:
 
@@ -428,7 +428,7 @@ Dependency: เริ่มได้ทันทีหลัง Step 2 โดย
 
 รวมส่วน observability/deployment ของ Step 8 และ Step 9
 
-สถานะ: Main implementation/offline verification ผ่านจาก Luna 6 จำนวน 6 agents และ main review; Python 119 tests ผ่าน, Maven 195 tests มี 2 external-DB skips, strict schemas 55 resources ผ่าน ยังไม่ได้ deploy, full browser journey ยังไม่ implement ครบ และ live acceptance ของ A/B/C/D ยังไม่ปิด ดู [implementation status](./kubernetes-component-d-implementation-status.md)
+สถานะ: Main implementation/offline verification ผ่านจาก Luna 6 จำนวน 6 agents และ main review; Python 119 tests ผ่าน, Maven 195 tests มี 2 external-DB skips, strict schemas 55 resources ผ่าน และ GitHub [release-validation run 38924310536](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/38924310536) ผ่านครบ ยังไม่ได้ deploy, full browser journey ยังไม่ implement ครบ และ live acceptance ของ A/B/C/D ยังไม่ปิด ดู [implementation status](./kubernetes-component-d-implementation-status.md)
 
 ขอบเขต:
 
