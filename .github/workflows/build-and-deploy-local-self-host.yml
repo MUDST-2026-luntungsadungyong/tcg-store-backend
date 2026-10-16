@@ -1,0 +1,191 @@
+name: Build on GitHub and deploy to local self-host
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: tcg-local-self-host
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: tcg-store-service-backend
+  IMAGE_TAG: github-${{ github.run_id }}
+  KUBE_CONTEXT: kind-tcg-component-a
+  KUBE_NAMESPACE: tcg-store-local
+  KUBECONFIG_PATH: C:\Users\Lenovo\tcg-store-backend\.local\pr39-work\component-a\kubeconfig
+  KIND_EXE: C:\Users\Lenovo\tcg-store-backend\target\component-a-tools\kind.exe
+
+jobs:
+  build:
+    name: Build image on GitHub-hosted runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact workflow commit
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Verify application and migrations
+        run: ./mvnw --batch-mode verify
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Read reproducible build metadata
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build local-transfer image
+        env:
+          SOURCE_EPOCH: ${{ steps.source.outputs.epoch }}
+          SOURCE_CREATED: ${{ steps.source.outputs.created }}
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            --load \
+            --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
+            --build-arg "SOURCE_DATE_EPOCH=${SOURCE_EPOCH}" \
+            --build-arg "OCI_CREATED=${SOURCE_CREATED}" \
+            --build-arg "OCI_REVISION=${GITHUB_SHA}" \
+            --build-arg "OCI_VERSION=${IMAGE_TAG}" \
+            .
+
+      - name: Verify image identity and save transfer artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          revision=$(docker image inspect "${IMAGE_NAME}:${IMAGE_TAG}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+          test "${revision}" = "${GITHUB_SHA}"
+          image_id=$(docker image inspect "${IMAGE_NAME}:${IMAGE_TAG}" --format '{{.Id}}')
+          docker save "${IMAGE_NAME}:${IMAGE_TAG}" --output image.tar
+          {
+            echo "image=${IMAGE_NAME}"
+            echo "tag=${IMAGE_TAG}"
+            echo "revision=${revision}"
+            echo "image_id=${image_id}"
+            echo "source_commit=${GITHUB_SHA}"
+          } > image-metadata.txt
+          sha256sum image.tar > image.tar.sha256
+
+      - name: Upload local image transfer artifact
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: local-image-${{ github.run_id }}
+          path: |
+            image.tar
+            image-metadata.txt
+            image.tar.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    name: Load image and deploy on Lenovo self-host
+    needs: build
+    runs-on: [self-hosted, Windows, X64, local-kubernetes]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact build commit
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Download image transfer artifact
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: local-image-${{ github.run_id }}
+          path: ${{ runner.temp }}\local-image-${{ github.run_id }}
+
+      - name: Load image into local Docker and verify revision
+        shell: powershell
+        env:
+          IMAGE_ARCHIVE: ${{ runner.temp }}\local-image-${{ github.run_id }}\image.tar
+          METADATA_FILE: ${{ runner.temp }}\local-image-${{ github.run_id }}\image-metadata.txt
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -LiteralPath $env:IMAGE_ARCHIVE -PathType Leaf)) { throw 'Image transfer artifact is missing.' }
+          docker load --input $env:IMAGE_ARCHIVE
+          if ($LASTEXITCODE -ne 0) { throw 'docker load failed.' }
+          $metadata = Get-Content -LiteralPath $env:METADATA_FILE -Raw
+          if ($metadata -notmatch [regex]::Escape("source_commit=${env:GITHUB_SHA}")) { throw 'Image artifact commit does not match workflow commit.' }
+          $revision = docker image inspect "${env:IMAGE_NAME}:${env:IMAGE_TAG}" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+          if ($LASTEXITCODE -ne 0 -or $revision.Trim() -cne $env:GITHUB_SHA) { throw "Loaded image revision '$revision' does not match $env:GITHUB_SHA." }
+          docker tag "${env:IMAGE_NAME}:${env:IMAGE_TAG}" "${env:IMAGE_NAME}:dev"
+          docker image inspect "${env:IMAGE_NAME}:dev" --format 'LOCAL_IMAGE_ID={{.Id}} REVISION={{index .Config.Labels "org.opencontainers.image.revision"}}'
+
+      - name: Load image into every Kind node
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path -LiteralPath $env:KIND_EXE -PathType Leaf)) { throw "Kind executable is missing: $env:KIND_EXE" }
+          & $env:KIND_EXE load docker-image "${env:IMAGE_NAME}:dev" --name tcg-component-a
+          if ($LASTEXITCODE -ne 0) { throw 'Kind image load failed.' }
+
+      - name: Render and deploy local Kubernetes release
+        shell: powershell
+        env:
+          KUBECONFIG: ${{ env.KUBECONFIG_PATH }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $rendered = Join-Path $env:GITHUB_WORKSPACE "target/kubernetes-local-selfhost-github-$env:GITHUB_RUN_ID"
+          python -m pip install --disable-pip-version-check --requirement scripts/kubernetes/requirements.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Kubernetes renderer dependency installation failed.' }
+          python scripts/kubernetes/render.py --environment local --output-dir $rendered --validate
+          if ($LASTEXITCODE -ne 0) { throw 'Local Kubernetes bundle validation failed.' }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/deploy-kubernetes.ps1 `
+            -Context $env:KUBE_CONTEXT `
+            -Environment local `
+            -ManifestDirectory (Join-Path $rendered 'local') `
+            -ReleaseId "gh-$env:GITHUB_RUN_ID" `
+            -Timeout 10m `
+            -Python python
+          if ($LASTEXITCODE -ne 0) { throw 'Local Kubernetes deployment failed.' }
+
+      - name: Verify rollout and run local health checks
+        shell: powershell
+        env:
+          KUBECONFIG: ${{ env.KUBECONFIG_PATH }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          kubectl --context $env:KUBE_CONTEXT --namespace $env:KUBE_NAMESPACE rollout status deployment/tcg-store-backend --timeout=180s
+          if ($LASTEXITCODE -ne 0) { throw 'Backend rollout did not complete.' }
+          kubectl --context $env:KUBE_CONTEXT --namespace $env:KUBE_NAMESPACE get pods -o wide
+          $portForward = Start-Process -FilePath kubectl.exe -ArgumentList @('--context', $env:KUBE_CONTEXT, '--namespace', $env:KUBE_NAMESPACE, 'port-forward', 'service/tcg-store-backend', '18081:80') -WindowStyle Hidden -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              Start-Sleep -Seconds 2
+              try {
+                $health = Invoke-RestMethod -Uri 'http://127.0.0.1:18081/api/health' -TimeoutSec 5
+                $readiness = Invoke-RestMethod -Uri 'http://127.0.0.1:18081/actuator/health/readiness' -TimeoutSec 5
+                if ($health.status -cne 'UP' -or $readiness.status -cne 'UP') { throw 'Local health response is not UP.' }
+                $ready = $true
+                $health | ConvertTo-Json -Compress
+                $readiness | ConvertTo-Json -Compress
+                break
+              } catch {
+                if ($attempt -eq 29) { throw }
+              }
+            }
+            if (-not $ready) { throw 'Local health checks did not become ready.' }
+          } finally {
+            if ($portForward -and -not $portForward.HasExited) { Stop-Process -Id $portForward.Id -Force -ErrorAction SilentlyContinue }
+          }
