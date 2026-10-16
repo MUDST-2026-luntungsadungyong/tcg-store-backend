@@ -276,18 +276,27 @@ jobs:
           --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
           --certificate-github-workflow-sha "${GITHUB_SHA}"
 
-      - name: Verify Cosign SPDX SBOM attestations
+      - name: Verify Cosign amd64 SPDX SBOM attestation
+        timeout-minutes: 4
         env:
           AMD64_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.amd64 }}
+        run: >-
+          cosign verify-attestation --timeout 90s --type spdxjson "$AMD64_REF"
+          --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}"
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          --certificate-github-workflow-sha "${GITHUB_SHA}"
+          > /dev/null
+
+      - name: Verify Cosign arm64 SPDX SBOM attestation
+        timeout-minutes: 4
+        env:
           ARM64_REF: ${{ env.IMAGE_NAME }}@${{ steps.platform.outputs.arm64 }}
-        run: |
-          set -euo pipefail
-          for image_ref in "$AMD64_REF" "$ARM64_REF"; do
-            cosign verify-attestation --type spdxjson "$image_ref" \
-              --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              --certificate-github-workflow-sha "${GITHUB_SHA}"
-          done
+        run: >-
+          cosign verify-attestation --timeout 90s --type spdxjson "$ARM64_REF"
+          --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-build.yml@${GITHUB_REF}"
+          --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+          --certificate-github-workflow-sha "${GITHUB_SHA}"
+          > /dev/null
 
       - name: Write immutable image contract
         env:
