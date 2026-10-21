@@ -205,3 +205,4 @@ tcg-store-backend/
 ## การร่วมพัฒนา
 
 อ่าน [CONTRIBUTING.md](CONTRIBUTING.md) ก่อนเริ่มงาน ทุก PR ต้องอ้าง Jira key, จำกัด scope ต่อ feature, เพิ่ม test ตาม acceptance criteria และรัน `mvnw verify` ผ่านก่อนขอ review
+<!-- auto-merge verified -->
