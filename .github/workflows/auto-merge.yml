@@ -1,0 +1,21 @@
+name: Auto Enable Merge Queue
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+    branches:
+      - main
+
+jobs:
+  enable-auto-merge:
+    name: Enable Auto-Merge into Queue
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      - name: Enable Auto-Merge
+        run: gh pr merge ${{ github.event.pull_request.number }} --repo MUDST-2026-luntungsadungyong/tcg-store-backend --auto --merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
