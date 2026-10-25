@@ -75,6 +75,22 @@ public class S3SellerProductImageStorage implements SellerProductImageStore {
     }
 
     @Override
+    public ImageData read(String imageUrl) {
+        String key = resolveManagedKey(imageUrl);
+        if (key == null) {
+            throw new SellerProductImageStorageException("Profile photo is not stored in managed image storage");
+        }
+        try {
+            var object = client.getObjectAsBytes(software.amazon.awssdk.services.s3.model.GetObjectRequest.builder()
+                .bucket(bucket).key(key).build());
+            String contentType = key.endsWith(".png") ? "image/png" : key.endsWith(".webp") ? "image/webp" : "image/jpeg";
+            return new ImageData(object.asByteArray(), contentType);
+        } catch (RuntimeException exception) {
+            throw new SellerProductImageStorageException("Could not load the profile photo", exception);
+        }
+    }
+
+    @Override
     public void delete(String imageUrl) {
         String key = resolveManagedKey(imageUrl);
         if (key == null) {

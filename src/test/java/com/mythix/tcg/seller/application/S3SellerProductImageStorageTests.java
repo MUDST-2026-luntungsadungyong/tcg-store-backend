@@ -23,6 +23,26 @@ class S3SellerProductImageStorageTests {
 
     private final S3Client client = mock(S3Client.class);
 
+    @Test
+    void readsManagedImageBytesFromConfiguredBucket() {
+        var requestType = software.amazon.awssdk.services.s3.model.GetObjectRequest.class;
+        org.mockito.Mockito.when(client.getObjectAsBytes(any(requestType))).thenReturn(
+            software.amazon.awssdk.core.ResponseBytes.fromByteArray(
+                software.amazon.awssdk.services.s3.model.GetObjectResponse.builder().build(), new byte[]{1, 2, 3}));
+        var image = storage().read("https://images.example.test/products/12345678-1234-1234-1234-123456789abc.png");
+        assertThat(image.bytes()).containsExactly(1, 2, 3);
+        assertThat(image.contentType()).isEqualTo("image/png");
+        verify(client).getObjectAsBytes(argThat((software.amazon.awssdk.services.s3.model.GetObjectRequest request) ->
+            request.bucket().equals("tcg-product-images") && request.key().equals("products/12345678-1234-1234-1234-123456789abc.png")));
+    }
+
+    @Test
+    void rejectsUnmanagedUrlsBeforeAccessingStorage() {
+        assertThatThrownBy(() -> storage().read("http://localhost:8080/private"))
+            .isInstanceOf(SellerProductImageStorageException.class);
+        org.mockito.Mockito.verifyNoInteractions(client);
+    }
+
     @AfterEach
     void clearTransactionSynchronization() {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
