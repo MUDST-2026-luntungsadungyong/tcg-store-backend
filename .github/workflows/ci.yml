@@ -115,6 +115,7 @@ jobs:
 
       - name: Validate fresh, repeat, upgrade-baseline and backup-restore paths
         env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
           PGPASSWORD: postgres
           PGHOST: localhost
           PGPORT: 5432
@@ -205,9 +206,13 @@ jobs:
           test "$LEGACY_TABLE_COUNT" -eq 0
 
           echo "Rehearsing backup and restore before future production migrations..."
-          pg_dump --format=custom --file=target/tcg_store_test.dump tcg_store_test
+          # Use the server image's tools: newer runner clients can emit settings
+          # (such as transaction_timeout) that PostgreSQL 16 cannot restore.
+          docker exec "$POSTGRES_CONTAINER" pg_dump --version
+          docker exec "$POSTGRES_CONTAINER" pg_restore --version
+          docker exec -e PGPASSWORD "$POSTGRES_CONTAINER" pg_dump -U "$PGUSER" --format=custom tcg_store_test > target/tcg_store_test.dump
           createdb tcg_store_restore
-          pg_restore --exit-on-error --no-owner --dbname=tcg_store_restore target/tcg_store_test.dump
+          docker exec -i -e PGPASSWORD "$POSTGRES_CONTAINER" pg_restore -U "$PGUSER" --exit-on-error --no-owner --dbname=tcg_store_restore < target/tcg_store_test.dump
           RESTORED_CARD_COUNT=$(psql -t -A -d tcg_store_restore -c 'SELECT COUNT(*) FROM global_cards;')
           test "$RESTORED_CARD_COUNT" -eq "$CARD_COUNT"
           DB_URL=jdbc:postgresql://localhost:5432/tcg_store_restore run_migration
