@@ -6,8 +6,10 @@ import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.cart.persistence.CartItemRepository;
 import com.mythix.tcg.collection.domain.CollectionItem;
 import com.mythix.tcg.collection.persistence.CollectionRepository;
+import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
@@ -48,6 +50,12 @@ class PublicCollectionControllerIntegrationTests {
     private CartItemRepository cartItemRepository;
 
     @Autowired
+    private NotificationRepository notificationRepository;
+
+    @Autowired
+    private OrderStatusLogRepository orderStatusLogRepository;
+
+    @Autowired
     private OrderItemRepository orderItemRepository;
 
     @Autowired
@@ -61,6 +69,8 @@ class PublicCollectionControllerIntegrationTests {
 
     @BeforeEach
     void setUp() {
+        notificationRepository.deleteAll();
+        orderStatusLogRepository.deleteAll();
         collectionRepository.deleteAll();
         cartItemRepository.deleteAll();
         orderItemRepository.deleteAll();
