@@ -30,6 +30,14 @@ public class SellerProductController {
 
     private final SellerProductService service;
 
+    @PostMapping(path = "/validate-listing-rules", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ListingRulesResponse validateListingRules(
+        @AuthenticationPrincipal AuthenticatedUser user,
+        @Valid @RequestBody ListingRulesRequest request
+    ) {
+        return service.validateListingRules(user.userId(), request);
+    }
+
     @GetMapping
     public List<SellerProductResponse> findAll(
         @AuthenticationPrincipal AuthenticatedUser user,
@@ -57,7 +65,8 @@ public class SellerProductController {
         @AuthenticationPrincipal AuthenticatedUser user,
         @Valid @ModelAttribute SellerProductMultipartRequest request
     ) {
-        return service.create(user.userId(), request.toRequest(), request.getImage());
+        return service.create(user.userId(), request.toRequest(), request.getImage(),
+            request.getFrontImage(), request.getBackImage(), request.getAdditionalImages());
     }
 
     @PutMapping(path = "/{productId}", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -75,7 +84,8 @@ public class SellerProductController {
         @PathVariable Long productId,
         @Valid @ModelAttribute SellerProductMultipartRequest request
     ) {
-        return service.update(user.userId(), productId, request.toRequest(), request.getImage());
+        return service.update(user.userId(), productId, request.toRequest(), request.getImage(),
+            request.getFrontImage(), request.getBackImage(), request.getAdditionalImages());
     }
 
     @PatchMapping({"/{productId}/status", "/{productId}/visibility"})

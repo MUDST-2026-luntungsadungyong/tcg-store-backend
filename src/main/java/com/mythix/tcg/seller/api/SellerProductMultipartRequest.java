@@ -12,6 +12,7 @@ import lombok.Setter;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @Setter
@@ -31,6 +32,24 @@ public class SellerProductMultipartRequest {
     private String imageUrl;
 
     private MultipartFile image;
+
+    private MultipartFile frontImage;
+    private MultipartFile backImage;
+    @Size(max = 4)
+    private List<MultipartFile> additionalImages;
+    @Size(max = 500)
+    private String actualImageFrontUrl;
+    @Size(max = 500)
+    private String actualImageBackUrl;
+    @Size(max = 4)
+    private List<@NotBlank @Size(max = 500) String> additionalImageUrls;
+    private boolean clearAdditionalImages;
+    @Pattern(regexp = "(?i)(PSA|BGS|CGC)?", message = "Grading company must be PSA, BGS, or CGC")
+    private String gradingCompany;
+    @Size(max = 30)
+    private String grade;
+    @Size(max = 100)
+    private String certNumber;
 
     @NotNull(message = "Sell price is required")
     @DecimalMin(value = "0.01", message = "Sell price must be greater than 0")
@@ -78,7 +97,13 @@ public class SellerProductMultipartRequest {
             language,
             set,
             rarity,
-            cardId
+            cardId,
+            actualImageFrontUrl,
+            actualImageBackUrl,
+            additionalImageUrls != null ? additionalImageUrls : clearAdditionalImages ? List.of() : null,
+            gradingCompany,
+            grade,
+            certNumber
         );
     }
 }

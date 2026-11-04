@@ -9,6 +9,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "local_cards")
@@ -33,6 +35,29 @@ public class Product {
 
     @Column(name = "custom_image_url", nullable = false, length = 500)
     private String customImageUrl;
+
+    @Column(name = "actual_image_front_url", length = 500)
+    private String actualImageFrontUrl;
+
+    @Column(name = "actual_image_back_url", length = 500)
+    private String actualImageBackUrl;
+
+    @ElementCollection
+    @CollectionTable(name = "product_actual_images", joinColumns = @JoinColumn(name = "local_card_id"))
+    @OrderColumn(name = "position")
+    @org.hibernate.annotations.BatchSize(size = 100)
+    @Column(name = "image_url", nullable = false, length = 500)
+    @Builder.Default
+    private List<String> additionalImageUrls = new ArrayList<>();
+
+    @Column(name = "grading_company", length = 10)
+    private String gradingCompany;
+
+    @Column(length = 30)
+    private String grade;
+
+    @Column(name = "cert_number", length = 100)
+    private String certNumber;
 
     @Column(name = "`condition`", nullable = false, length = 50)
     private String condition;

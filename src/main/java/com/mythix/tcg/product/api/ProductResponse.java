@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @NoArgsConstructor
@@ -21,6 +22,14 @@ public class ProductResponse {
     private String name;
     private String game;
     private String image;
+    private String imageSmall;
+    private String imageLarge;
+    private String actualImageFrontUrl;
+    private String actualImageBackUrl;
+    private List<String> additionalImageUrls;
+    private String gradingCompany;
+    private String grade;
+    private String certNumber;
     private BigDecimal price;
     private BigDecimal cost;
     private Integer stock;
@@ -67,6 +76,14 @@ public class ProductResponse {
                 .name(product.getCard() != null ? product.getCard().getName() : null)
                 .game("Pokemon")
                 .image(image)
+                .imageSmall(product.getCard() != null ? product.getCard().getImageSmall() : null)
+                .imageLarge(product.getCard() != null ? product.getCard().getImageLarge() : null)
+                .actualImageFrontUrl(product.getActualImageFrontUrl())
+                .actualImageBackUrl(product.getActualImageBackUrl())
+                .additionalImageUrls(List.copyOf(product.getAdditionalImageUrls()))
+                .gradingCompany(product.getGradingCompany())
+                .grade(product.getGrade())
+                .certNumber(product.getCertNumber())
                 .price(product.getPrice())
                 .cost(product.getCost())
                 .stock(availableStock)

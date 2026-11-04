@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record SellerProductRequest(
     @NotBlank(message = "Product name is required")
@@ -59,6 +60,21 @@ public record SellerProductRequest(
     String rarity,
 
     @Size(max = 100, message = "Card ID must be at most 100 characters")
-    String cardId
+    String cardId,
+
+    @Size(max = 500) String actualImageFrontUrl,
+    @Size(max = 500) String actualImageBackUrl,
+    @Size(max = 4) List<@NotBlank @Size(max = 500) String> additionalImageUrls,
+    @Pattern(regexp = "(?i)(PSA|BGS|CGC)?", message = "Grading company must be PSA, BGS, or CGC")
+    String gradingCompany,
+    @Size(max = 30) String grade,
+    @Size(max = 100) String certNumber
 ) {
+    // Preserve source compatibility for clients/tests of the original request.
+    public SellerProductRequest(String name, String game, String image, BigDecimal price,
+        BigDecimal cost, Integer stock, String status, String condition, String language,
+        String set, String rarity, String cardId) {
+        this(name, game, image, price, cost, stock, status, condition, language, set, rarity,
+            cardId, null, null, null, null, null, null);
+    }
 }
