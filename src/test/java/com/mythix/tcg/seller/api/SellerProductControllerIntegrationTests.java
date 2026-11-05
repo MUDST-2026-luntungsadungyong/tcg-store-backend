@@ -283,10 +283,8 @@ class SellerProductControllerIntegrationTests {
         String request = VALID_CREATE_REQUEST.substring(0, VALID_CREATE_REQUEST.lastIndexOf('}'))
             + ",\n  \"sellerId\": \"" + otherSeller.getId() + "\"\n}";
 
-        String response = mockMvc.perform(post(PRODUCTS_PATH)
-                .header("Authorization", bearer(sellerToken))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(request))
+        String response = mockMvc.perform(multipartWithActualPhotos(request)
+                .header("Authorization", bearer(sellerToken)))
             .andExpect(status().isCreated())
             .andReturn().getResponse().getContentAsString();
 
@@ -299,7 +297,7 @@ class SellerProductControllerIntegrationTests {
             seller.getId(),
             "Umbreon VMAX",
             "Pokemon",
-            "https://example.com/umbreon-vmax.webp",
+            row.path("actualImageFrontUrl").asText(),
             "1999.90",
             "1200.25",
             4,
@@ -323,7 +321,9 @@ class SellerProductControllerIntegrationTests {
         assertThat(saved.getCard().getSupertype()).isEqualTo("Pokemon");
         assertThat(saved.getCard().getSetName()).isEqualTo("Evolving Skies");
         assertThat(saved.getCard().getRarity()).isEqualTo("Secret Rare");
-        assertThat(saved.getCustomImageUrl()).isEqualTo("https://example.com/umbreon-vmax.webp");
+        assertThat(saved.getCustomImageUrl()).isEqualTo(row.path("actualImageFrontUrl").asText());
+        assertThat(saved.getActualImageFrontUrl()).matches("https://images.test/products/[0-9a-f-]+\\.png");
+        assertThat(saved.getActualImageBackUrl()).isNotEqualTo(saved.getActualImageFrontUrl());
         assertThat(saved.getOnHand()).isEqualTo(4);
         assertThat(saved.getReserved()).isZero();
     }
@@ -364,10 +364,8 @@ class SellerProductControllerIntegrationTests {
             }
             """;
 
-        String response = mockMvc.perform(post(PRODUCTS_PATH)
-                .header("Authorization", bearer(sellerToken))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(request))
+        String response = mockMvc.perform(multipartWithActualPhotos(request)
+                .header("Authorization", bearer(sellerToken)))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.cardId").value("catalog-scrum59-card"))
             .andExpect(jsonPath("$.name").value("Charizard"))
@@ -431,6 +429,8 @@ class SellerProductControllerIntegrationTests {
 
         mockMvc.perform(multipart(PRODUCTS_PATH)
                 .file(image)
+                .file(actualPhoto("frontImage"))
+                .file(actualPhoto("backImage"))
                 .param("name", "Umbreon VMAX")
                 .param("game", "Pokemon")
                 .param("price", "1999.90")
@@ -653,6 +653,20 @@ class SellerProductControllerIntegrationTests {
             .andExpect(jsonPath("$.length()").value(1))
             .andExpect(jsonPath("$[0].status").value("HIDE"));
 
+        // Historical rows stay readable, but republishing must satisfy the
+        // new photo policy. Attach real multipart photos before enabling SHOW.
+        mockMvc.perform(multipart(PRODUCTS_PATH + "/{id}", productId)
+                .file(actualPhoto("frontImage")).file(actualPhoto("backImage"))
+                .param("name", "Historical").param("game", "Pokemon")
+                .param("imageUrl", "https://example.com/historical.webp")
+                .param("price", "100.00").param("cost", "40.00")
+                .param("stock", "2").param("status", "HIDE")
+                .with(request -> { request.setMethod("PUT"); return request; })
+                .header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.actualImageFrontUrl").isNotEmpty())
+            .andExpect(jsonPath("$.actualImageBackUrl").isNotEmpty());
+
         mockMvc.perform(patch(PRODUCTS_PATH + "/{id}/status", productId)
                 .header("Authorization", bearer(sellerToken))
                 .contentType(MediaType.APPLICATION_JSON)
@@ -660,15 +674,322 @@ class SellerProductControllerIntegrationTests {
             .andExpect(status().isNoContent());
     }
 
+    @Test
+    void optionalCatalogListingCanPublishWithoutActualPhotosBelowThreshold() throws Exception {
+        Product existing = policyProduct("Common", "499.99", "HIDE");
+        mockMvc.perform(post(PRODUCTS_PATH).header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON).content(policyJson(existing, "SHOW", "499.99", "")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.status").value("SHOW"))
+            .andExpect(jsonPath("$.actualImageFrontUrl").doesNotExist())
+            .andExpect(jsonPath("$.additionalImageUrls").isEmpty());
+    }
+
+    @Test
+    void highPriceRequiresBothSidesEvenWhenClientClaimsCommonOrProvidesImageUrl() throws Exception {
+        Product existing = policyProduct("Common", "500.00", "HIDE");
+        mockMvc.perform(post(PRODUCTS_PATH).header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON).content(policyJson(existing, "SHOW", "500.00", "")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImages").exists());
+    }
+
+    @Test
+    void actualPhotoUrlCannotBeSpoofedOnCreateEvenForOptionalListing() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        mockMvc.perform(post(PRODUCTS_PATH).header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON).content(policyJson(existing, "SHOW", "10",
+                    ",\"actualImageFrontUrl\":\"https://images.test/products/foreign.png\"")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImageFrontUrl").exists());
+    }
+
+    @Test
+    void oneActualSideIsInsufficientAndLegacyImageFieldNeverCountsAsBack() throws Exception {
+        mockMvc.perform(multipart(PRODUCTS_PATH).file(actualPhoto("frontImage"))
+                .file(actualPhoto("image"))
+                .param("name", "High Value Card").param("game", "Pokemon")
+                .param("price", "500").param("cost", "0").param("stock", "1").param("status", "SHOW")
+                .header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImages").exists());
+    }
+
+    @Test
+    void draftsPersistSellerDeclaredGradingWithoutClaimingOfficialPhotosAreActual() throws Exception {
+        Product existing = policyProduct("Common", "20", "HIDE");
+        String response = mockMvc.perform(post(PRODUCTS_PATH).header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON).content(policyJson(existing, "HIDE", "20",
+                    ",\"gradingCompany\":\"PSA\",\"grade\":\"9\",\"certNumber\":\"123456\"")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.gradingCompany").value("PSA"))
+            .andExpect(jsonPath("$.grade").value("9"))
+            .andExpect(jsonPath("$.certNumber").value("123456"))
+            .andExpect(jsonPath("$.actualImageFrontUrl").doesNotExist())
+            .andReturn().getResponse().getContentAsString();
+        Long id = Long.valueOf(objectMapper.readTree(response).path("id").asText());
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(entityManager.find(Product.class, id).getCertNumber()).isEqualTo("123456");
+    }
+
+    @Test
+    void partialGradingDetailsAreRejected() throws Exception {
+        Product existing = policyProduct("Common", "20", "HIDE");
+        mockMvc.perform(post(PRODUCTS_PATH).header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON).content(policyJson(existing, "HIDE", "20",
+                    ",\"gradingCompany\":\"PSA\",\"grade\":\"9\"")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.gradingCompany").exists());
+    }
+
+    @Test
+    void frontendEmptyGradingFieldsCreateUngradedListingsInJsonAndMultipart() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        String body = policyJson(existing, "SHOW", "10",
+            ",\"gradingCompany\":\"\",\"grade\":\"\",\"certNumber\":\"\"");
+        mockMvc.perform(post(PRODUCTS_PATH).header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.gradingCompany").doesNotExist());
+        mockMvc.perform(multipartWithActualPhotos(body)
+                .param("gradingCompany", "").param("grade", "").param("certNumber", "")
+                .header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.gradingCompany").doesNotExist());
+    }
+
+    @Test
+    void frontendCanUngradeAndReplacePhotoInTheSameMultipartUpdate() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        existing.setGradingCompany("PSA");
+        existing.setGrade("9");
+        existing.setCertNumber("123");
+        entityManager.flush();
+        mockMvc.perform(multipart(PRODUCTS_PATH + "/{id}", existing.getId())
+                .file(actualPhoto("frontImage"))
+                .param("name", "Card").param("game", "Pokemon").param("imageUrl", "https://example.test/official.png")
+                .param("price", "10").param("cost", "0").param("stock", "1").param("status", "SHOW")
+                .param("gradingCompany", "").param("grade", "").param("certNumber", "")
+                .with(request -> { request.setMethod("PUT"); return request; })
+                .header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.gradingCompany").doesNotExist())
+            .andExpect(jsonPath("$.grade").doesNotExist())
+            .andExpect(jsonPath("$.certNumber").doesNotExist())
+            .andExpect(jsonPath("$.actualImageFrontUrl").isNotEmpty());
+    }
+
+    @Test
+    void rulesUseAuthoritativeCatalogRarityAndNormalizeCondition() throws Exception {
+        Product existing = policyProduct("SAR", "10", "HIDE");
+        mockMvc.perform(post(PRODUCTS_PATH + "/validate-listing-rules")
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"cardId\":\"" + existing.getCard().getId()
+                    + "\",\"price\":10,\"condition\":\"Near Mint\",\"rarity\":\"Common\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imageMandatory").value(true))
+            .andExpect(jsonPath("$.reasons[0]").value("SPECIAL_RARITY"));
+    }
+
+    @Test
+    void invalidConditionCannotBypassRules() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        mockMvc.perform(post(LISTINGS_ALIAS_PATH + "/validate-listing-rules")
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"cardId\":\"" + existing.getCard().getId()
+                    + "\",\"price\":10,\"condition\":\"MINT-ISH\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.condition").exists());
+    }
+
+    @Test
+    void changingOptionalPriceToMandatoryCannotBypassGateViaPut() throws Exception {
+        Product existing = policyProduct("Common", "100", "SHOW");
+        mockMvc.perform(put(PRODUCTS_PATH + "/{id}", existing.getId())
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON)
+                .content(policyJson(existing, "SHOW", "500", "")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImages").exists());
+    }
+
+    @Test
+    void enablingLegacyHighValueListingIsGatedButHidingItIsAlwaysAllowed() throws Exception {
+        Product existing = policyProduct("Common", "500", "SHOW");
+        mockMvc.perform(patch(PRODUCTS_PATH + "/{id}/status", existing.getId())
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"HIDE\"}"))
+            .andExpect(status().isNoContent());
+        mockMvc.perform(patch(PRODUCTS_PATH + "/{id}/visibility", existing.getId())
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"SHOW\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImages").exists());
+    }
+
+    @Test
+    void cannotClaimFrontAsBack() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        existing.setActualImageFrontUrl("https://images.test/products/owned-front.png");
+        entityManager.flush();
+        mockMvc.perform(put(PRODUCTS_PATH + "/{id}", existing.getId())
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON)
+                .content(policyJson(existing, "HIDE", "10",
+                    ",\"actualImageBackUrl\":\"https://images.test/products/owned-front.png\"")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImageBackUrl").exists());
+    }
+
+    @Test
+    void cannotRetainAnActualPhotoFromAnotherSellersListing() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        Product foreign = persistProduct(otherSeller, "Foreign", "Pokemon", "Test Set", "Common",
+            "https://example.test/official.png", null, BigDecimal.TEN, BigDecimal.ZERO, 1, 0, "HIDE");
+        foreign.setActualImageFrontUrl("https://images.test/products/foreign-front.png");
+        entityManager.flush();
+        mockMvc.perform(put(PRODUCTS_PATH + "/{id}", existing.getId())
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON)
+                .content(policyJson(existing, "HIDE", "10",
+                    ",\"actualImageFrontUrl\":\"https://images.test/products/foreign-front.png\"")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImageFrontUrl").exists());
+    }
+
+    @Test
+    void missingRarityAndSellerCreatedCatalogCannotClaimOptionalPhotos() throws Exception {
+        mockMvc.perform(post(PRODUCTS_PATH).header("Authorization", bearer(sellerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(VALID_CREATE_REQUEST.replace("1999.90", "10.00").replace("Secret Rare", "Common")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.fieldErrors.actualImages").exists());
+    }
+
+    @Test
+    void optionalListingCanRemoveActualFrontAndUngradeWithCatalogFallback() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        existing.setActualImageFrontUrl("https://images.test/products/front.png");
+        existing.setCustomImageUrl(existing.getActualImageFrontUrl());
+        existing.setGradingCompany("PSA");
+        existing.setGrade("9");
+        existing.setCertNumber("123");
+        entityManager.flush();
+        String body = policyJson(existing, "SHOW", "10", ",\"actualImageFrontUrl\":\"\"")
+            .replace("https://example.test/official.png", existing.getActualImageFrontUrl());
+        mockMvc.perform(put(PRODUCTS_PATH + "/{id}", existing.getId())
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.actualImageFrontUrl").doesNotExist())
+            .andExpect(jsonPath("$.gradingCompany").doesNotExist())
+            .andExpect(jsonPath("$.grade").doesNotExist())
+            .andExpect(jsonPath("$.certNumber").doesNotExist())
+            .andExpect(jsonPath("$.image").value(existing.getCard().getImageLarge()));
+    }
+
+    @Test
+    void hiddenListingCanRemoveFrontWhenCatalogHasNoArt() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        existing.getCard().setImageLarge("");
+        existing.getCard().setImageSmall("");
+        existing.setActualImageFrontUrl("https://images.test/products/front.png");
+        existing.setCustomImageUrl(existing.getActualImageFrontUrl());
+        entityManager.flush();
+        String body = policyJson(existing, "HIDE", "10", ",\"actualImageFrontUrl\":\"\"")
+            .replace("https://example.test/official.png", existing.getActualImageFrontUrl());
+
+        mockMvc.perform(put(PRODUCTS_PATH + "/{id}", existing.getId())
+                .header("Authorization", bearer(sellerToken)).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.actualImageFrontUrl").doesNotExist());
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(entityManager.find(Product.class, existing.getId()).getCustomImageUrl()).isEmpty();
+    }
+
+    @Test
+    void multipartSupportsRetainedAndNewDetailsAndPublicResponseKeepsOfficialArtSeparate() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        existing.getAdditionalImageUrls().add("https://images.test/products/retained-detail.png");
+        entityManager.flush();
+        mockMvc.perform(multipart(PRODUCTS_PATH + "/{id}", existing.getId())
+                .file(actualPhoto("frontImage")).file(actualPhoto("backImage"))
+                .file(actualPhoto("additionalImages"))
+                .param("name", "Card").param("game", "Pokemon").param("imageUrl", "https://example.test/official.png")
+                .param("price", "500").param("cost", "0").param("stock", "1").param("status", "SHOW")
+                .param("clearAdditionalImages", "true")
+                .param("additionalImageUrls", "https://images.test/products/retained-detail.png")
+                .with(request -> { request.setMethod("PUT"); return request; })
+                .header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.additionalImageUrls.length()").value(2));
+        entityManager.flush();
+        entityManager.clear();
+        mockMvc.perform(get("/api/products/{id}", existing.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.imageLarge").value("https://example.test/official.png"))
+            .andExpect(jsonPath("$.actualImageFrontUrl").isNotEmpty())
+            .andExpect(jsonPath("$.actualImageBackUrl").isNotEmpty())
+            .andExpect(jsonPath("$.additionalImageUrls.length()").value(2));
+    }
+
+    @Test
+    void oversizedOrSpoofedFilesAndTooManyDetailsAreRejected() throws Exception {
+        Product existing = policyProduct("Common", "10", "HIDE");
+        for (MockMultipartFile invalid : List.of(
+            new MockMultipartFile("frontImage", "fake.png", "image/png", "not a png".getBytes()),
+            new MockMultipartFile("frontImage", "large.png", "image/png", new byte[5 * 1024 * 1024 + 1]))) {
+            mockMvc.perform(multipart(PRODUCTS_PATH).file(invalid)
+                    .param("name", "Card").param("game", "Pokemon").param("imageUrl", "https://example.test/official.png")
+                    .param("price", "10").param("cost", "0").param("stock", "1").param("status", "HIDE")
+                    .param("cardId", existing.getCard().getId()).header("Authorization", bearer(sellerToken)))
+                .andExpect(status().isBadRequest());
+        }
+        var tooMany = multipartWithActualPhotos(policyJson(existing, "SHOW", "500", ""));
+        for (int i = 0; i < 5; i++) tooMany.file(actualPhoto("additionalImages"));
+        mockMvc.perform(tooMany.header("Authorization", bearer(sellerToken)))
+            .andExpect(status().isBadRequest());
+    }
+
+    private Product policyProduct(String rarity, String price, String status) {
+        Product product = persistProduct(seller, "Policy Card", "Pokemon", "Test Set", rarity,
+            "https://example.test/official.png", null, new BigDecimal(price), BigDecimal.ZERO, 1, 0, status);
+        entityManager.flush();
+        return product;
+    }
+
+    private String policyJson(Product product, String status, String price, String extras) {
+        return """
+            {"cardId":"%s","name":"Policy Card","game":"Pokemon","image":"https://example.test/official.png",
+            "price":%s,"cost":0,"stock":1,"status":"%s","condition":"NM"%s}
+            """.formatted(product.getCard().getId(), price, status, extras);
+    }
+
     private List<MockHttpServletRequestBuilder> protectedRequests(String id) {
         return List.of(
             get(PRODUCTS_PATH),
+            post(PRODUCTS_PATH + "/validate-listing-rules").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"cardId\":\"some-card\",\"price\":1,\"condition\":\"NM\"}"),
             post(PRODUCTS_PATH).contentType(MediaType.APPLICATION_JSON).content(VALID_CREATE_REQUEST),
             put(PRODUCTS_PATH + "/{id}", id).contentType(MediaType.APPLICATION_JSON).content(VALID_CREATE_REQUEST),
             patch(PRODUCTS_PATH + "/{id}/status", id).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\":\"HIDE\"}"),
             delete(PRODUCTS_PATH + "/{id}", id)
         );
+    }
+
+    private org.springframework.test.web.servlet.request.MockMultipartHttpServletRequestBuilder multipartWithActualPhotos(String json) throws Exception {
+        var builder = multipart(PRODUCTS_PATH).file(actualPhoto("frontImage")).file(actualPhoto("backImage"));
+        JsonNode node = objectMapper.readTree(json);
+        for (String field : List.of("name", "game", "price", "cost", "stock", "status", "condition",
+            "language", "set", "rarity", "cardId", "sellerId")) {
+            if (node.has(field)) builder.param(field, node.path(field).asText());
+        }
+        if (node.has("image")) builder.param("imageUrl", node.path("image").asText());
+        return builder;
+    }
+
+    private MockMultipartFile actualPhoto(String field) {
+        return new MockMultipartFile(field, "card.png", "image/png",
+            new byte[] {(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a});
     }
 
     private void expectProductError(ResultActions result, int expectedStatus, String expectedCode) throws Exception {
@@ -741,7 +1062,7 @@ class SellerProductControllerIntegrationTests {
                                    int reserved,
                                    String status) {
         Card card = Card.builder()
-            .id("seller-listing-test-" + UUID.randomUUID())
+            .id("catalog-test-" + UUID.randomUUID())
             .name(name)
             .supertype(game)
             .setName(set)

@@ -42,7 +42,9 @@ LABEL org.opencontainers.image.source="${OCI_SOURCE}" \
       org.opencontainers.image.title="${OCI_TITLE}" \
       org.opencontainers.image.description="${OCI_DESCRIPTION}"
 
-RUN addgroup -S -g 10001 app \
+# Pin the Alpine security fix until the Temurin base includes it.
+RUN apk add --no-cache 'brotli-libs=1.2.1-r0' \
+    && addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app \
     && touch -d "@${SOURCE_DATE_EPOCH}" /etc/passwd /etc/group /etc/shadow
 WORKDIR /app

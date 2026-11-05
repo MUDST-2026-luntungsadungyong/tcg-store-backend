@@ -5,6 +5,8 @@ import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.seller.api.SellerProductRequest;
 import com.mythix.tcg.seller.api.SellerProductResponse;
+import com.mythix.tcg.seller.api.ListingRulesRequest;
+import com.mythix.tcg.seller.api.ListingRulesResponse;
 import com.mythix.tcg.seller.persistence.SellerOrderItemRepository;
 import com.mythix.tcg.seller.persistence.SellerProductRepository;
 import com.mythix.tcg.user.domain.User;
@@ -16,7 +18,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,7 +75,14 @@ public class SellerProductService {
 
     @Transactional
     public SellerProductResponse create(Long sellerId, SellerProductRequest request, MultipartFile imageFile) {
+        return create(sellerId, request, imageFile, null, null, null);
+    }
+
+    @Transactional
+    public SellerProductResponse create(Long sellerId, SellerProductRequest request, MultipartFile imageFile,
+        MultipartFile frontImage, MultipartFile backImage, List<MultipartFile> additionalImages) {
         User seller = requireSeller(sellerId);
+        validateGrading(request);
         String imageUrl = resolveImage(request.image(), imageFile);
 
         String requestedCardId = trimToNull(request.cardId());
@@ -94,7 +106,7 @@ public class SellerProductService {
                 .build());
         }
 
-        Product product = productRepository.save(Product.builder()
+        Product product = Product.builder()
             .seller(seller)
             .card(card)
             .customImageUrl(imageUrl)
@@ -105,7 +117,12 @@ public class SellerProductService {
             .onHand(request.stock())
             .reserved(0)
             .status(normalizeStatus(request.status()))
-            .build());
+            .build();
+        applyActualPhotos(product, request, frontImage, backImage, additionalImages);
+        applyGrading(product, request);
+        if (product.getActualImageFrontUrl() != null) product.setCustomImageUrl(product.getActualImageFrontUrl());
+        enforcePublishedPolicy(product);
+        productRepository.save(product);
 
         return toResponse(product, 0L);
     }
@@ -117,9 +134,18 @@ public class SellerProductService {
         SellerProductRequest request,
         MultipartFile imageFile
     ) {
+        return update(sellerId, productId, request, imageFile, null, null, null);
+    }
+
+    @Transactional
+    public SellerProductResponse update(Long sellerId, Long productId, SellerProductRequest request,
+        MultipartFile imageFile, MultipartFile frontImage, MultipartFile backImage,
+        List<MultipartFile> additionalImages) {
         requireSeller(sellerId);
+        validateGrading(request);
         Product product = findOwnedForUpdate(sellerId, productId);
-        String previousImage = product.getCustomImageUrl();
+        Set<String> previousImages = imageReferences(product);
+        Set<String> previousActualImages = actualImageReferences(product);
         String imageUrl = resolveImage(request.image(), imageFile);
 
         product.setCustomImageUrl(imageUrl);
@@ -130,9 +156,19 @@ public class SellerProductService {
         product.setOnHand(addAvailableAndReserved(request.stock(), product.getReserved()));
         product.setStatus(normalizeStatus(request.status()));
 
-        if (previousImage != null && !previousImage.equals(imageUrl)) {
-            deleteImageIfUnreferenced(previousImage, productId);
+        applyActualPhotos(product, request, frontImage, backImage, additionalImages);
+        applyGrading(product, request);
+        if (product.getActualImageFrontUrl() != null) {
+            product.setCustomImageUrl(product.getActualImageFrontUrl());
+        } else if (previousActualImages.contains(product.getCustomImageUrl())
+            && !actualImageReferences(product).contains(product.getCustomImageUrl())) {
+            String catalogImage = firstNonBlank(product.getCard().getImageLarge(), product.getCard().getImageSmall());
+            product.setCustomImageUrl(catalogImage == null ? "" : catalogImage);
         }
+        enforcePublishedPolicy(product);
+        Set<String> retainedImages = imageReferences(product);
+        previousImages.stream().filter(url -> !retainedImages.contains(url))
+            .forEach(url -> deleteImageIfUnreferenced(url, productId));
 
         long activeOrders = orderItemRepository.countActiveOrders(productId);
         return toResponse(product, activeOrders);
@@ -143,6 +179,7 @@ public class SellerProductService {
         requireSeller(sellerId);
         Product product = findOwnedForUpdate(sellerId, productId);
         product.setStatus(normalizeStatus(status));
+        enforcePublishedPolicy(product);
     }
 
     @Transactional
@@ -162,7 +199,7 @@ public class SellerProductService {
             return;
         }
 
-        deleteImageIfUnreferenced(product.getCustomImageUrl(), productId);
+        imageReferences(product).forEach(url -> deleteImageIfUnreferenced(url, productId));
         productRepository.delete(product);
         productRepository.flush();
     }
@@ -173,6 +210,117 @@ public class SellerProductService {
             throw new SellerRequiredException();
         }
         return seller;
+    }
+
+    @Transactional(readOnly = true)
+    public ListingRulesResponse validateListingRules(Long sellerId, ListingRulesRequest request) {
+        requireSeller(sellerId);
+        Card card = cardRepository.findById(request.cardId())
+            .filter(found -> Boolean.TRUE.equals(found.getActive()))
+            .orElseThrow(() -> new SellerProductValidationException("cardId", "Card was not found in the database"));
+        return ListingImagePolicy.evaluate(card.getSupertype(), policyRarity(card), request.price(),
+            normalizeCondition(request.condition()), normalizeGradingCompany(request.gradingCompany()));
+    }
+
+    private String policyRarity(Card card) {
+        // Seller-created legacy catalog rows are not an authoritative rarity source.
+        return card.getId().startsWith(SELLER_CARD_PREFIX) ? null : card.getRarity();
+    }
+
+    private void enforcePublishedPolicy(Product product) {
+        if (!"SHOW".equals(product.getStatus())) return;
+        ListingRulesResponse policy = ListingImagePolicy.evaluate(product.getCard().getSupertype(),
+            policyRarity(product.getCard()), product.getPrice(), product.getCondition(), product.getGradingCompany());
+        if (policy.imageMandatory()
+            && (product.getActualImageFrontUrl() == null || product.getActualImageBackUrl() == null)) {
+            throw new SellerProductValidationException("actualImages",
+                "Upload actual front and back photos before publishing this listing: "
+                    + String.join(", ", policy.reasons()));
+        }
+    }
+
+    private void applyActualPhotos(Product product, SellerProductRequest request,
+        MultipartFile frontImage, MultipartFile backImage, List<MultipartFile> additionalImages) {
+        String front = retainSide(request.actualImageFrontUrl(), product.getActualImageFrontUrl(), "actualImageFrontUrl");
+        String back = retainSide(request.actualImageBackUrl(), product.getActualImageBackUrl(), "actualImageBackUrl");
+        List<String> oldExtras = product.getAdditionalImageUrls();
+        List<String> retained = request.additionalImageUrls() == null
+            ? new ArrayList<>(oldExtras) : new ArrayList<>(request.additionalImageUrls());
+        if (retained.stream().anyMatch(url -> url == null || !oldExtras.contains(url))
+            || new LinkedHashSet<>(retained).size() != retained.size()) {
+            throw new SellerProductValidationException("additionalImageUrls",
+                "Only existing detail photos belonging to this listing can be retained");
+        }
+        List<MultipartFile> uploads = additionalImages == null ? List.of() : additionalImages;
+        if (retained.size() + uploads.size() > ListingImagePolicy.MAX_ADDITIONAL_IMAGES) {
+            throw new SellerProductValidationException("additionalImages", "At most four detail photos are allowed");
+        }
+        SellerProductImageValidator validator = new SellerProductImageValidator();
+        if (frontImage != null) validator.validate(frontImage);
+        if (backImage != null) validator.validate(backImage);
+        uploads.forEach(validator::validate);
+        if (frontImage != null) front = imageStorage.store(frontImage);
+        if (backImage != null) back = imageStorage.store(backImage);
+        for (MultipartFile file : uploads) retained.add(imageStorage.store(file));
+        product.setActualImageFrontUrl(front);
+        product.setActualImageBackUrl(back);
+        // Mutate Hibernate's managed collection so removals and ordering flush correctly.
+        product.getAdditionalImageUrls().clear();
+        product.getAdditionalImageUrls().addAll(retained);
+    }
+
+    private String retainSide(String requested, String current, String field) {
+        if (requested == null) return current;
+        String normalized = trimToNull(requested);
+        if (normalized == null) return null;
+        if (!normalized.equals(current)) {
+            throw new SellerProductValidationException(field,
+                "Upload a new photo or retain the existing photo for this side of this listing");
+        }
+        return current;
+    }
+
+    private String normalizeGradingCompany(String value) {
+        String normalized = trimToNull(value);
+        if (normalized == null) return null;
+        normalized = normalized.toUpperCase(Locale.ROOT);
+        if (!List.of("PSA", "BGS", "CGC").contains(normalized)) {
+            throw new SellerProductValidationException("gradingCompany", "Grading company must be PSA, BGS, or CGC");
+        }
+        return normalized;
+    }
+
+    private void validateGrading(SellerProductRequest request) {
+        String company = normalizeGradingCompany(request.gradingCompany());
+        String grade = trimToNull(request.grade());
+        String cert = trimToNull(request.certNumber());
+        if ((company == null && (grade != null || cert != null))
+            || (company != null && (grade == null || cert == null))) {
+            throw new SellerProductValidationException("gradingCompany",
+                "Provide grading company, grade and certificate number together, or leave all three empty");
+        }
+    }
+
+    private void applyGrading(Product product, SellerProductRequest request) {
+        product.setGradingCompany(normalizeGradingCompany(request.gradingCompany()));
+        product.setGrade(trimToNull(request.grade()));
+        product.setCertNumber(trimToNull(request.certNumber()));
+    }
+
+    private Set<String> imageReferences(Product product) {
+        Set<String> images = actualImageReferences(product);
+        images.add(product.getCustomImageUrl());
+        images.remove(null);
+        return images;
+    }
+
+    private Set<String> actualImageReferences(Product product) {
+        Set<String> images = new LinkedHashSet<>();
+        images.add(product.getActualImageFrontUrl());
+        images.add(product.getActualImageBackUrl());
+        images.addAll(product.getAdditionalImageUrls());
+        images.remove(null);
+        return images;
     }
 
     private Product findOwnedForUpdate(Long sellerId, Long productId) {
@@ -221,7 +369,7 @@ public class SellerProductService {
 
     private void deleteImageIfUnreferenced(String imageUrl, Long currentProductId) {
         if (imageUrl != null
-            && !productRepository.existsByCustomImageUrlAndIdNot(imageUrl, currentProductId)) {
+            && !productRepository.imageReferencedByAnotherProduct(imageUrl, currentProductId)) {
             imageStorage.delete(imageUrl);
         }
     }
@@ -269,7 +417,13 @@ public class SellerProductService {
             card.getImageLarge(),
             card.getMarketPrice(),
             activeOrders,
-            activeOrders
+            activeOrders,
+            product.getActualImageFrontUrl(),
+            product.getActualImageBackUrl(),
+            List.copyOf(product.getAdditionalImageUrls()),
+            product.getGradingCompany(),
+            product.getGrade(),
+            product.getCertNumber()
         );
     }
 
@@ -311,7 +465,8 @@ public class SellerProductService {
 
     private String canonicalGame(String game) {
         String value = game == null ? "" : game.trim();
-        if (value.equalsIgnoreCase("Pokemon") || value.equalsIgnoreCase("Pokémon")) {
+        if (value.equalsIgnoreCase("Pokemon") || value.equalsIgnoreCase("Pokémon")
+            || value.equalsIgnoreCase("Trainer") || value.equalsIgnoreCase("Energy")) {
             return "Pokemon";
         }
         if (value.equalsIgnoreCase("YGO") || value.equalsIgnoreCase("Yu-Gi-Oh")

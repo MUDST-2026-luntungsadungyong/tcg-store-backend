@@ -24,4 +24,9 @@ public interface SellerProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findActiveByIdForUpdate(@Param("productId") Long productId);
 
     boolean existsByCustomImageUrlAndIdNot(String customImageUrl, Long productId);
+
+    @Query("select count(distinct p.id) > 0 from Product p left join p.additionalImageUrls extra "
+        + "where p.id <> :productId and (p.customImageUrl = :url or p.actualImageFrontUrl = :url "
+        + "or p.actualImageBackUrl = :url or extra = :url)")
+    boolean imageReferencedByAnotherProduct(@Param("url") String url, @Param("productId") Long productId);
 }

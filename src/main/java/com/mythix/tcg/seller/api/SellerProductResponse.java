@@ -1,6 +1,7 @@
 package com.mythix.tcg.seller.api;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record SellerProductResponse(
     String id,
@@ -27,6 +28,12 @@ public record SellerProductResponse(
     String imageLarge,
     BigDecimal marketPrice,
     long activeOrderCount,
-    long activeReservationCount
+    long activeReservationCount,
+    String actualImageFrontUrl,
+    String actualImageBackUrl,
+    List<String> additionalImageUrls,
+    String gradingCompany,
+    String grade,
+    String certNumber
 ) {
 }

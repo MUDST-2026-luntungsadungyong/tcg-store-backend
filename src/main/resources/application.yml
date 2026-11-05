@@ -13,7 +13,8 @@ spring:
   servlet:
     multipart:
       max-file-size: 5MB
-      max-request-size: 6MB
+      # Two required sides + four optional detail photos, each at most 5 MiB.
+      max-request-size: 32MB
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/tcg_store}
     username: ${DB_USERNAME:postgres}

@@ -134,17 +134,20 @@ jobs:
               org.springframework.boot.loader.launch.PropertiesLauncher
           }
 
+          EXPECTED_MIGRATIONS=$(find src/main/resources/db/migration -maxdepth 1 -type f -name 'V*.sql' | wc -l)
+          test "$EXPECTED_MIGRATIONS" -ge 11
+
           echo "Running Flyway against a fresh database..."
           run_migration
           FRESH_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
-          test "$FRESH_COUNT" -eq 10
+          test "$FRESH_COUNT" -eq "$EXPECTED_MIGRATIONS"
 
           echo "Applying development seed separately..."
           psql -v ON_ERROR_STOP=1 -f infra/postgres/init/02-data.sql
           psql -v ON_ERROR_STOP=1 -f infra/postgres/init/03-profile-avatar.sql
           run_migration
           REPEAT_COUNT=$(psql -t -A -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;')
-          test "$REPEAT_COUNT" -eq 10
+          test "$REPEAT_COUNT" -eq "$EXPECTED_MIGRATIONS"
 
           echo "Verifying database integrity and seed separation..."
           TABLE_COUNT=$(psql -t -A -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
@@ -193,6 +196,17 @@ jobs:
           test "$V9_COUNT" -eq 1
           V10_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='10' AND success;")
           test "$V10_COUNT" -eq 1
+          V11_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='11' AND success;")
+          test "$V11_COUNT" -eq 1
+          echo "Checking photo/grading schema and legacy listing preservation..."
+          for database in tcg_store_test tcg_store_upgrade; do
+            PHOTO_COLUMNS=$(psql -t -A -d "$database" -c "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='local_cards' AND column_name IN ('actual_image_front_url','actual_image_back_url','grading_company','grade','cert_number');")
+            test "$PHOTO_COLUMNS" -eq 5
+            PHOTO_TABLE=$(psql -t -A -d "$database" -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='product_actual_images';")
+            test "$PHOTO_TABLE" -eq 1
+          done
+          LEGACY_PHOTO_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM local_cards WHERE global_card_id='legacy-card' AND custom_image_url='https://example.test/legacy.png' AND actual_image_front_url IS NULL AND actual_image_back_url IS NULL AND grading_company IS NULL AND grade IS NULL AND cert_number IS NULL;")
+          test "$LEGACY_PHOTO_COUNT" -eq "$LEGACY_CARD_COUNT"
           LEGACY_PAID_ORDER_STATUS=$(psql -t -A -d tcg_store_upgrade -c "SELECT status FROM orders WHERE order_number = 'legacy-paid-order';")
           test "$LEGACY_PAID_ORDER_STATUS" = "CONFIRMED"
           psql -v ON_ERROR_STOP=1 -d tcg_store_upgrade -c "UPDATE orders SET status = 'SENT' WHERE order_number = 'legacy-paid-order';"
