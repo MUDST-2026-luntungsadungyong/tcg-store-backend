@@ -1,7 +1,9 @@
 package com.mythix.tcg.seller.application;
 
+import com.mythix.tcg.auction.application.AuctionException;
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.catalog.persistence.CardRepository;
+import com.mythix.tcg.product.domain.CardCondition;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.seller.api.SellerProductRequest;
 import com.mythix.tcg.seller.api.SellerProductResponse;
@@ -144,17 +146,28 @@ public class SellerProductService {
         requireSeller(sellerId);
         validateGrading(request);
         Product product = findOwnedForUpdate(sellerId, productId);
+        String condition = normalizeCondition(request.condition());
+        String language = normalizeLanguage(request.language());
+        String status = normalizeStatus(request.status());
+        if (product.getAuctionReserved() > 0
+            && (request.stock() != product.availableStock()
+                || !condition.equals(CardCondition.code(product.getCondition()))
+                || !language.equals(product.getLanguage())
+                || ("OUT_OF_STOCK".equals(status) && !status.equals(product.getStatus())))) {
+            throw AuctionException.conflict(
+                "Refresh the listing and keep its current stock, condition and language while an auction reserves stock");
+        }
         Set<String> previousImages = imageReferences(product);
         Set<String> previousActualImages = actualImageReferences(product);
         String imageUrl = resolveImage(request.image(), imageFile);
 
         product.setCustomImageUrl(imageUrl);
-        product.setCondition(normalizeCondition(request.condition()));
-        product.setLanguage(normalizeLanguage(request.language()));
+        product.setCondition(condition);
+        product.setLanguage(language);
         product.setPrice(request.price());
         product.setCost(request.cost());
-        product.setOnHand(addAvailableAndReserved(request.stock(), product.getReserved()));
-        product.setStatus(normalizeStatus(request.status()));
+        product.setOnHand(totalStock(request.stock(), product));
+        product.setStatus(status);
 
         applyActualPhotos(product, request, frontImage, backImage, additionalImages);
         applyGrading(product, request);
@@ -178,7 +191,12 @@ public class SellerProductService {
     public void changeStatus(Long sellerId, Long productId, String status) {
         requireSeller(sellerId);
         Product product = findOwnedForUpdate(sellerId, productId);
-        product.setStatus(normalizeStatus(status));
+        String nextStatus = normalizeStatus(status);
+        if (product.getAuctionReserved() > 0 && "OUT_OF_STOCK".equals(nextStatus)
+            && !nextStatus.equals(product.getStatus())) {
+            throw AuctionException.conflict("This listing has stock reserved by an auction");
+        }
+        product.setStatus(nextStatus);
         enforcePublishedPolicy(product);
     }
 
@@ -187,6 +205,9 @@ public class SellerProductService {
         requireSeller(sellerId);
         Product product = findOwnedForUpdate(sellerId, productId);
 
+        if (product.getAuctionReserved() > 0) {
+            throw AuctionException.conflict("This listing has stock reserved by an auction");
+        }
         long activeOrders = orderItemRepository.countActiveOrders(productId);
         if (activeOrders > 0 || product.getReserved() > 0) {
             throw new SellerProductHasActiveOrdersException(Math.max(activeOrders, 1L));
@@ -358,10 +379,10 @@ public class SellerProductService {
         }
     }
 
-    private int addAvailableAndReserved(int available, Integer reservedValue) {
-        int reserved = reservedValue == null ? 0 : reservedValue;
+    private int totalStock(int available, Product product) {
+        int reserved = product.getReserved() == null ? 0 : product.getReserved();
         try {
-            return Math.addExact(available, reserved);
+            return Math.addExact(Math.addExact(available, reserved), product.getAuctionReserved());
         } catch (ArithmeticException exception) {
             throw new SellerProductValidationException("stock", "Stock is too large");
         }
@@ -391,7 +412,6 @@ public class SellerProductService {
         Card card = product.getCard();
         String image = firstNonBlank(product.getCustomImageUrl(), card.getImageLarge(), card.getImageSmall());
         int reserved = product.getReserved() == null ? 0 : product.getReserved();
-        int onHand = product.getOnHand() == null ? 0 : product.getOnHand();
         return new SellerProductResponse(
             String.valueOf(product.getId()),
             String.valueOf(product.getSeller().getId()),
@@ -400,7 +420,7 @@ public class SellerProductService {
             image == null ? "" : image,
             product.getPrice(),
             product.getCost() == null ? BigDecimal.ZERO : product.getCost(),
-            Math.max(0, onHand - reserved),
+            product.availableStock(),
             product.getStatus(),
             product.getCondition(),
             product.getLanguage(),
@@ -497,14 +517,11 @@ public class SellerProductService {
         if (value == null) {
             return "NM";
         }
-        return switch (value.toUpperCase(Locale.ROOT).replace('-', ' ').replace('_', ' ')) {
-            case "NM", "NEAR MINT" -> "NM";
-            case "LP", "LIGHTLY PLAYED" -> "LP";
-            case "MP", "MODERATELY PLAYED" -> "MP";
-            case "HP", "HEAVILY PLAYED" -> "HP";
-            case "DMG", "DAMAGED" -> "DMG";
-            default -> throw new SellerProductValidationException("condition", "Condition must be NM, LP, MP, HP, or DMG");
-        };
+        String code = CardCondition.code(value);
+        if (code == null) {
+            throw new SellerProductValidationException("condition", "Condition must be NM, LP, MP, HP, or DMG");
+        }
+        return code;
     }
 
     private String normalizeLanguage(String language) {

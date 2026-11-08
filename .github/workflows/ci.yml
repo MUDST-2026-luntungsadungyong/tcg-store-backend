@@ -47,7 +47,7 @@ jobs:
         run: ./mvnw --batch-mode -Dtest=TidbRevision5SchemaContractTests test
 
   postgres-concurrency:
-    name: PostgreSQL checkout concurrency
+    name: PostgreSQL checkout and auction concurrency
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -77,6 +77,14 @@ jobs:
 
       - name: Verify PostgreSQL concurrency
         run: ./mvnw --batch-mode -Dspring.profiles.active=postgres -Dtest=CheckoutConcurrencyPostgresTests verify
+
+      - name: Verify auction concurrency on the migrated schema
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/tcg_store_auction_test
+        run: |
+          docker exec "$POSTGRES_CONTAINER" createdb -U postgres tcg_store_auction_test
+          ./mvnw --batch-mode -Dspring.profiles.active=postgres -Dtest=AuctionConcurrencyPostgresTests verify
 
   db-schema-validation:
     name: Flyway Fresh, Upgrade & Restore Validation
@@ -131,11 +139,11 @@ jobs:
           run_migration() {
             java -Dloader.main=com.mythix.tcg.DatabaseMigrationApplication \
               -cp "$MIGRATION_JAR" \
-              org.springframework.boot.loader.launch.PropertiesLauncher
+              org.springframework.boot.loader.launch.PropertiesLauncher "$@"
           }
 
           EXPECTED_MIGRATIONS=$(find src/main/resources/db/migration -maxdepth 1 -type f -name 'V*.sql' | wc -l)
-          test "$EXPECTED_MIGRATIONS" -ge 11
+          test "$EXPECTED_MIGRATIONS" -ge 12
 
           echo "Running Flyway against a fresh database..."
           run_migration
@@ -218,6 +226,28 @@ jobs:
           test "$UPGRADED_CARD_COUNT" -eq "$LEGACY_CARD_COUNT"
           LEGACY_TABLE_COUNT=$(psql -t -A -d tcg_store_upgrade -c "SELECT COUNT(*) FROM pg_class WHERE relnamespace='public'::regnamespace AND relname IN ('cards', 'products');")
           test "$LEGACY_TABLE_COUNT" -eq 0
+
+          echo "Upgrading an applied V11 schema and preserving seller stock and order reservations..."
+          createdb tcg_store_upgrade_v11
+          V11_URL=jdbc:postgresql://localhost:5432/tcg_store_upgrade_v11
+          # The current artifact cannot validate new entity mappings against a V11-only fixture.
+          DB_URL="$V11_URL" run_migration --spring.flyway.target=11 --spring.jpa.hibernate.ddl-auto=none
+          psql -v ON_ERROR_STOP=1 -d tcg_store_upgrade_v11 <<'SQL'
+          INSERT INTO users (email, password, full_name, role, seller_status)
+          VALUES ('auction-seller@example.test', 'fixture', 'Auction Seller', 'USER', 'APPROVED');
+          INSERT INTO global_cards (id, name, supertype, set_name, card_number, image_small, image_large, market_price)
+          VALUES ('auction-card', 'Auction Card', 'Pokémon', 'Test Set', '1', 'small', 'large', 10.00);
+          INSERT INTO local_cards (seller_id, global_card_id, custom_image_url, condition, language, price, cost, on_hand, reserved, status,
+                                   actual_image_front_url, actual_image_back_url, grading_company, grade, cert_number)
+          SELECT id, 'auction-card', 'https://example.test/cover.png', 'NM', 'EN', 20.00, 10.00, 2, 1, 'SHOW',
+                 'https://example.test/front.png', 'https://example.test/back.png', 'PSA', '10', 'test-cert'
+          FROM users WHERE email = 'auction-seller@example.test';
+          SQL
+          DB_URL="$V11_URL" run_migration
+          AUCTION_MIGRATION_COUNT=$(psql -t -A -d tcg_store_upgrade_v11 -c "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND version='12' AND success;")
+          test "$AUCTION_MIGRATION_COUNT" -eq 1
+          PRESERVED_STOCK=$(psql -t -A -d tcg_store_upgrade_v11 -c "SELECT COUNT(*) FROM local_cards WHERE global_card_id='auction-card' AND on_hand=2 AND reserved=1 AND auction_reserved=0 AND price=20.00 AND status='SHOW' AND custom_image_url='https://example.test/cover.png' AND actual_image_front_url='https://example.test/front.png' AND actual_image_back_url='https://example.test/back.png' AND grading_company='PSA' AND grade='10' AND cert_number='test-cert';")
+          test "$PRESERVED_STOCK" -eq 1
 
           echo "Rehearsing backup and restore before future production migrations..."
           # Use the server image's tools: newer runner clients can emit settings

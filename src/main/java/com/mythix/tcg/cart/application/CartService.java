@@ -89,16 +89,10 @@ public class CartService {
     }
 
     private void validateStock(Product product, Long listingId, int requestedQuantity) {
-        int availableQuantity = availableQuantity(product);
+        int availableQuantity = product.availableStock();
         if (requestedQuantity > availableQuantity) {
             throw new InsufficientStockException(listingId, availableQuantity);
         }
-    }
-
-    private int availableQuantity(Product product) {
-        int onHand = product.getOnHand() == null ? 0 : product.getOnHand();
-        int reserved = product.getReserved() == null ? 0 : product.getReserved();
-        return Math.max(0, onHand - reserved);
     }
 
     private int safeAdd(Integer current, Integer increment) {
@@ -133,7 +127,7 @@ public class CartService {
     private CartItemResponse toItemResponse(CartItem item) {
         Product product = item.getProduct();
         var card = product.getCard();
-        int availableQuantity = availableQuantity(product);
+        int availableQuantity = product.availableStock();
         int quantity = item.getQuantity();
         BigDecimal price = product.getPrice() == null ? BigDecimal.ZERO : product.getPrice();
         String image = firstNonBlank(product.getCustomImageUrl(), card.getImageLarge(), card.getImageSmall());
