@@ -31,6 +31,26 @@ public class CollectionService {
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
+    public String getUserCollectionPrivacy(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CollectionUserNotFoundException(userId));
+        return user.getCollectionPrivacy() != null ? user.getCollectionPrivacy().toUpperCase() : "PUBLIC";
+    }
+
+    @Transactional
+    public String updateUserCollectionPrivacy(Long userId, String privacy) {
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new CollectionUserNotFoundException(userId));
+        String normalized = privacy != null ? privacy.trim().toUpperCase() : "PUBLIC";
+        if (!"PUBLIC".equals(normalized) && !"PRIVATE".equals(normalized)) {
+            throw new CollectionValidationException("privacy", "privacy must be either PUBLIC or PRIVATE");
+        }
+        user.setCollectionPrivacy(normalized);
+        userRepository.save(user);
+        return normalized;
+    }
+
+    @Transactional(readOnly = true)
     public List<CollectionItemResponse> getUserCollection(Long userId) {
         return collectionRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()

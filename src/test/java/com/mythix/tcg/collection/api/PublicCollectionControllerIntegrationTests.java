@@ -174,6 +174,37 @@ class PublicCollectionControllerIntegrationTests {
                 .andExpect(jsonPath("$.code").value("PUBLIC_COLLECTION_NOT_FOUND"));
     }
 
+    @Test
+    void privateCollectionReturnsForbiddenForGuests() throws Exception {
+        User user = saveUser("Private Collector", "private-col@example.com");
+        user.setCollectionPrivacy("PRIVATE");
+        userRepository.save(user);
+
+        Card card = saveCard("card-private-1", "Rare Holo");
+        saveItem(user, card, 2);
+
+        mockMvc.perform(get("/api/collections/" + user.getId()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("COLLECTION_PRIVATE"));
+    }
+
+    @Test
+    void privateCollectionDoesNotAppearOnLeaderboard() throws Exception {
+        User publicUser = saveUser("Public Guy", "public-col@example.com");
+        Card card = saveCard("card-leaderboard-1", "Rare Holo");
+        saveItem(publicUser, card, 5);
+
+        User privateUser = saveUser("Private Secret Guy", "privatesecret-col@example.com");
+        privateUser.setCollectionPrivacy("PRIVATE");
+        userRepository.save(privateUser);
+        saveItem(privateUser, card, 10);
+
+        mockMvc.perform(get("/api/collections/leaderboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].displayName").value("Public Guy"));
+    }
+
     private User saveUser(String name, String email) {
         return userRepository.save(User.builder()
                 .fullName(name)
@@ -205,5 +236,25 @@ class PublicCollectionControllerIntegrationTests {
                 .language("EN")
                 .quantity(quantity)
                 .build());
+    }
+
+    @Test
+    void getPublicCollectionsReturnsOnlyPublicCollectionsAndExcludesPrivate() throws Exception {
+        User publicUser = saveUser("Public Guy", "pub1@example.com");
+        Card card = saveCard("card-pub-1", "Rare Holo");
+        saveItem(publicUser, card, 3);
+
+        User privateUser = saveUser("Private Guy", "priv1@example.com");
+        privateUser.setCollectionPrivacy("PRIVATE");
+        userRepository.save(privateUser);
+        saveItem(privateUser, card, 10);
+
+        mockMvc.perform(get("/api/collections"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].displayName").value("Public Guy"))
+                .andExpect(jsonPath("$.items[0].totalCardsCount").value(3))
+                .andExpect(jsonPath("$.items[0].rareCardCount").value(3))
+                .andExpect(jsonPath("$.page.totalElements").value(1));
     }
 }

@@ -49,6 +49,10 @@ public class User {
     @Builder.Default
     private String sellerStatus = "NONE";
 
+    @Column(name = "collection_privacy", nullable = false, length = 20)
+    @Builder.Default
+    private String collectionPrivacy = "PUBLIC";
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

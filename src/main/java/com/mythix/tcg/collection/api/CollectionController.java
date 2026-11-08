@@ -3,6 +3,8 @@ package com.mythix.tcg.collection.api;
 import com.mythix.tcg.auth.security.AuthenticatedUser;
 import com.mythix.tcg.collection.api.CollectionDto.AddToCollectionRequest;
 import com.mythix.tcg.collection.api.CollectionDto.CollectionItemResponse;
+import com.mythix.tcg.collection.api.CollectionDto.CollectionPrivacyRequest;
+import com.mythix.tcg.collection.api.CollectionDto.CollectionPrivacyResponse;
 import com.mythix.tcg.collection.api.CollectionDto.CollectionResponse;
 import com.mythix.tcg.collection.api.CollectionDto.PageMetadata;
 import com.mythix.tcg.collection.application.CollectionService;
@@ -35,6 +37,7 @@ public class CollectionController {
             @RequestParam(required = false) @Min(0) Integer page,
             @RequestParam(required = false) @Min(1) @Max(100) Integer size) {
 
+        String privacy = collectionService.getUserCollectionPrivacy(user.userId());
         if (page != null) {
             int pageSize = (size != null) ? size : 20;
             Pageable pageable = PageRequest.of(page, pageSize);
@@ -47,6 +50,7 @@ public class CollectionController {
                             .totalElements(response.getTotalElements())
                             .totalPages(response.getTotalPages())
                             .build())
+                    .privacy(privacy)
                     .build());
         }
 
@@ -59,7 +63,23 @@ public class CollectionController {
                         .totalElements(response.size())
                         .totalPages(response.isEmpty() ? 0 : 1)
                         .build())
+                .privacy(privacy)
                 .build());
+    }
+
+    @GetMapping("/privacy")
+    public ResponseEntity<CollectionPrivacyResponse> getCollectionPrivacy(
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        String privacy = collectionService.getUserCollectionPrivacy(user.userId());
+        return ResponseEntity.ok(CollectionPrivacyResponse.builder().privacy(privacy).build());
+    }
+
+    @PutMapping("/privacy")
+    public ResponseEntity<CollectionPrivacyResponse> updateCollectionPrivacy(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestBody CollectionPrivacyRequest request) {
+        String updated = collectionService.updateUserCollectionPrivacy(user.userId(), request.getPrivacy());
+        return ResponseEntity.ok(CollectionPrivacyResponse.builder().privacy(updated).build());
     }
 
     @PostMapping

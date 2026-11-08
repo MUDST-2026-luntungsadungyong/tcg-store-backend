@@ -87,6 +87,25 @@ public class CollectionDto {
     public static class CollectionResponse {
         private List<CollectionItemResponse> items;
         private PageMetadata page;
+        private String privacy;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class CollectionPrivacyRequest {
+        @jakarta.validation.constraints.NotNull(message = "privacy is required")
+        @jakarta.validation.constraints.Pattern(regexp = "(?i)^(PUBLIC|PRIVATE)$", message = "privacy must be either PUBLIC or PRIVATE")
+        private String privacy;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class CollectionPrivacyResponse {
+        private String privacy;
     }
 
     @Data
