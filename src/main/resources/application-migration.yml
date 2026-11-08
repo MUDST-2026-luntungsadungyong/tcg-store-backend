@@ -15,6 +15,9 @@ logging:
 # entity mappings after Flyway. These inert values keep that validation independent
 # from JWT and object-storage credentials; no web server or S3 request is started.
 app:
+  reports:
+    weekly:
+      enabled: false
   jwt:
     secret: migration-only-secret-that-is-at-least-32-bytes
   seller:

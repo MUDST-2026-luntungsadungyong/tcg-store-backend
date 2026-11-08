@@ -148,8 +148,9 @@ try {
             throw "runner exit=$runnerCode; $($script:lastMigrationFailure); Flyway history table exists=$historyExists; public table count=$tableCount."
         }
         $count = Get-Scalar 'tcg_acceptance' 'SELECT COUNT(*) FROM flyway_schema_history WHERE success;'
-        if ($count -ne '10') { throw "Expected 10 successful migration records; observed $count." }
-        "Flyway V1–V10 recorded successfully; migration application exited zero."
+        $expectedMigrations = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot '../../src/main/resources/db/migration') -Filter 'V*__*.sql').Count
+        if ([int]$count -ne $expectedMigrations) { throw "Expected $expectedMigrations successful migration records; observed $count." }
+        "All $expectedMigrations Flyway migrations recorded successfully; migration application exited zero."
     }
 
     Set-Status 'Seed separation and repeat migration' {

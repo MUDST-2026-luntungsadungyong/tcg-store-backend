@@ -83,6 +83,10 @@ management:
         http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
 
 app:
+  reports:
+    weekly:
+      enabled: ${WEEKLY_REPORTS_ENABLED:true}
+      reconcile-ms: 60000
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://localhost:5174,http://127.0.0.1:3000,http://127.0.0.1:5173,http://127.0.0.1:5174}
   jwt:

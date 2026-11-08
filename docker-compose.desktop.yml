@@ -48,6 +48,7 @@ x-backend-common-environment: &backend-common-environment
   APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
   JPA_SHOW_SQL: ${JPA_SHOW_SQL:-false}
   FLYWAY_ENABLED: "false"
+  WEEKLY_REPORTS_ENABLED: ${WEEKLY_REPORTS_ENABLED:-true}
 
 services:
   postgres-local:
