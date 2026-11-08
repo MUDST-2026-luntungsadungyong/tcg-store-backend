@@ -1,6 +1,7 @@
 package com.mythix.tcg.order.domain;
 
 import com.mythix.tcg.user.domain.User;
+import com.mythix.tcg.voucher.domain.Voucher;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
@@ -42,6 +43,21 @@ public class Order {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String status = "PENDING";
+
+    @Column(name = "subtotal_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal subtotalAmount = BigDecimal.ZERO;
+
+    @Column(name = "discount_amount", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "voucher_id")
+    private Voucher voucher;
+
+    @Column(name = "voucher_code_snapshot", length = 50)
+    private String voucherCodeSnapshot;
 
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;

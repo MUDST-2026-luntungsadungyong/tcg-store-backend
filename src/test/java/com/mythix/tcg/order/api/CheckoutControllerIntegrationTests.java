@@ -15,6 +15,8 @@ import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
+import com.mythix.tcg.voucher.domain.UserVoucher;
+import com.mythix.tcg.voucher.domain.Voucher;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -112,6 +114,53 @@ class CheckoutControllerIntegrationTests {
                 assertThat(notification.getType()).isEqualTo("ORDER_RESERVED");
                 assertThat(notification.getOrder().getId()).isNotNull();
             });
+    }
+
+    @Test
+    void checkoutWithVoucherAppliesDiscountToBuyerWhileSellerReceivesFullAmount() throws Exception {
+        Voucher voucher = Voucher.builder()
+            .code("SAVE10")
+            .title("Save 10 Baht")
+            .discountType("FIXED_AMOUNT")
+            .discountValue(new BigDecimal("10.00"))
+            .minSpend(new BigDecimal("20.00"))
+            .totalQuota(100)
+            .usedQuota(0)
+            .perUserLimit(1)
+            .startTime(java.time.LocalDateTime.now().minusDays(1))
+            .endTime(java.time.LocalDateTime.now().plusDays(1))
+            .isActive(true)
+            .build();
+        entityManager.persist(voucher);
+
+        UserVoucher userVoucher = UserVoucher.builder()
+            .user(buyer)
+            .voucher(voucher)
+            .status("COLLECTED")
+            .build();
+        entityManager.persist(userVoucher);
+
+        Product product = persistProduct("Pikachu", new BigDecimal("30.00"), 5, 0, "SHOW");
+        entityManager.persist(CartItem.builder().user(buyer).product(product).quantity(1).build());
+        entityManager.flush();
+
+        mockMvc.perform(post(CHECKOUT_PATH)
+                .header("Authorization", bearer(buyerToken))
+                .header("Idempotency-Key", "checkout-voucher-seller-full")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"voucherCode\":\"SAVE10\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.subtotalAmount").value(30.00))
+            .andExpect(jsonPath("$.discountAmount").value(10.00))
+            .andExpect(jsonPath("$.totalAmount").value(20.00))
+            .andExpect(jsonPath("$.voucherCode").value("SAVE10"));
+
+        entityManager.flush();
+        Order savedOrder = orderRepository.findByBuyerIdAndIdempotencyKey(buyer.getId(), "checkout-voucher-seller-full").orElseThrow();
+        assertThat(savedOrder.getSubtotalAmount()).isEqualByComparingTo("30.00");
+        assertThat(savedOrder.getDiscountAmount()).isEqualByComparingTo("10.00");
+        assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo("20.00");
+        assertThat(savedOrder.getSellerNetAmount()).isEqualByComparingTo("30.00");
     }
 
     @Test

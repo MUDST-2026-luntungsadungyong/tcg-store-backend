@@ -15,6 +15,7 @@ import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.user.persistence.UserRepository;
 import com.mythix.tcg.collection.application.CollectionService;
 import com.mythix.tcg.collection.api.CollectionDto.AddToCollectionRequest;
+import com.mythix.tcg.voucher.application.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,6 +41,7 @@ public class BuyerOrderService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final CollectionService collectionService;
+    private final VoucherService voucherService;
 
     @Transactional(readOnly = true)
     public List<BuyerOrderResponse> getBuyerOrders(Long buyerId, String status) {
@@ -95,6 +97,7 @@ public class BuyerOrderService {
             transferOwnershipToBuyer(order);
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
+            voucherService.releaseVoucherFromOrder(order);
         }
 
         order.setStatus(updatedStatus);
@@ -219,6 +222,9 @@ public class BuyerOrderService {
                 .status(order.getStatus())
                 .totalAmount(order.getTotalAmount())
                 .totalPrice(order.getTotalAmount())
+                .subtotalAmount(order.getSubtotalAmount() != null ? order.getSubtotalAmount() : order.getTotalAmount())
+                .discountAmount(order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO)
+                .voucherCode(order.getVoucherCodeSnapshot())
                 .itemCount(totalCount)
                 .items(itemResponses)
                 .logs(logs)
