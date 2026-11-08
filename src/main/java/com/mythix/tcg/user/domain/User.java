@@ -53,7 +53,18 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "auction_strikes", nullable = false)
+    @Builder.Default
+    private int auctionStrikes = 0;
+
+    @Column(name = "auction_banned_until")
+    private java.time.Instant auctionBannedUntil;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public boolean isAuctionBanned() {
+        return auctionBannedUntil != null && auctionBannedUntil.isAfter(java.time.Instant.now());
+    }
 }

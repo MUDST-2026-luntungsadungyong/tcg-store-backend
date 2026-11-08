@@ -45,6 +45,9 @@ public class UserNotification {
     @Column(nullable = false, length = 1000)
     private String message;
 
+    @Column(length = 255)
+    private String actionPath;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 

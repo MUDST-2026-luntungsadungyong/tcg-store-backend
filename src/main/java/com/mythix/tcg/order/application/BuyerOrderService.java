@@ -42,6 +42,7 @@ public class BuyerOrderService {
     private final UserRepository userRepository;
     private final CollectionService collectionService;
     private final VoucherService voucherService;
+    private final com.mythix.tcg.auction.application.AuctionSettlementService auctionSettlementService;
 
     @Transactional(readOnly = true)
     public List<BuyerOrderResponse> getBuyerOrders(Long buyerId, String status) {
@@ -81,6 +82,7 @@ public class BuyerOrderService {
 
     @Transactional
     public BuyerOrderResponse updateOrderStatus(Long buyerId, Long orderId, String newStatus, String note) {
+        auctionSettlementService.lockAuctionForOrder(orderId);
         Order order = orderRepository.findByIdAndBuyerId(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
@@ -92,6 +94,9 @@ public class BuyerOrderService {
         }
 
         validateStatusTransition(previousStatus, updatedStatus);
+        if ("AUCTION".equals(order.getOrderType()) && !"FULFILLED".equals(updatedStatus)) {
+            throw new OrderStatusValidationException("status", "Invalid buyer action for an auction order");
+        }
 
         if ("FULFILLED".equalsIgnoreCase(updatedStatus)) {
             transferOwnershipToBuyer(order);
@@ -134,6 +139,10 @@ public class BuyerOrderService {
     }
 
     private void transferOwnershipToBuyer(Order order) {
+        if ("AUCTION".equalsIgnoreCase(order.getOrderType())) {
+            auctionSettlementService.transferAuctionCardToPersonalBinder(order);
+            return;
+        }
         if (order.getItems() == null) return;
         for (OrderItem item : order.getItems()) {
             if (item.getProduct() != null) {
@@ -216,6 +225,7 @@ public class BuyerOrderService {
         return BuyerOrderResponse.builder()
                 .id(String.valueOf(order.getId()))
                 .orderNumber(order.getOrderNumber())
+                .orderType(order.getOrderType())
                 .buyerId(order.getBuyer() != null ? String.valueOf(order.getBuyer().getId()) : null)
                 .sellerId(sellerId)
                 .sellerName(sellerName)

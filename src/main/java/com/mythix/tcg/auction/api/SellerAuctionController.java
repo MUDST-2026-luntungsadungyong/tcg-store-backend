@@ -1,9 +1,14 @@
 package com.mythix.tcg.auction.api;
 
 import com.mythix.tcg.auction.api.AuctionDtos.*;
+import com.mythix.tcg.auction.api.AuctionExtendedDtos.SecondChanceOfferView;
+import com.mythix.tcg.auction.api.AuctionExtendedDtos.SellerAnalyticsView;
+import com.mythix.tcg.auction.api.AuctionExtendedDtos.SettlementSummaryView;
+import com.mythix.tcg.auction.application.AuctionAnalyticsService;
 import com.mythix.tcg.auction.application.AuctionCancellationService;
 import com.mythix.tcg.auction.application.AuctionException;
 import com.mythix.tcg.auction.application.AuctionService;
+import com.mythix.tcg.auction.application.AuctionSettlementService;
 import com.mythix.tcg.auction.domain.AuctionPhoto;
 import com.mythix.tcg.auth.security.AuthenticatedUser;
 import lombok.RequiredArgsConstructor;
@@ -24,10 +29,29 @@ import java.util.Locale;
 public class SellerAuctionController {
     private final AuctionService auctions;
     private final AuctionCancellationService cancellations;
+    private final AuctionAnalyticsService analytics;
+    private final AuctionSettlementService settlement;
 
     @GetMapping
     public List<AuctionView> list(@AuthenticationPrincipal AuthenticatedUser user) {
         return auctions.list(user.userId());
+    }
+
+    @GetMapping("/analytics")
+    public SellerAnalyticsView analytics(@AuthenticationPrincipal AuthenticatedUser user) {
+        return analytics.getSellerAnalytics(user.userId());
+    }
+
+    @PostMapping("/{id}/second-chance-offer")
+    public SecondChanceOfferView sendSecondChanceOffer(@AuthenticationPrincipal AuthenticatedUser user,
+                                                       @PathVariable Long id) {
+        return settlement.sendSecondChanceOffer(id, user.userId());
+    }
+
+    @GetMapping("/{id}/settlement-summary")
+    public SettlementSummaryView settlementSummary(@AuthenticationPrincipal AuthenticatedUser user,
+                                                   @PathVariable Long id) {
+        return settlement.getSettlementSummary(id, user.userId());
     }
 
     @GetMapping("/inventory")

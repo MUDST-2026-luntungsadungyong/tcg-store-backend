@@ -2,6 +2,8 @@ package com.mythix.tcg.auction.application;
 
 import com.mythix.tcg.auction.domain.Auction;
 import com.mythix.tcg.auction.persistence.AuctionRepository;
+import com.mythix.tcg.auction.api.AuctionLiveUpdates;
+import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -21,7 +23,9 @@ import java.time.Instant;
 @Slf4j
 public class AuctionLifecycle {
     private final AuctionRepository repository;
+    private final ApplicationEventPublisher events;
     private final AuctionService service;
+
 
     @Scheduled(fixedDelayString = "${auction.lifecycle.interval-ms:5000}")
     public void runDueAuctions() {
@@ -30,6 +34,7 @@ public class AuctionLifecycle {
             PageRequest.ofSize(100))) {
             try {
                 service.advanceLifecycle(id, now);
+                events.publishEvent(new AuctionLiveUpdates.Changed(id));
             } catch (RuntimeException exception) {
                 log.error("Could not advance auction {}", id, exception);
             }

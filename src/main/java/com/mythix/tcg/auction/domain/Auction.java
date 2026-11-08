@@ -14,7 +14,10 @@ import java.time.Instant;
 @Setter
 @NoArgsConstructor
 public class Auction {
-    public enum Status { DRAFT, SCHEDULED, ACTIVE, ENDED, AWAITING_PAYMENT, COMPLETED, CANCELLED }
+    public enum Status {
+        DRAFT, SCHEDULED, ACTIVE, ENDED, AWAITING_PAYMENT, COMPLETED, CANCELLED,
+        BUYOUT_COMPLETED, RESERVE_NOT_MET, UNSOLD_NO_BIDS, DEFAULTED
+    }
     public enum StartMode { NOW, SCHEDULED }
 
     @Id
@@ -64,6 +67,27 @@ public class Auction {
     private int bidCount;
     @Column(precision = 12, scale = 2)
     private BigDecimal highestBid;
+
+    private Long leadingBidderId;
+
+    private Long winnerId;
+    @Column(precision = 12, scale = 2)
+    private BigDecimal winningBid;
+    @Column(nullable = false)
+    private boolean isReserveMet;
+
+    private Long orderId;
+    private Instant paymentDeadline;
+
+    @Column(precision = 5, scale = 4, nullable = false)
+    private BigDecimal platformFeeRate = new BigDecimal("0.0500");
+    @Column(precision = 12, scale = 2, nullable = false)
+    private BigDecimal platformFeeAmount = BigDecimal.ZERO;
+    @Column(precision = 12, scale = 2, nullable = false)
+    private BigDecimal sellerNetAmount = BigDecimal.ZERO;
+    @Column(precision = 12, scale = 2, nullable = false)
+    private BigDecimal costBasis = BigDecimal.ZERO;
+
     @Column(nullable = false)
     private boolean stockHeld;
     @Column(nullable = false)

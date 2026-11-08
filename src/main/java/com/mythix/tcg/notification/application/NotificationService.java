@@ -149,6 +149,17 @@ public class NotificationService {
             .build());
     }
 
+    @Transactional
+    public void sendAuctionNotification(User recipient, String type, String title, String message, String actionPath) {
+        notificationRepository.save(UserNotification.builder()
+            .recipient(recipient)
+            .type(type)
+            .title(title)
+            .message(message)
+            .actionPath(actionPath)
+            .build());
+    }
+
     private UserNotification sellerApplicationNotification(
             User recipient, SellerProfile profile, String type, String title, String message) {
         return UserNotification.builder()

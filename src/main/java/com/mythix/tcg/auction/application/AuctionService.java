@@ -55,6 +55,7 @@ public class AuctionService {
     private static final Instant MAX_START = Instant.parse("9999-12-31T00:00:00Z");
 
     private final AuctionRepository auctions;
+    private final AuctionSettlementService settlement;
     private final AuctionPhotoRepository photos;
     private final AuctionCancellationRepository cancellations;
     private final AuctionEvidenceRepository evidence;
@@ -207,11 +208,7 @@ public class AuctionService {
 
         Auction auction = candidate.get();
         if ((auction.getStatus() == SCHEDULED || auction.getStatus() == ACTIVE) && !now.isBefore(auction.getEndAt())) {
-            if (auction.getBidCount() == 0) {
-                releaseStock(auction);
-            }
-            auction.setStatus(ENDED);
-            auction.setUpdatedAt(now);
+            settlement.closeAuction(id, now);
         } else if (auction.getStatus() == SCHEDULED && !now.isBefore(auction.getStartAt())) {
             auction.setStatus(ACTIVE);
             auction.setUpdatedAt(now);

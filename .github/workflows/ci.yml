@@ -249,6 +249,14 @@ jobs:
           PRESERVED_STOCK=$(psql -t -A -d tcg_store_upgrade_v11 -c "SELECT COUNT(*) FROM local_cards WHERE global_card_id='auction-card' AND on_hand=2 AND reserved=1 AND auction_reserved=0 AND price=20.00 AND status='SHOW' AND custom_image_url='https://example.test/cover.png' AND actual_image_front_url='https://example.test/front.png' AND actual_image_back_url='https://example.test/back.png' AND grading_company='PSA' AND grade='10' AND cert_number='test-cert';")
           test "$PRESERVED_STOCK" -eq 1
 
+          echo "Verifying V13 to V14 upgrade with voucher and auction schema in place..."
+          createdb tcg_store_upgrade_v13
+          V13_URL=jdbc:postgresql://localhost:5432/tcg_store_upgrade_v13
+          DB_URL="$V13_URL" run_migration --spring.flyway.target=13 --spring.jpa.hibernate.ddl-auto=none
+          DB_URL="$V13_URL" run_migration
+          test "$(psql -t -A -d tcg_store_upgrade_v13 -c "SELECT count(*) FROM flyway_schema_history WHERE version IN ('13','14') AND success;")" -eq 2
+          test "$(psql -t -A -d tcg_store_upgrade_v13 -c "SELECT count(*) FROM auction_commission_policy WHERE id = 1 AND rate = 0.0500 AND minimum_fee = 20;")" -eq 1
+
           echo "Rehearsing backup and restore before future production migrations..."
           # Use the server image's tools: newer runner clients can emit settings
           # (such as transaction_timeout) that PostgreSQL 16 cannot restore.

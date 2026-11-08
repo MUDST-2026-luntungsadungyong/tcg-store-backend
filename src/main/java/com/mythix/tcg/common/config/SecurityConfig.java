@@ -64,6 +64,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/collections/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/vouchers").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/vouchers/validate").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/auctions", "/api/auctions/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // SellerProductService checks the current database role/status so a token
                 // issued immediately before seller verification does not become stale.
