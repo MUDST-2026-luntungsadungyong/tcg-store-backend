@@ -3,7 +3,7 @@ package com.mythix.tcg.auction.api;
 import com.mythix.tcg.auction.api.AuctionExtendedDtos.BidRequest;
 import com.mythix.tcg.auction.api.AuctionExtendedDtos.ProxyBidRequest;
 import com.mythix.tcg.auction.application.AuctionBidService;
-import com.mythix.tcg.auction.application.AuctionDiscoveryService;
+import com.mythix.tcg.auction.application.AuctionWatchlistService;
 import com.mythix.tcg.auction.application.AuctionSettlementService;
 import com.mythix.tcg.auction.domain.Auction;
 import com.mythix.tcg.auction.persistence.AuctionRepository;
@@ -55,6 +55,7 @@ class BuyerAuctionIntegrationTests {
     @Autowired private OrderRepository orders;
     @Autowired private CollectionRepository collections;
     @Autowired private AuctionBidService bidService;
+    @Autowired private AuctionWatchlistService watchlistService;
     @Autowired private AuctionSettlementService settlementService;
 
     private AuctionApiFixtures fixtures;
@@ -172,6 +173,10 @@ class BuyerAuctionIntegrationTests {
         // Buyer 1's proxy should automatically counter at 200 + increment (20) = 220
         updated = auctions.findById(auction.getId()).orElseThrow();
         assertThat(updated.getHighestBid()).isEqualByComparingTo("220.00");
+        mvc.perform(get("/api/notifications").header("Authorization", buyer2Auth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content[0].type").value("AUCTION_OUTBID"))
+            .andExpect(jsonPath("$.content[0].actionPath").value("/auctions/" + auction.getId()));
 
         bidService.placeManualBid(auction.getId(), buyer2.getId(), new BigDecimal("500.00"));
         assertThat(auctions.findById(auction.getId()).orElseThrow().getLeadingBidderId()).isEqualTo(buyer1.getId());
@@ -222,6 +227,29 @@ class BuyerAuctionIntegrationTests {
                 .header("Authorization", buyer1Auth))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.isWatching").value(false));
+    }
+
+    @Test
+    void testWatchlistRemindersSendOnceForEachWindow() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("100.00"), null, null);
+        watchlistService.toggleWatchlist(buyer1.getId(), auction.getId());
+
+        auction.setEndAt(Instant.now().plus(60, ChronoUnit.MINUTES));
+        auctions.save(auction);
+        watchlistService.processEndingReminders();
+        watchlistService.processEndingReminders();
+
+        auction.setEndAt(Instant.now().plus(15, ChronoUnit.MINUTES));
+        auctions.save(auction);
+        watchlistService.processEndingReminders();
+        watchlistService.processEndingReminders();
+
+        mvc.perform(get("/api/notifications").header("Authorization", buyer1Auth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalElements").value(2))
+            .andExpect(jsonPath("$.content[0].type").value("AUCTION_WATCHLIST_ENDING"))
+            .andExpect(jsonPath("$.content[0].actionPath").value("/auctions/" + auction.getId()))
+            .andExpect(jsonPath("$.content[1].type").value("AUCTION_WATCHLIST_ENDING"));
     }
 
     @Test
@@ -397,6 +425,11 @@ class BuyerAuctionIntegrationTests {
 
         // Parse offer ID from response
         long offerId = json.readTree(offerResponseBody).get("id").asLong();
+
+        mvc.perform(get("/api/user/auction-second-chance-offers").header("Authorization", buyer1Auth))
+            .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(offerId));
+        mvc.perform(get("/api/user/auction-second-chance-offers").header("Authorization", buyer2Auth))
+            .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
 
         // Buyer 1 accepts offer
         mvc.perform(post("/api/auctions/second-chance/" + offerId + "/respond?accept=true")

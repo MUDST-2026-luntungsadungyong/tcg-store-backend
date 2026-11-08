@@ -125,9 +125,9 @@ public class AuctionWatchlistService {
         Instant window1hEnd = now.plus(Duration.ofMinutes(65));
         for (AuctionWatchlist w : watchlistRepository.findDue1HourWatchlists(window1hStart, window1hEnd)) {
             auctionRepository.findById(w.getAuctionId()).ifPresent(auction -> {
-                sendWatchlistReminder(w.getUserId(), auction, "เหลือเวลาอีกประมาณ 1 ชั่วโมงก่อนปิดการประมูล");
-                w.setNotified1h(true);
-                watchlistRepository.save(w);
+                if (watchlistRepository.claimOneHourReminder(w.getId()) == 1) {
+                    sendWatchlistReminder(w.getUserId(), auction, "เหลือเวลาอีกประมาณ 1 ชั่วโมงก่อนปิดการประมูล");
+                }
             });
         }
 
@@ -136,9 +136,9 @@ public class AuctionWatchlistService {
         Instant window15mEnd = now.plus(Duration.ofMinutes(16));
         for (AuctionWatchlist w : watchlistRepository.findDue15MinWatchlists(window15mStart, window15mEnd)) {
             auctionRepository.findById(w.getAuctionId()).ifPresent(auction -> {
-                sendWatchlistReminder(w.getUserId(), auction, "เหลือเวลาอีกเพียง 15 นาทีสุดท้ายก่อนปิดการประมูล!");
-                w.setNotified15m(true);
-                watchlistRepository.save(w);
+                if (watchlistRepository.claimFifteenMinuteReminder(w.getId()) == 1) {
+                    sendWatchlistReminder(w.getUserId(), auction, "เหลือเวลาอีกเพียง 15 นาทีสุดท้ายก่อนปิดการประมูล!");
+                }
             });
         }
     }

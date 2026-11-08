@@ -3,6 +3,7 @@ package com.mythix.tcg.auction.persistence;
 import com.mythix.tcg.auction.domain.AuctionWatchlist;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
@@ -10,6 +11,14 @@ import java.util.List;
 import java.util.Optional;
 
 public interface AuctionWatchlistRepository extends JpaRepository<AuctionWatchlist, Long> {
+
+    @Modifying
+    @Query("update AuctionWatchlist w set w.notified1h = true where w.id = :id and w.notified1h = false")
+    int claimOneHourReminder(Long id);
+
+    @Modifying
+    @Query("update AuctionWatchlist w set w.notified15m = true where w.id = :id and w.notified15m = false")
+    int claimFifteenMinuteReminder(Long id);
 
     Optional<AuctionWatchlist> findByUserIdAndAuctionId(Long userId, Long auctionId);
 
