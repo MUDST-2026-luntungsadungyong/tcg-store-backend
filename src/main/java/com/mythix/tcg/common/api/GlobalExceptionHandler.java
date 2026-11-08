@@ -32,6 +32,7 @@ import com.mythix.tcg.order.application.EmptyCartException;
 import com.mythix.tcg.order.application.OrderStatusValidationException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
+import com.mythix.tcg.voucher.application.VoucherExceptions.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
@@ -317,4 +318,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
             .body(new ApiError("VALIDATION_ERROR", "Request validation failed", fields));
     }
+
+    @ExceptionHandler(VoucherNotFoundException.class)
+    public ResponseEntity<ApiError> voucherNotFound(VoucherNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("VOUCHER_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(VoucherAlreadyClaimedException.class)
+    public ResponseEntity<ApiError> voucherAlreadyClaimed(VoucherAlreadyClaimedException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_ALREADY_CLAIMED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(VoucherQuotaExhaustedException.class)
+    public ResponseEntity<ApiError> voucherQuotaExhausted(VoucherQuotaExhaustedException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_QUOTA_EXHAUSTED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(VoucherNotApplicableException.class)
+    public ResponseEntity<ApiError> voucherNotApplicable(VoucherNotApplicableException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_NOT_APPLICABLE", exception.getMessage(), Map.of()));
+    }
+
 }

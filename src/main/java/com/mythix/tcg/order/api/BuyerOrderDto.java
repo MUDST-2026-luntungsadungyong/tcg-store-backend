@@ -73,6 +73,9 @@ public class BuyerOrderDto {
         private String status;
         private BigDecimal totalAmount;
         private BigDecimal totalPrice;
+        private BigDecimal subtotalAmount;
+        private BigDecimal discountAmount;
+        private String voucherCode;
         private Integer itemCount;
         private List<BuyerOrderItemResponse> items;
         private List<OrderStatusLogResponse> logs;

@@ -11,13 +11,23 @@ public final class CheckoutDto {
     private CheckoutDto() {
     }
 
-    /** Checkout uses the authenticated user's current cart; no client fields are accepted. */
     public static final class CheckoutRequest {
+        private String voucherCode;
         private final Map<String, JsonNode> unexpectedFields = new LinkedHashMap<>();
+
+        public String getVoucherCode() {
+            return voucherCode;
+        }
+
+        public void setVoucherCode(String voucherCode) {
+            this.voucherCode = voucherCode;
+        }
 
         @JsonAnySetter
         public void rejectUnexpectedField(String name, JsonNode value) {
-            unexpectedFields.put(name, value);
+            if (!"voucherCode".equalsIgnoreCase(name)) {
+                unexpectedFields.put(name, value);
+            }
         }
 
         public void validate() {
@@ -45,8 +55,21 @@ public final class CheckoutDto {
         String orderNumber,
         String status,
         BigDecimal totalAmount,
+        BigDecimal subtotalAmount,
+        BigDecimal discountAmount,
+        String voucherCode,
         List<CheckoutItemResponse> items,
         String createdAt
     ) {
+        public CheckoutResponse(
+            String id,
+            String orderNumber,
+            String status,
+            BigDecimal totalAmount,
+            List<CheckoutItemResponse> items,
+            String createdAt
+        ) {
+            this(id, orderNumber, status, totalAmount, totalAmount, BigDecimal.ZERO, null, items, createdAt);
+        }
     }
 }

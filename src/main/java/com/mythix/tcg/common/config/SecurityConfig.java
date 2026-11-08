@@ -62,6 +62,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                 .requestMatchers("/api/health", "/actuator/health", "/actuator/health/**", "/api/cards/**", "/api/products/**", "/api/stores/**", "/api/auth/register", "/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password", "/error").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/collections/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/vouchers").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/vouchers/validate").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // SellerProductService checks the current database role/status so a token
                 // issued immediately before seller verification does not become stale.
