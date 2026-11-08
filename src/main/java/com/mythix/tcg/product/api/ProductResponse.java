@@ -63,9 +63,7 @@ public class ProductResponse {
             }
         }
 
-        int onHand = product.getOnHand() != null ? product.getOnHand() : 0;
-        int reserved = product.getReserved() != null ? product.getReserved() : 0;
-        int availableStock = Math.max(0, onHand - reserved);
+        int availableStock = product.availableStock();
 
         return ProductResponse.builder()
                 .id(product.getId() != null ? String.valueOf(product.getId()) : null)

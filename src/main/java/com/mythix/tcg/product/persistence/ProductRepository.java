@@ -22,6 +22,6 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     List<Product> findBySellerId(Long sellerId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select p from Product p join fetch p.card join fetch p.seller where p.id = :id")
+    @Query("select p from Product p where p.id = :id")
     Optional<Product> findByIdForUpdate(@Param("id") Long id);
 }
