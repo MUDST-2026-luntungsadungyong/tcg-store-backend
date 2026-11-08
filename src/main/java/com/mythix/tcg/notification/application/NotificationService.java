@@ -127,6 +127,28 @@ public class NotificationService {
         notificationRepository.resolveSellerApplicationReviewNotifications(sellerProfileId);
     }
 
+    @Transactional
+    public void notifyAdminsOfAuctionCancellation(Long auctionId, Collection<User> admins) {
+        for (User admin : admins) {
+            notificationRepository.save(UserNotification.builder()
+                .recipient(admin)
+                .type(NotificationTypes.AUCTION_CANCELLATION_SUBMITTED)
+                .title("Auction cancellation request")
+                .message("Auction #" + auctionId + " has a cancellation request awaiting review.")
+                .build());
+        }
+    }
+
+    @Transactional
+    public void notifySellerOfAuctionCancellationDecision(User seller, Long auctionId, boolean approved) {
+        notificationRepository.save(UserNotification.builder()
+            .recipient(seller)
+            .type(NotificationTypes.AUCTION_CANCELLATION_DECIDED)
+            .title(approved ? "Auction cancellation approved" : "Auction cancellation rejected")
+            .message("An administrator reviewed your cancellation request for auction #" + auctionId + ".")
+            .build());
+    }
+
     private UserNotification sellerApplicationNotification(
             User recipient, SellerProfile profile, String type, String title, String message) {
         return UserNotification.builder()

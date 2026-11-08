@@ -1,0 +1,29 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:tcg_store;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
+
+app:
+  auth:
+    demo-reset-enabled: true
+  jwt:
+    secret: ${APP_JWT_SECRET:256277a7b6bce805ba154fec08b267f9a2484a6e7c4108f1099a5000b1f383d4}
+  seller:
+    product-images:
+      object-storage-region: us-east-1
+      object-storage-bucket: local-dev-bucket
+      object-storage-public-base-url: http://localhost:8080/uploads
+      object-storage-access-key: dummy-access-key
+      object-storage-secret-key: dummy-secret-key
