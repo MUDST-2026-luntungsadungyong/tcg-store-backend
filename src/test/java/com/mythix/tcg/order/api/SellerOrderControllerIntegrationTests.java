@@ -307,10 +307,30 @@ class SellerOrderControllerIntegrationTests {
         mockMvc.perform(get("/api/seller/orders"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void updateOrderStatus_Sent_WithTrackingNumber_SavesLog() throws Exception {
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"SENT\", \"trackingNumber\":\"FLASH77261902\", \"note\":\"Shipped via Flash\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SENT"))
+                .andExpect(jsonPath("$.logs[0].note").value("Shipped via Flash (Tracking: FLASH77261902)"));
+
+        var logs = orderStatusLogRepository.findByOrderIdOrderByCreatedAtAsc(sellerOrder.getId());
+        org.assertj.core.api.Assertions.assertThat(logs).hasSize(1);
+        org.assertj.core.api.Assertions.assertThat(logs.get(0).getNote()).isEqualTo("Shipped via Flash (Tracking: FLASH77261902)");
+    }
+
+    @Test
+    void updateOrderStatus_Sent_WithoutTrackingOrNote_FailsValidation() throws Exception {
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"SENT\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
 }
-
-
-
-
-
-
