@@ -170,9 +170,7 @@ public class CheckoutService {
         if (product.getPrice() == null || product.getPrice().signum() < 0) {
             throw new CheckoutValidationException("price", "listing price is invalid");
         }
-        int onHand = product.getOnHand() == null ? 0 : product.getOnHand();
-        int reserved = product.getReserved() == null ? 0 : product.getReserved();
-        int available = Math.max(0, onHand - reserved);
+        int available = product.availableStock();
         if (quantityValue > available) {
             throw new CheckoutInsufficientStockException(listingId, available);
         }

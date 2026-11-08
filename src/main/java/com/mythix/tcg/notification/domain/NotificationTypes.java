@@ -7,6 +7,8 @@ public final class NotificationTypes {
     public static final String SELLER_APPLICATION_SUBMITTED = "SELLER_APPLICATION_SUBMITTED";
     public static final String SELLER_APPLICATION_APPROVED = "SELLER_APPLICATION_APPROVED";
     public static final String SELLER_APPLICATION_REJECTED = "SELLER_APPLICATION_REJECTED";
+    public static final String AUCTION_CANCELLATION_SUBMITTED = "AUCTION_CANCELLATION_SUBMITTED";
+    public static final String AUCTION_CANCELLATION_DECIDED = "AUCTION_CANCELLATION_DECIDED";
 
     private NotificationTypes() {
     }

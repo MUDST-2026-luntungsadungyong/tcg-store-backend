@@ -19,7 +19,6 @@ public interface SellerProductRepository extends JpaRepository<Product, Long> {
     List<Product> findAllBySeller_IdAndStatusNotOrderByUpdatedAtDescIdDesc(Long sellerId, String status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = "card")
     @Query("select p from Product p where p.id = :productId")
     Optional<Product> findActiveByIdForUpdate(@Param("productId") Long productId);
 

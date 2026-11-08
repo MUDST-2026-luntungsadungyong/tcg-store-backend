@@ -81,6 +81,10 @@ public class Product {
     @Builder.Default
     private Integer reserved = 0;
 
+    @Column(name = "auction_reserved", nullable = false)
+    @Builder.Default
+    private int auctionReserved = 0;
+
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String status = "SHOW";
@@ -92,6 +96,12 @@ public class Product {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public int availableStock() {
+        int units = onHand == null ? 0 : onHand;
+        int orderHolds = reserved == null ? 0 : reserved;
+        return (int) Math.max(0L, (long) units - orderHolds - auctionReserved);
+    }
 
     @PrePersist
     @PreUpdate

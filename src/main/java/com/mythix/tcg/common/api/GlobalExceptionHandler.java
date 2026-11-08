@@ -1,5 +1,6 @@
 package com.mythix.tcg.common.api;
 
+import com.mythix.tcg.auction.application.AuctionException;
 import com.mythix.tcg.auth.application.DuplicateEmailException;
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
 import com.mythix.tcg.admin.application.SellerApplicationNotFoundException;
@@ -32,6 +33,7 @@ import com.mythix.tcg.order.application.EmptyCartException;
 import com.mythix.tcg.order.application.OrderStatusValidationException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
@@ -48,6 +50,18 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AuctionException.class)
+    public ResponseEntity<ApiError> auction(AuctionException exception) {
+        return ResponseEntity.status(exception.getStatus())
+            .body(new ApiError(exception.getCode(), exception.getMessage(), null));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> stockLockContention() {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("CONCURRENT_UPDATE", "The data changed concurrently. Refresh and retry.", null));
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> validation(MethodArgumentNotValidException exception) {
