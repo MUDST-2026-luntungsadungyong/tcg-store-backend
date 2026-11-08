@@ -56,6 +56,34 @@ public final class PublicCollectionDto {
     @AllArgsConstructor
     @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class PublicCollectionsPageResponse {
+        private List<PublicCollectionSummary> items;
+        private CollectionDto.PageMetadata page;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class PublicCollectionSummary {
+        private String userId;
+        private String displayName;
+        private String avatarUrl;
+        private String role;
+        private String sellerStatus;
+        private Boolean isSeller;
+        private long totalCardsCount;
+        private long rareCardCount;
+        private long distinctRareCardCount;
+        private List<RareCardHighlight> highlights;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class PublicCollectionResponse {
         private PublicCollector owner;
         private List<CollectionDto.CollectionItemResponse> items;
@@ -73,5 +101,8 @@ public final class PublicCollectionDto {
         private String avatarUrl;
         private long rareCardCount;
         private long distinctRareCardCount;
+        private String role;
+        private String sellerStatus;
+        private String collectionPrivacy;
     }
 }

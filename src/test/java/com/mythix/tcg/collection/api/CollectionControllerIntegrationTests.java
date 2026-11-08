@@ -260,4 +260,61 @@ class CollectionControllerIntegrationTests {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("COLLECTION_ITEM_NOT_FOUND"));
     }
+
+    @Test
+    @DisplayName("Should toggle collection privacy between PUBLIC and PRIVATE and enforce access")
+    void shouldToggleCollectionPrivacyAndEnforceAccess() throws Exception {
+        // 1. Initial collection should report PUBLIC
+        mockMvc.perform(get("/api/collection")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.privacy").value("PUBLIC"));
+
+        mockMvc.perform(get("/api/collection/privacy")
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.privacy").value("PUBLIC"));
+
+        // 2. Change privacy to PRIVATE
+        mockMvc.perform(put("/api/collection/privacy")
+                        .header("Authorization", "Bearer " + user1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"privacy\": \"PRIVATE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.privacy").value("PRIVATE"));
+
+        // 3. User 1 (owner) can still view their collection publicly
+        mockMvc.perform(get("/api/collections/" + user1.getId())
+                        .header("Authorization", "Bearer " + user1Token))
+                .andExpect(status().isOk());
+
+        // 4. User 2 cannot view User 1's private collection -> 403
+        mockMvc.perform(get("/api/collections/" + user1.getId())
+                        .header("Authorization", "Bearer " + user2Token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("COLLECTION_PRIVATE"));
+
+        // 5. Change back to PUBLIC
+        mockMvc.perform(put("/api/collection/privacy")
+                        .header("Authorization", "Bearer " + user1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"privacy\": \"PUBLIC\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.privacy").value("PUBLIC"));
+
+        // 6. User 2 can now view User 1's collection
+        mockMvc.perform(get("/api/collections/" + user1.getId())
+                        .header("Authorization", "Bearer " + user2Token))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Should return 400 when updating collection privacy with invalid value")
+    void shouldReturn400WhenInvalidPrivacy() throws Exception {
+        mockMvc.perform(put("/api/collection/privacy")
+                        .header("Authorization", "Bearer " + user1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"privacy\": \"INVALID_CHOICE\"}"))
+                .andExpect(status().isBadRequest());
+    }
 }
