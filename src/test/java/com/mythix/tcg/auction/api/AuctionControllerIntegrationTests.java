@@ -265,7 +265,7 @@ class AuctionControllerIntegrationTests {
         assertThat(heldStock()).isEqualTo(1);
         auctionService.advanceLifecycle(id, end);
         auctionService.advanceLifecycle(id, end.plusSeconds(1));
-        assertStatus(id, "ENDED");
+        assertStatus(id, "UNSOLD_NO_BIDS");
         assertThat(heldStock()).isZero();
     }
 

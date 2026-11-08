@@ -25,4 +25,12 @@ public class AuctionException extends RuntimeException {
     public static AuctionException conflict(String message) {
         return new AuctionException(HttpStatus.CONFLICT, "AUCTION_CONFLICT", message);
     }
+
+    public static AuctionException notFound(String message) {
+        return missing(message);
+    }
+
+    public static AuctionException forbidden(String message) {
+        return new AuctionException(HttpStatus.FORBIDDEN, "AUCTION_FORBIDDEN", message);
+    }
 }

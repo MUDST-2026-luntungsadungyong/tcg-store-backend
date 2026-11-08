@@ -32,6 +32,7 @@ public class SellerOrderDto {
         Long id,
         String orderNumber,
         String status,
+        String orderType,
         Long buyerId,
         String buyerName,
         String buyerEmail,

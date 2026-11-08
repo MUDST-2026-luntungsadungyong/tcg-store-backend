@@ -59,6 +59,10 @@ public class Order {
     @Column(name = "voucher_code_snapshot", length = 50)
     private String voucherCodeSnapshot;
 
+    @Column(name = "order_type", nullable = false, length = 20)
+    @Builder.Default
+    private String orderType = "DIRECT";
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount;
 

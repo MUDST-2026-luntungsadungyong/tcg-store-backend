@@ -31,6 +31,7 @@ import java.util.Map;
 public class SellerOrderService {
 
     private final OrderRepository orderRepository;
+    private final com.mythix.tcg.auction.application.AuctionSettlementService auctionSettlementService;
     private final NotificationService notificationService;
     private final ProductRepository productRepository;
     private final OrderStatusLogRepository orderStatusLogRepository;
@@ -66,6 +67,7 @@ public class SellerOrderService {
 
     @Transactional
     public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note, String trackingNumber) {
+        auctionSettlementService.lockAuctionForOrder(orderId);
         Order order = orderRepository.findOrderForSeller(sellerId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found for seller"));
 
@@ -77,6 +79,14 @@ public class SellerOrderService {
         }
 
         validateStatusTransition(previousStatus, updatedStatus);
+        if ("AUCTION".equals(order.getOrderType())) {
+            if ("CONFIRMED".equals(updatedStatus) && !auctionSettlementService.hasPaymentProof(orderId)) {
+                throw new OrderStatusValidationException("status", "Buyer payment proof is required before confirmation");
+            }
+            if (!"CONFIRMED".equals(updatedStatus) && !"SENT".equals(updatedStatus)) {
+                throw new OrderStatusValidationException("status", "Invalid seller action for an auction order");
+            }
+        }
 
         String effectiveTracking = trackingNumber != null ? trackingNumber.trim() : "";
         String effectiveNote = note != null ? note.trim() : "";
@@ -316,6 +326,7 @@ public class SellerOrderService {
                 order.getId(),
                 order.getOrderNumber(),
                 order.getStatus(),
+                order.getOrderType(),
                 buyer != null ? buyer.getId() : null,
                 buyer != null ? buyer.getFullName() : null,
                 buyer != null ? buyer.getEmail() : null,

@@ -45,6 +45,28 @@ public class CollectionItem {
     @Builder.Default
     private Integer quantity = 1;
 
+    @Column(length = 100)
+    private String provenance;
+
+    @Column(name = "is_auction_won", nullable = false)
+    @Builder.Default
+    private boolean auctionWon = false;
+
+    @Column(name = "grading_company", length = 10)
+    private String gradingCompany;
+
+    @Column(length = 30)
+    private String grade;
+
+    @Column(name = "cert_number", length = 100)
+    private String certNumber;
+
+    @Column(name = "image_front_url", length = 500)
+    private String imageFrontUrl;
+
+    @Column(name = "image_back_url", length = 500)
+    private String imageBackUrl;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

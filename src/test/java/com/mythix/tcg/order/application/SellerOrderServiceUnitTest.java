@@ -53,6 +53,9 @@ class SellerOrderServiceUnitTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private com.mythix.tcg.auction.application.AuctionSettlementService auctionSettlementService;
+
     @InjectMocks
     private SellerOrderService sellerOrderService;
 

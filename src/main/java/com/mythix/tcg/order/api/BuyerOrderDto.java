@@ -67,6 +67,7 @@ public class BuyerOrderDto {
     public static class BuyerOrderResponse {
         private String id;
         private String orderNumber;
+        private String orderType;
         private String buyerId;
         private String sellerId;
         private String sellerName;

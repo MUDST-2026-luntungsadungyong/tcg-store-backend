@@ -62,6 +62,10 @@ public class CollectionDto {
     @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class CollectionItemResponse {
+        private boolean auctionWon;
+        private String provenance;
+        private String gradingCompany;
+        private String grade;
         private String id;
         private String ownerId;
         private String cardId;

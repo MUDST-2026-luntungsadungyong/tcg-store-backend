@@ -13,6 +13,8 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
 
     List<OrderItem> findBySellerId(Long sellerId);
 
+    List<OrderItem> findByOrderId(Long orderId);
+
     @Query("SELECT item FROM OrderItem item WHERE item.seller.id = :sellerId AND item.order.id = :orderId")
     List<OrderItem> findBySellerIdAndOrderId(@Param("sellerId") Long sellerId, @Param("orderId") Long orderId);
 }
