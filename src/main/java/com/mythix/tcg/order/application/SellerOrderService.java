@@ -61,6 +61,11 @@ public class SellerOrderService {
 
     @Transactional
     public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note) {
+        return updateOrderStatus(sellerId, orderId, newStatus, note, null);
+    }
+
+    @Transactional
+    public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note, String trackingNumber) {
         Order order = orderRepository.findOrderForSeller(sellerId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found for seller"));
 
@@ -73,10 +78,30 @@ public class SellerOrderService {
 
         validateStatusTransition(previousStatus, updatedStatus);
 
+        String effectiveTracking = trackingNumber != null ? trackingNumber.trim() : "";
+        String effectiveNote = note != null ? note.trim() : "";
+
         if ("SENT".equalsIgnoreCase(updatedStatus)) {
+            if (effectiveTracking.isEmpty() && effectiveNote.isEmpty()) {
+                throw new OrderStatusValidationException("trackingNumber",
+                        "Tracking number is required when marking order as SENT");
+            }
             deductInventoryOnSend(order);
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
+        }
+
+        String logNote;
+        if ("SENT".equalsIgnoreCase(updatedStatus)) {
+            if (!effectiveTracking.isEmpty()) {
+                logNote = !effectiveNote.isEmpty()
+                        ? effectiveNote + " (Tracking: " + effectiveTracking + ")"
+                        : "Tracking: " + effectiveTracking;
+            } else {
+                logNote = effectiveNote;
+            }
+        } else {
+            logNote = note;
         }
 
         order.setStatus(updatedStatus);
@@ -88,7 +113,7 @@ public class SellerOrderService {
                 .toStatus(updatedStatus)
                 .changedBy(userRepository.getReferenceById(sellerId))
                 .changedByRole("SELLER")
-                .note(note)
+                .note(logNote)
                 .build();
         orderStatusLogRepository.save(log);
 

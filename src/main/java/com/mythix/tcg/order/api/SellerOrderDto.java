@@ -51,7 +51,8 @@ public class SellerOrderDto {
         @NotBlank(message = "Status is required")
         @Pattern(regexp = "(?i)PENDING|CONFIRMED|SENT|FULFILLED|CANCELLED", message = "Status must be PENDING, CONFIRMED, SENT, FULFILLED, or CANCELLED")
         String status,
-        String note
+        String note,
+        String trackingNumber
     ) {}
 
     public record SellerProfitSummaryResponse(

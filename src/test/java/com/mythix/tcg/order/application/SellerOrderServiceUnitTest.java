@@ -259,9 +259,38 @@ class SellerOrderServiceUnitTest {
         assertThat(summary.netProfit()).isEqualByComparingTo("450.00");
         assertThat(summary.totalOrders()).isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("updateOrderStatus() - จัดส่งพร้อมระบุ Tracking Number บันทึกลง Log ถูกต้อง")
+    void updateOrderStatus_sentWithTrackingNumber_success() {
+        // Arrange
+        sampleOrder.setStatus("CONFIRMED");
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+        when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder);
+        when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.of(product));
+
+        // Act
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Shipped via Flash", "FLASH77261902");
+
+        // Assert
+        assertThat(response).isNotNull();
+        assertThat(sampleOrder.getStatus()).isEqualTo("SENT");
+        verify(orderStatusLogRepository).save(argThat(log ->
+            log.getToStatus().equals("SENT") &&
+            log.getNote().equals("Shipped via Flash (Tracking: FLASH77261902)")
+        ));
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus() - จัดส่งโดยไม่มีทั้ง Tracking Number และ Note เกิดข้อผิดพลาด")
+    void updateOrderStatus_sentWithoutTrackingOrNote_throwsException() {
+        // Arrange
+        sampleOrder.setStatus("CONFIRMED");
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+
+        // Act & Assert
+        assertThatThrownBy(() -> sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "", ""))
+            .isInstanceOf(OrderStatusValidationException.class);
+    }
+
 }
-
-
-
-
-
