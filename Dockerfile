@@ -44,6 +44,7 @@ LABEL org.opencontainers.image.source="${OCI_SOURCE}" \
 
 # Pin the Alpine security fix until the Temurin base includes it.
 RUN apk add --no-cache 'brotli-libs=1.2.1-r0' \
+    && rm -rf /lib/apk/db/scripts.tar /var/cache/apk/* \
     && addgroup -S -g 10001 app \
     && adduser -S -D -H -u 10001 -G app app \
     && touch -d "@${SOURCE_DATE_EPOCH}" /etc/passwd /etc/group /etc/shadow
