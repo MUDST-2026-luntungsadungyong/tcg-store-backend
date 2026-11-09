@@ -71,6 +71,11 @@ public class BuyerOrderDto {
         private String buyerId;
         private String sellerId;
         private String sellerName;
+        private String sellerEmail;
+        private String sellerPhone;
+        private String sellerLine;
+        private String sellerFacebook;
+        private String sellerOtherContact;
         private String status;
         private BigDecimal totalAmount;
         private BigDecimal totalPrice;

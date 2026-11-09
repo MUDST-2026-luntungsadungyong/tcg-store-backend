@@ -40,7 +40,7 @@ public class Order {
     @JoinColumn(name = "buyer_id", nullable = false)
     private User buyer;
 
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 32)
     @Builder.Default
     private String status = "PENDING";
 

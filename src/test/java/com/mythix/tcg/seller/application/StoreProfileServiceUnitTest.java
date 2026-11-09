@@ -82,6 +82,20 @@ class StoreProfileServiceUnitTest {
     }
 
     @Test
+    @DisplayName("publicStore() - does not expose seller contact details")
+    void publicStore_hidesContactDetails() {
+        when(repository.findByUserId(2L)).thenReturn(Optional.of(sampleProfile));
+
+        StoreProfileResponse response = storeProfileService.publicStore(2L);
+
+        assertThat(response.shopName()).isEqualTo("Pewter Gym Cards");
+        assertThat(response.phone()).isNull();
+        assertThat(response.line()).isNull();
+        assertThat(response.facebook()).isNull();
+        assertThat(response.otherContact()).isNull();
+    }
+
+    @Test
     @DisplayName("mine() - โยน InvalidCredentialsException เมื่อไม่พบข้อมูลร้านค้า")
     void mine_notFound_throwsException() {
         // Arrange

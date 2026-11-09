@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -317,7 +316,7 @@ public class AuctionBidService {
             .orderNumber(orderNumber)
             .buyer(buyer)
             .orderType("AUCTION")
-            .status("PENDING")
+            .status("AWAITING_BUYER_CONTACT")
             .subtotalAmount(buyoutPrice)
             .totalAmount(buyoutPrice)
             .platformFee(fee)
@@ -348,7 +347,7 @@ public class AuctionBidService {
         orderItemRepository.save(item);
 
         // 4. Update Auction state
-        auction.setStatus(BUYOUT_COMPLETED);
+        auction.setStatus(AWAITING_BUYER_CONTACT);
         auction.setWinnerId(buyerId);
         auction.setWinningBid(buyoutPrice);
         auction.setHighestBid(buyoutPrice);
@@ -356,7 +355,6 @@ public class AuctionBidService {
         auction.setBidCount(auction.getBidCount() + 1);
         auction.setReserveMet(true);
         auction.setOrderId(savedOrder.getId());
-        auction.setPaymentDeadline(now.plus(Duration.ofHours(48)));
         auction.setPlatformFeeRate(policy.rate());
         auction.setPlatformFeeAmount(fee);
         auction.setSellerNetAmount(sellerNet);
@@ -368,12 +366,14 @@ public class AuctionBidService {
 
         // 5. Send notifications
         sendAuctionNotification(buyerId, NotificationTypes.AUCTION_WON,
-            "ยินดีด้วย! คุณทำการซื้อขาด (Buy-It-Now) รายการ '" + auction.getCardName() + "' สำเร็จ",
-            "/auctions/me");
+            "คุณทำการซื้อขาด (Buy-It-Now) รายการ '" + auction.getCardName()
+                + "' สำเร็จ กรุณาติดต่อร้านค้าเพื่อดำเนินการชำระเงินและจัดส่ง",
+            "/orders/" + savedOrder.getId());
 
         sendAuctionNotification(auction.getSellerId(), NotificationTypes.AUCTION_ENDED_SELLER,
-            "รายการประมูล '" + auction.getCardName() + "' ถูกซื้อขาดในราคา ฿" + buyoutPrice.toPlainString(),
-            "/workspace/auctions/" + auction.getId());
+            "รายการประมูล '" + auction.getCardName() + "' ถูกซื้อขาดในราคา ฿" + buyoutPrice.toPlainString()
+                + " กรุณารอผู้ซื้อเพื่อตกลงการชำระเงินและจัดส่ง",
+            "/workspace/orders?orderId=" + savedOrder.getId());
 
         return new SettlementSummaryView(
             auction.getId(),
@@ -383,7 +383,7 @@ public class AuctionBidService {
             fee,
             sellerNet,
             costBasis,
-            BUYOUT_COMPLETED,
+            AWAITING_BUYER_CONTACT,
             now
         );
     }

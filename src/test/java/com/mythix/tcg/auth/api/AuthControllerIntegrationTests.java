@@ -182,17 +182,24 @@ class AuthControllerIntegrationTests {
     }
 
     @Test
-    void sellerCanUpdateStoreAndGuestsCanReadIt() throws Exception {
+    void sellerCanUpdateStoreWhileGuestsOnlySeePublicFields() throws Exception {
         String token = registerAndGetToken();
         mockMvc.perform(post("/api/sellers/verify").header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"shopName\":\"Original\"}"))
             .andExpect(status().isCreated());
         mockMvc.perform(put("/api/sellers/me/store").header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"shopName\":\"Mythix Vault\",\"shopDescription\":\"Cards\",\"line\":\"vault\"}"))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.shopName").value("Mythix Vault"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.shopName").value("Mythix Vault"))
+            .andExpect(jsonPath("$.line").value("vault"));
         Long userId = userRepository.findByEmail("naphat@example.com").orElseThrow().getId();
         mockMvc.perform(get("/api/stores/{sellerId}", userId))
-            .andExpect(status().isOk()).andExpect(jsonPath("$.line").value("vault"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.shopName").value("Mythix Vault"))
+            .andExpect(jsonPath("$.line").isEmpty())
+            .andExpect(jsonPath("$.phone").isEmpty())
+            .andExpect(jsonPath("$.facebook").isEmpty())
+            .andExpect(jsonPath("$.otherContact").isEmpty());
     }
 
     @Test

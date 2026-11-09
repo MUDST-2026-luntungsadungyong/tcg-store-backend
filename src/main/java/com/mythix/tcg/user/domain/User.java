@@ -38,6 +38,9 @@ public class User {
     @Column(name = "contact_facebook", length = 255)
     private String contactFacebook;
 
+    @Column(name = "contact_other", length = 255)
+    private String contactOther;
+
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 

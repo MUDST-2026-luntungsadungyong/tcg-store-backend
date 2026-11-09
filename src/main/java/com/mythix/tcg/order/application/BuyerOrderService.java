@@ -13,6 +13,7 @@ import com.mythix.tcg.order.domain.OrderStatusLog;
 import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.user.persistence.UserRepository;
+import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.collection.application.CollectionService;
 import com.mythix.tcg.collection.api.CollectionDto.AddToCollectionRequest;
 import com.mythix.tcg.voucher.application.VoucherService;
@@ -94,7 +95,8 @@ public class BuyerOrderService {
         }
 
         validateStatusTransition(previousStatus, updatedStatus);
-        if ("AUCTION".equals(order.getOrderType()) && !"FULFILLED".equals(updatedStatus)) {
+        if ("AUCTION".equals(order.getOrderType())
+                && !"FULFILLED".equals(updatedStatus) && !"CANCELLED".equals(updatedStatus)) {
             throw new OrderStatusValidationException("status", "Invalid buyer action for an auction order");
         }
 
@@ -126,8 +128,8 @@ public class BuyerOrderService {
             throw new OrderStatusValidationException("status", "Cannot change status of an order that is already " + from);
         }
         if ("CANCELLED".equalsIgnoreCase(to)) {
-            if (!"PENDING".equalsIgnoreCase(from) && !"CONFIRMED".equalsIgnoreCase(from)) {
-                throw new OrderStatusValidationException("status", "Can only cancel PENDING or CONFIRMED orders");
+            if (!List.of("PENDING", "CONFIRMED", "AWAITING_BUYER_CONTACT", "PENDING_SELLER_ACTION").contains(from.toUpperCase(Locale.ROOT))) {
+                throw new OrderStatusValidationException("status", "Order can no longer be cancelled");
             }
         } else if ("FULFILLED".equalsIgnoreCase(to)) {
             if (!"SENT".equalsIgnoreCase(from)) {
@@ -199,8 +201,10 @@ public class BuyerOrderService {
 
         String sellerId = null;
         String sellerName = null;
+        User seller = null;
         if (!items.isEmpty() && items.get(0).getSeller() != null) {
-            sellerId = String.valueOf(items.get(0).getSeller().getId());
+            seller = items.get(0).getSeller();
+            sellerId = String.valueOf(seller.getId());
             sellerName = items.get(0).getShopNameSnapshot();
         }
 
@@ -229,6 +233,11 @@ public class BuyerOrderService {
                 .buyerId(order.getBuyer() != null ? String.valueOf(order.getBuyer().getId()) : null)
                 .sellerId(sellerId)
                 .sellerName(sellerName)
+                .sellerEmail(seller != null ? seller.getEmail() : null)
+                .sellerPhone(seller != null ? seller.getPhone() : null)
+                .sellerLine(seller != null ? seller.getContactLine() : null)
+                .sellerFacebook(seller != null ? seller.getContactFacebook() : null)
+                .sellerOtherContact(seller != null ? seller.getContactOther() : null)
                 .status(order.getStatus())
                 .totalAmount(order.getTotalAmount())
                 .totalPrice(order.getTotalAmount())
@@ -289,7 +298,7 @@ public class BuyerOrderService {
 
     private String normalizeStatus(String status) {
         String value = status.trim().toUpperCase(Locale.ROOT);
-        if (!List.of("PENDING", "CONFIRMED", "SENT", "FULFILLED", "CANCELLED").contains(value)) {
+        if (!List.of("PENDING", "CONFIRMED", "AWAITING_BUYER_CONTACT", "PENDING_SELLER_ACTION", "SENT", "FULFILLED", "CANCELLED").contains(value)) {
             throw new OrderStatusValidationException("status",
                 "Status must be PENDING, CONFIRMED, SENT, FULFILLED, or CANCELLED");
         }
