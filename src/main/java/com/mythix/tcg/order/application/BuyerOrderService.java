@@ -256,7 +256,8 @@ public class BuyerOrderService {
 
         BigDecimal unitPrice = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
         int qty = item.getQuantity() != null ? item.getQuantity() : 1;
-        BigDecimal itemTotal = unitPrice.multiply(BigDecimal.valueOf(qty));
+        BigDecimal itemTotal = item.getOrder() != null && "AUCTION".equals(item.getOrder().getOrderType()) ? unitPrice
+                : unitPrice.multiply(BigDecimal.valueOf(qty));
 
         String sellerId = item.getSeller() != null ? String.valueOf(item.getSeller().getId()) : null;
 

@@ -57,6 +57,8 @@ public final class AuctionExtendedDtos {
         String setName,
         String imageUrl,
         String condition,
+        int quantity,
+        String language,
         String gradingCompany,
         String grade,
         String certNumber,
@@ -87,6 +89,8 @@ public final class AuctionExtendedDtos {
         String setName,
         String imageUrl,
         String condition,
+        int quantity,
+        String language,
         String gradingCompany,
         String grade,
         String certNumber,
@@ -141,12 +145,15 @@ public final class AuctionExtendedDtos {
         String cardName,
         String imageUrl,
         String condition,
+        int quantity,
+        String language,
         String gradingCompany,
         String grade,
         BigDecimal finalPrice,
         Instant wonAt,
         Instant paymentDeadline,
-        boolean isPaid
+        boolean isPaid,
+        boolean hasPaymentProof
     ) {}
 
     public record SecondChanceOfferView(
@@ -154,6 +161,7 @@ public final class AuctionExtendedDtos {
         Long auctionId,
         String cardName,
         String imageUrl,
+        int quantity,
         BigDecimal offerPrice,
         AuctionSecondChanceOffer.OfferStatus status,
         Instant expiresAt,

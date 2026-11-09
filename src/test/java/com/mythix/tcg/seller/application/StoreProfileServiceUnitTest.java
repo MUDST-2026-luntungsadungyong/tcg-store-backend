@@ -13,6 +13,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -24,6 +26,14 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Sprint 1: StoreProfileService Unit Tests (SCRUM-16)")
 class StoreProfileServiceUnitTest {
+    @Test
+    void missingPublicStoreIsNotAnAuthenticationError() {
+        when(repository.findByUserId(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> storeProfileService.publicStore(99L))
+            .isInstanceOfSatisfying(ResponseStatusException.class,
+                error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    }
 
     @Mock
     private SellerProfileRepository repository;

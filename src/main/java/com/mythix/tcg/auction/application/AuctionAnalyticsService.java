@@ -23,6 +23,7 @@ public class AuctionAnalyticsService {
     private final AuctionRepository auctionRepository;
     private final AuctionBidRepository bidRepository;
     private final OrderRepository orderRepository;
+    private final com.mythix.tcg.auction.persistence.AuctionPaymentProofRepository paymentProofRepository;
 
     @Transactional(readOnly = true)
     public SellerAnalyticsView getSellerAnalytics(Long sellerId) {
@@ -132,12 +133,15 @@ public class AuctionAnalyticsService {
                 a.getCardName(),
                 a.getImageUrl(),
                 a.getCondition(),
+                a.getQuantity(),
+                a.getLanguage(),
                 a.getGradingCompany(),
                 a.getGrade(),
                 price,
                 a.getUpdatedAt(),
                 a.getPaymentDeadline(),
-                isPaid
+                isPaid,
+                a.getOrderId() != null && paymentProofRepository.existsById(a.getOrderId())
             ));
         }
 
