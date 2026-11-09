@@ -18,7 +18,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -140,21 +139,6 @@ public class BuyerAuctionController {
         return ResponseEntity.ok(analyticsService.getBuyerPortfolio(user.userId()));
     }
 
-    @PostMapping(path = "/orders/{orderId}/payment-proof", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Void> submitPaymentProof(@PathVariable Long orderId, @RequestPart("file") MultipartFile file,
-            @AuthenticationPrincipal AuthenticatedUser user) {
-        settlementService.submitPaymentProof(orderId, user.userId(), file);
-        return ResponseEntity.noContent().build();
-    }
-
-    @GetMapping("/orders/{orderId}/payment-proof")
-    public ResponseEntity<byte[]> getPaymentProof(@PathVariable Long orderId,
-            @AuthenticationPrincipal AuthenticatedUser user) {
-        var proof = settlementService.getPaymentProof(orderId, user.userId());
-        return ResponseEntity.ok().contentType(MediaType.parseMediaType(proof.getContentType()))
-            .header("Cache-Control", "private, no-store").header("X-Content-Type-Options", "nosniff")
-            .body(proof.getContent());
-    }
 
     @GetMapping("/user/auction-second-chance-offers")
     public List<SecondChanceOfferView> getPendingOffers(@AuthenticationPrincipal AuthenticatedUser user) {

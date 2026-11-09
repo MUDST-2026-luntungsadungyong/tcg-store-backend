@@ -126,22 +126,32 @@ class BuyerAuctionIntegrationTests {
         mvc.perform(get("/api/user/auction-portfolio").header("Authorization", buyer1Auth))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.wonItems[0].quantity").value(3))
-            .andExpect(jsonPath("$.wonItems[0].hasPaymentProof").value(false));
+            .andExpect(jsonPath("$.wonItems[0].orderStatus").value("AWAITING_BUYER_CONTACT"));
         String path = "/api/orders/" + order.getId();
         mvc.perform(get(path).header("Authorization", buyer1Auth)).andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].quantity").value(3))
-            .andExpect(jsonPath("$.items[0].itemTotal").value(3001));
+            .andExpect(jsonPath("$.items[0].itemTotal").value(3001))
+            .andExpect(jsonPath("$.sellerEmail").value(seller.getEmail()));
+
+        mvc.perform(get("/api/seller/orders").header("Authorization", sellerAuth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.content[0].id").value(order.getId()))
+            .andExpect(jsonPath("$.content[0].orderType").value("AUCTION"))
+            .andExpect(jsonPath("$.content[0].status").value("AWAITING_BUYER_CONTACT"));
+
         byte[] png = java.util.Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGGQAAAAASUVORK5CYII=");
         var proof = new org.springframework.mock.web.MockMultipartFile("file", "slip.png", "image/png", png);
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(path + "/payment-proof")
-            .file(proof).header("Authorization", buyer1Auth)).andExpect(status().isNoContent());
-        mvc.perform(get("/api/user/auction-portfolio").header("Authorization", buyer1Auth))
-            .andExpect(jsonPath("$.wonItems[0].hasPaymentProof").value(true));
+                .file(proof).header("Authorization", buyer1Auth))
+            .andExpect(status().isNotFound());
+        mvc.perform(get(path + "/payment-proof").header("Authorization", buyer1Auth))
+            .andExpect(status().isNotFound());
+
         String sellerPath = "/api/seller/orders/" + order.getId();
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(sellerPath + "/status")
             .header("Authorization", sellerAuth).contentType("application/json")
-            .content("{\"status\":\"CONFIRMED\"}")).andExpect(status().isOk());
+            .content("{\"status\":\"PENDING_SELLER_ACTION\"}")).andExpect(status().isOk());
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(sellerPath + "/status")
             .header("Authorization", sellerAuth).contentType("application/json")
             .content("{\"status\":\"SENT\",\"trackingNumber\":\"TCG12345\"}")).andExpect(status().isOk());
@@ -236,13 +246,13 @@ class BuyerAuctionIntegrationTests {
         mvc.perform(post("/api/auctions/" + auction.getId() + "/buyout")
                 .header("Authorization", buyer1Auth))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("BUYOUT_COMPLETED"))
+            .andExpect(jsonPath("$.status").value("AWAITING_BUYER_CONTACT"))
             .andExpect(jsonPath("$.finalPrice").value(800.00))
             .andExpect(jsonPath("$.platformFeeAmount").value(40.00)) // 5% of 800 = 40
             .andExpect(jsonPath("$.sellerNetAmount").value(760.00));
 
         Auction finalized = auctions.findById(auction.getId()).orElseThrow();
-        assertThat(finalized.getStatus()).isEqualTo(Auction.Status.BUYOUT_COMPLETED);
+        assertThat(finalized.getStatus()).isEqualTo(Auction.Status.AWAITING_BUYER_CONTACT);
         assertThat(finalized.getOrderId()).isNotNull();
 
         // Check stock moved to order reserved
@@ -390,32 +400,19 @@ class BuyerAuctionIntegrationTests {
         settlementService.closeAuction(auction.getId(), Instant.now().plus(48, ChronoUnit.HOURS));
 
         Auction settled = auctions.findById(auction.getId()).orElseThrow();
-        assertThat(settled.getStatus()).isEqualTo(Auction.Status.AWAITING_PAYMENT);
+        assertThat(settled.getStatus()).isEqualTo(Auction.Status.AWAITING_BUYER_CONTACT);
         assertThat(settled.getWinnerId()).isEqualTo(buyer1.getId());
         assertThat(settled.getWinningBid()).isEqualByComparingTo("300.00");
         assertThat(settled.getOrderId()).isNotNull();
 
         String path = "/api/orders/" + settled.getOrderId();
         String sellerPath = "/api/seller/orders/" + settled.getOrderId();
-        byte[] png = java.util.Base64.getDecoder().decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGGQAAAAASUVORK5CYII=");
-        var file = new org.springframework.mock.web.MockMultipartFile("file", "slip.png", "image/png", png);
-        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(path + "/payment-proof")
-                .file(file).header("Authorization", buyer1Auth))
-            .andExpect(status().isNoContent());
-        mvc.perform(get(path + "/payment-proof").header("Authorization", buyer2Auth))
-            .andExpect(status().isNotFound());
-        mvc.perform(get(path + "/payment-proof").header("Authorization", sellerAuth))
-            .andExpect(status().isOk());
-
-        assertThat(orders.findById(settled.getOrderId()).orElseThrow().getStatus()).isEqualTo("PENDING");
-        settlementService.processExpiredPaymentsAt(settled.getPaymentDeadline().plusSeconds(1));
-        assertThat(orders.findById(settled.getOrderId()).orElseThrow().getStatus()).isEqualTo("PENDING");
+        assertThat(orders.findById(settled.getOrderId()).orElseThrow().getStatus()).isEqualTo("AWAITING_BUYER_CONTACT");
 
 
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(sellerPath + "/status")
                 .header("Authorization", sellerAuth).contentType("application/json")
-                .content("{\"status\":\"CONFIRMED\"}"))
+                .content("{\"status\":\"PENDING_SELLER_ACTION\"}"))
             .andExpect(status().isOk());
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(sellerPath + "/status")
                 .header("Authorization", sellerAuth).contentType("application/json")
@@ -437,49 +434,4 @@ class BuyerAuctionIntegrationTests {
             .andExpect(status().isOk()).andExpect(jsonPath("$.totalInvested").value(300.00));
     }
 
-    @Test
-    void testDefaultingPenaltyAndSecondChanceOffer() throws Exception {
-        Auction auction = createActiveAuction(new BigDecimal("100.00"), new BigDecimal("100.00"), null);
-
-        // Buyer 1 bids 200, Buyer 2 bids 300
-        bidService.placeManualBid(auction.getId(), buyer1.getId(), new BigDecimal("200.00"));
-        bidService.placeManualBid(auction.getId(), buyer2.getId(), new BigDecimal("300.00"));
-
-        // Close auction -> Buyer 2 is winner
-        settlementService.closeAuction(auction.getId(), auction.getEndAt().plusSeconds(1));
-
-        Auction settled = auctions.findById(auction.getId()).orElseThrow();
-        assertThat(settled.getWinnerId()).isEqualTo(buyer2.getId());
-
-        // Fast forward 49 hours without payment -> triggers defaulting penalty
-        Instant futureTime = settled.getPaymentDeadline().plusSeconds(1);
-        settlementService.processExpiredPaymentsAt(futureTime);
-
-        User defaultingUser = users.findById(buyer2.getId()).orElseThrow();
-        assertThat(defaultingUser.getAuctionStrikes()).isEqualTo(1);
-
-        Auction defaultedAuction = auctions.findById(auction.getId()).orElseThrow();
-        assertThat(defaultedAuction.getStatus()).isEqualTo(Auction.Status.DEFAULTED);
-
-        // Seller sends Second-Chance offer to Buyer 1 (runner up)
-        String offerResponseBody = mvc.perform(post("/api/seller/auctions/" + auction.getId() + "/second-chance-offer")
-                .header("Authorization", sellerAuth))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.offerPrice").value(200.00))
-            .andReturn().getResponse().getContentAsString();
-
-        // Parse offer ID from response
-        long offerId = json.readTree(offerResponseBody).get("id").asLong();
-
-        mvc.perform(get("/api/user/auction-second-chance-offers").header("Authorization", buyer1Auth))
-            .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(offerId));
-        mvc.perform(get("/api/user/auction-second-chance-offers").header("Authorization", buyer2Auth))
-            .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
-
-        // Buyer 1 accepts offer
-        mvc.perform(post("/api/auctions/second-chance/" + offerId + "/respond?accept=true")
-                .header("Authorization", buyer1Auth))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("SUCCESS"));
-    }
 }

@@ -79,13 +79,9 @@ public class SellerOrderService {
         }
 
         validateStatusTransition(previousStatus, updatedStatus);
-        if ("AUCTION".equals(order.getOrderType())) {
-            if ("CONFIRMED".equals(updatedStatus) && !auctionSettlementService.hasPaymentProof(orderId)) {
-                throw new OrderStatusValidationException("status", "Buyer payment proof is required before confirmation");
-            }
-            if (!"CONFIRMED".equals(updatedStatus) && !"SENT".equals(updatedStatus)) {
-                throw new OrderStatusValidationException("status", "Invalid seller action for an auction order");
-            }
+        if ("AUCTION".equals(order.getOrderType())
+                && !List.of("PENDING_SELLER_ACTION", "SENT", "CANCELLED").contains(updatedStatus)) {
+            throw new OrderStatusValidationException("status", "Invalid seller action for an auction order");
         }
 
         String effectiveTracking = trackingNumber != null ? trackingNumber.trim() : "";
@@ -139,16 +135,20 @@ public class SellerOrderService {
                     "Cannot change status of an order that is already " + from);
         }
         if ("CANCELLED".equalsIgnoreCase(to)) {
-            if (!"PENDING".equalsIgnoreCase(from) && !"CONFIRMED".equalsIgnoreCase(from)) {
-                throw new OrderStatusValidationException("status", "Can only cancel PENDING or CONFIRMED orders");
+            if (!List.of("PENDING", "CONFIRMED", "AWAITING_BUYER_CONTACT", "PENDING_SELLER_ACTION").contains(from.toUpperCase(Locale.ROOT))) {
+                throw new OrderStatusValidationException("status", "Order can no longer be cancelled");
+            }
+        } else if ("PENDING_SELLER_ACTION".equalsIgnoreCase(to)) {
+            if (!"AWAITING_BUYER_CONTACT".equalsIgnoreCase(from)) {
+                throw new OrderStatusValidationException("status", "Buyer contact is required before seller action");
             }
         } else if ("CONFIRMED".equalsIgnoreCase(to)) {
             if (!"PENDING".equalsIgnoreCase(from)) {
                 throw new OrderStatusValidationException("status", "Can only confirm PENDING orders");
             }
         } else if ("SENT".equalsIgnoreCase(to)) {
-            if (!"CONFIRMED".equalsIgnoreCase(from)) {
-                throw new OrderStatusValidationException("status", "Can only send CONFIRMED orders");
+            if (!"CONFIRMED".equalsIgnoreCase(from) && !"PENDING_SELLER_ACTION".equalsIgnoreCase(from)) {
+                throw new OrderStatusValidationException("status", "Can only send an order ready for seller action");
             }
         } else if ("FULFILLED".equalsIgnoreCase(to)) {
             throw new OrderStatusValidationException("status", "Only the buyer can fulfill the order");
@@ -345,7 +345,7 @@ public class SellerOrderService {
 
     private String normalizeStatus(String status) {
         String value = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
-        if (!List.of("PENDING", "CONFIRMED", "SENT", "FULFILLED", "CANCELLED").contains(value)) {
+        if (!List.of("PENDING", "CONFIRMED", "AWAITING_BUYER_CONTACT", "PENDING_SELLER_ACTION", "SENT", "FULFILLED", "CANCELLED").contains(value)) {
             throw new OrderStatusValidationException("status",
                 "Status must be PENDING, CONFIRMED, SENT, FULFILLED, or CANCELLED");
         }

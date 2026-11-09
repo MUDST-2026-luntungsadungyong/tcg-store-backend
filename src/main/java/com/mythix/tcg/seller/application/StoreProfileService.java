@@ -18,7 +18,7 @@ public class StoreProfileService {
     @Transactional(readOnly = true)
     public StoreProfileResponse publicStore(Long userId) {
         return repository.findByUserId(userId)
-            .map(StoreProfileResponse::from)
+            .map(StoreProfileResponse::publicFrom)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
     }
     @Transactional public StoreProfileResponse update(Long userId, StoreProfileRequest request) {
@@ -27,6 +27,7 @@ public class StoreProfileService {
         profile.getUser().setPhone(trim(request.phone()));
         profile.getUser().setContactLine(trim(request.line()));
         profile.getUser().setContactFacebook(trim(request.facebook()));
+        profile.getUser().setContactOther(trim(request.otherContact()));
         return StoreProfileResponse.from(profile);
     }
     private SellerProfile find(Long userId) { return repository.findByUserId(userId).orElseThrow(InvalidCredentialsException::new); }

@@ -36,15 +36,6 @@ public interface AuctionRepository extends JpaRepository<Auction, Long>, JpaSpec
     List<Long> findDueIds(@Param("scheduled") Auction.Status scheduled, @Param("active") Auction.Status active,
                           @Param("now") Instant now, Pageable pageable);
 
-    @Query("""
-        select a.id from Auction a
-        where a.status in :statuses and a.paymentDeadline is not null and a.paymentDeadline <= :now
-          and exists (select o.id from Order o where o.id = a.orderId and o.status = 'PENDING')
-          and not exists (select p.orderId from AuctionPaymentProof p where p.orderId = a.orderId)
-        order by a.id
-        """)
-    List<Long> findDueExpiredPaymentIds(@Param("statuses") Collection<Auction.Status> statuses,
-                                        @Param("now") Instant now, Pageable pageable);
 
     Page<Auction> findAllByStatus(Auction.Status status, Pageable pageable);
 

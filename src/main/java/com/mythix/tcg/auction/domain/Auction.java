@@ -15,7 +15,7 @@ import java.time.Instant;
 @NoArgsConstructor
 public class Auction {
     public enum Status {
-        DRAFT, SCHEDULED, ACTIVE, ENDED, AWAITING_PAYMENT, COMPLETED, CANCELLED,
+        DRAFT, SCHEDULED, ACTIVE, ENDED, AWAITING_BUYER_CONTACT, COMPLETED, CANCELLED,
         BUYOUT_COMPLETED, RESERVE_NOT_MET, UNSOLD_NO_BIDS, DEFAULTED
     }
     public enum StartMode { NOW, SCHEDULED }
@@ -81,7 +81,6 @@ public class Auction {
     private boolean isReserveMet;
 
     private Long orderId;
-    private Instant paymentDeadline;
 
     @Column(precision = 5, scale = 4, nullable = false)
     private BigDecimal platformFeeRate = new BigDecimal("0.0500");

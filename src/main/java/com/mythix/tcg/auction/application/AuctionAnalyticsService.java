@@ -23,7 +23,6 @@ public class AuctionAnalyticsService {
     private final AuctionRepository auctionRepository;
     private final AuctionBidRepository bidRepository;
     private final OrderRepository orderRepository;
-    private final com.mythix.tcg.auction.persistence.AuctionPaymentProofRepository paymentProofRepository;
 
     @Transactional(readOnly = true)
     public SellerAnalyticsView getSellerAnalytics(Long sellerId) {
@@ -83,7 +82,7 @@ public class AuctionAnalyticsService {
         long bidsPlaced = bidRepository.countByBidderId(buyerId);
         long distinctParticipated = bidRepository.countDistinctAuctionsByBidderId(buyerId);
 
-        List<Auction.Status> wonStatuses = List.of(AWAITING_PAYMENT, COMPLETED, BUYOUT_COMPLETED);
+        List<Auction.Status> wonStatuses = List.of(AWAITING_BUYER_CONTACT, COMPLETED, BUYOUT_COMPLETED);
         List<Auction> wonAuctions = auctionRepository.findAllByWinnerIdOrderByUpdatedAtDesc(buyerId);
 
         long auctionsWon = wonAuctions.stream()
@@ -139,9 +138,7 @@ public class AuctionAnalyticsService {
                 a.getGrade(),
                 price,
                 a.getUpdatedAt(),
-                a.getPaymentDeadline(),
-                isPaid,
-                a.getOrderId() != null && paymentProofRepository.existsById(a.getOrderId())
+                isPaid
             ));
         }
 

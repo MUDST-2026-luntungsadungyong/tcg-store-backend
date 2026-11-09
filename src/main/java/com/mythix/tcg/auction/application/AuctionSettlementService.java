@@ -28,12 +28,7 @@ import com.mythix.tcg.auction.api.AuctionLiveUpdates;
 import org.springframework.context.ApplicationEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import com.mythix.tcg.seller.application.SellerProductImageValidator;
-import com.mythix.tcg.auction.domain.AuctionPaymentProof;
-import com.mythix.tcg.auction.persistence.AuctionPaymentProofRepository;
-import org.springframework.web.multipart.MultipartFile;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,9 +65,6 @@ public class AuctionSettlementService {
     private final CollectionRepository collectionRepository;
     private final CardRepository cardRepository;
     private final NotificationService notificationService;
-    private final AuctionPaymentProofRepository paymentProofRepository;
-
-    private final SellerProductImageValidator imageValidator = new SellerProductImageValidator();
 
     @Transactional
     public void closeAuction(Long auctionId, Instant now) {
@@ -156,7 +148,7 @@ public class AuctionSettlementService {
             .orderNumber(orderNumber)
             .buyer(winner)
             .orderType("AUCTION")
-            .status("PENDING")
+            .status("AWAITING_BUYER_CONTACT")
             .subtotalAmount(finalPrice)
             .totalAmount(finalPrice)
             .platformFee(fee)
@@ -186,12 +178,11 @@ public class AuctionSettlementService {
                 .build();
         orderItemRepository.save(item);
 
-        auction.setStatus(AWAITING_PAYMENT);
+        auction.setStatus(AWAITING_BUYER_CONTACT);
         auction.setWinnerId(winnerId);
         auction.setWinningBid(finalPrice);
         auction.setReserveMet(true);
         auction.setOrderId(savedOrder.getId());
-        auction.setPaymentDeadline(now.plus(Duration.ofHours(48)));
         auction.setPlatformFeeRate(policy.rate());
         auction.setPlatformFeeAmount(fee);
         auction.setSellerNetAmount(sellerNet);
@@ -204,13 +195,13 @@ public class AuctionSettlementService {
         // Notifications
         sendNotification(winnerId, NotificationTypes.AUCTION_WON,
             "ยินดีด้วย! คุณเป็นผู้ชนะการประมูลรายการ '" + auction.getCardName() + "' ในราคา ฿"
-                + finalPrice.toPlainString() + " กรุณาชำระเงินภายใน 48 ชั่วโมง",
-            "/auctions/me");
+                + finalPrice.toPlainString() + " กรุณาติดต่อร้านค้าเพื่อดำเนินการชำระเงินและจัดส่ง",
+            "/orders/" + savedOrder.getId());
 
         sendNotification(auction.getSellerId(), NotificationTypes.AUCTION_ENDED_SELLER,
             "การประมูลรายการ '" + auction.getCardName() + "' จบลงแล้ว! ผู้ชนะคือ " + winner.getFullName()
-                + " ในราคา ฿" + finalPrice.toPlainString() + " รอการชำระเงินจากผู้ซื้อ",
-            "/workspace/auctions/" + auction.getId());
+                + " ในราคา ฿" + finalPrice.toPlainString() + " กรุณารอผู้ชนะติดต่อเพื่อดำเนินการชำระเงินและจัดส่ง",
+            "/workspace/orders?orderId=" + savedOrder.getId());
     }
 
     @Transactional(readOnly = true)
@@ -227,36 +218,6 @@ public class AuctionSettlementService {
         return auctionRepository.findIdByOrderId(orderId).flatMap(auctionRepository::findByIdForUpdate);
     }
 
-    @Transactional
-    public void submitPaymentProof(Long orderId, Long buyerId, MultipartFile file) {
-        var image = imageValidator.validate(file);
-        Auction auction = lockAuctionForOrder(orderId).orElseThrow(() -> notFound("Auction order not found"));
-        if (!buyerId.equals(auction.getWinnerId()) || !orderId.equals(auction.getOrderId())) {
-            throw notFound("Auction order not found");
-        }
-        Instant now = Instant.now();
-        Order order = orderRepository.findById(orderId).orElseThrow(() -> notFound("Order not found"));
-        if (!"PENDING".equals(order.getStatus()) || auction.getPaymentDeadline() == null
-                || !now.isBefore(auction.getPaymentDeadline())) {
-            throw conflict("This order no longer accepts payment proof");
-        }
-        paymentProofRepository.save(new AuctionPaymentProof(orderId, image.contentType(), image.content(), now));
-    }
-
-    public boolean hasPaymentProof(Long orderId) {
-        return paymentProofRepository.existsById(orderId);
-    }
-
-    @Transactional(readOnly = true)
-    public AuctionPaymentProof getPaymentProof(Long orderId, Long viewerId) {
-        Order order = orderRepository.findById(orderId).orElseThrow(() -> notFound("Order not found"));
-        boolean participant = viewerId.equals(order.getBuyer().getId()) || orderItemRepository.findByOrderId(orderId)
-            .stream().anyMatch(item -> viewerId.equals(item.getSeller().getId()));
-        if (!participant || !"AUCTION".equals(order.getOrderType())) {
-            throw notFound("Payment proof not found");
-        }
-        return paymentProofRepository.findById(orderId).orElseThrow(() -> notFound("Payment proof not found"));
-    }
 
     @Transactional
     public void transferAuctionCardToPersonalBinder(Order order) {
@@ -398,7 +359,7 @@ public class AuctionSettlementService {
             .orderNumber(orderNumber)
             .buyer(buyer)
             .orderType("AUCTION")
-            .status("PENDING")
+            .status("AWAITING_BUYER_CONTACT")
             .subtotalAmount(price)
             .totalAmount(price)
             .platformFee(fee)
@@ -423,100 +384,25 @@ public class AuctionSettlementService {
             .costAtPurchase(product != null && product.getCost() != null ? product.getCost() : BigDecimal.ZERO)
             .quantity(auction.getQuantity()).build());
 
-        auction.setStatus(AWAITING_PAYMENT);
+        auction.setStatus(AWAITING_BUYER_CONTACT);
         auction.setWinnerId(bidderId);
         auction.setWinningBid(price);
         auction.setPlatformFeeRate(policy.rate());
         auction.setOrderId(savedOrder.getId());
-        auction.setPaymentDeadline(now.plus(Duration.ofHours(48)));
         auction.setPlatformFeeAmount(fee);
         auction.setSellerNetAmount(sellerNet);
         auction.setUpdatedAt(now);
         auctionRepository.save(auction);
         events.publishEvent(new AuctionLiveUpdates.Changed(auction.getId()));
 
+        sendNotification(bidderId, NotificationTypes.AUCTION_WON,
+            "คุณตอบรับข้อเสนอ Second-Chance สำหรับรายการ '" + auction.getCardName()
+                + "' สำเร็จ กรุณาติดต่อร้านค้าเพื่อดำเนินการชำระเงินและจัดส่ง",
+            "/orders/" + savedOrder.getId());
+
         sendNotification(auction.getSellerId(), NotificationTypes.AUCTION_ENDED_SELLER,
             "ผู้ประมูลอันดับสองยอมรับข้อเสนอ Second-Chance Offer รายการ '" + auction.getCardName() + "' เรียบร้อยแล้ว",
-            "/workspace/auctions/" + auction.getId());
-    }
-
-    @Scheduled(fixedDelayString = "${auction.settlement.check-interval-ms:30000}")
-    @Transactional
-    public void processExpiredPayments() {
-        processExpiredPaymentsAt(Instant.now());
-    }
-
-    @Transactional
-    public void processExpiredPaymentsAt(Instant now) {
-        List<Long> expiredAuctionIds = auctionRepository.findDueExpiredPaymentIds(List.of(AWAITING_PAYMENT, BUYOUT_COMPLETED), now, PageRequest.of(0, 50));
-
-        for (Long auctionId : expiredAuctionIds) {
-            try {
-                handleDefaultedWinner(auctionId, now);
-            } catch (Exception e) {
-                log.error("Failed to process defaulted auction {}", auctionId, e);
-            }
-        }
-    }
-
-    private void handleDefaultedWinner(Long auctionId, Instant now) {
-        Auction auction = auctionRepository.findByIdForUpdate(auctionId).orElse(null);
-        if (auction == null || (auction.getStatus() != AWAITING_PAYMENT && auction.getStatus() != BUYOUT_COMPLETED)
-                || auction.getPaymentDeadline() == null || auction.getPaymentDeadline().isAfter(now)
-                || auction.getOrderId() == null || hasPaymentProof(auction.getOrderId())
-                || orderRepository.findById(auction.getOrderId()).filter(order -> "PENDING".equals(order.getStatus())).isEmpty()) {
-            return;
-        }
-
-        Long winnerId = auction.getWinnerId();
-        if (winnerId != null) {
-            User winner = userRepository.findByIdForUpdate(winnerId).orElse(null);
-            if (winner != null) {
-                winner.setAuctionStrikes(winner.getAuctionStrikes() + 1);
-                if (winner.getAuctionStrikes() >= 2) {
-                    winner.setAuctionBannedUntil(now.plus(Duration.ofDays(30)));
-                }
-                userRepository.save(winner);
-
-                sendNotification(winnerId, NotificationTypes.AUCTION_DEFAULTED_WARNING,
-                    "คุณไม่ได้ชำระเงินค่าประมูลการ์ด '" + auction.getCardName()
-                        + "' ภายใน 48 ชั่วโมง จึงถูกตัดสิทธิ์และได้รับ Reputation Strike 1 ครั้ง (สะสม "
-                        + winner.getAuctionStrikes() + " Strikes)",
-                    "/notifications");
-            }
-        }
-
-        // Cancel order if present
-        if (auction.getOrderId() != null) {
-            orderRepository.findById(auction.getOrderId()).ifPresent(order -> {
-                if ("PENDING".equalsIgnoreCase(order.getStatus())) {
-                    order.setStatus("CANCELLED");
-                    order.setUpdatedAt(LocalDateTime.now());
-                    orderRepository.save(order);
-
-                    // release reserved stock
-                    List<OrderItem> items = orderItemRepository.findByOrderId(order.getId());
-                    for (OrderItem item : items) {
-                        if (item.getProduct() != null) {
-                            Product p = productRepository.findByIdForUpdate(item.getProduct().getId())
-                                .orElseThrow(() -> conflict("Auction inventory is no longer available"));
-                            p.setReserved(Math.max(0, p.getReserved() - item.getQuantity()));
-                            productRepository.save(p);
-                        }
-                    }
-                }
-            });
-        }
-
-        auction.setStatus(DEFAULTED);
-        auction.setUpdatedAt(now);
-        auctionRepository.save(auction);
-        events.publishEvent(new AuctionLiveUpdates.Changed(auction.getId()));
-
-        sendNotification(auction.getSellerId(), NotificationTypes.AUCTION_ENDED_SELLER,
-            "ผู้ชนะการประมูลรายการ '" + auction.getCardName()
-                + "' ไม่ได้ชำระเงินภายใน 48 ชั่วโมง คุณสามารถส่ง Second-Chance Offer ให้ผู้เคาะอันดับสอง หรือนำการ์ดกลับสู่สต๊อกได้",
-            "/workspace/auctions/" + auction.getId());
+            "/workspace/orders?orderId=" + savedOrder.getId());
     }
 
     private void releaseStockToSeller(Auction auction) {

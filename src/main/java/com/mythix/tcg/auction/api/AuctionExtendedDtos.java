@@ -151,9 +151,7 @@ public final class AuctionExtendedDtos {
         String grade,
         BigDecimal finalPrice,
         Instant wonAt,
-        Instant paymentDeadline,
-        boolean isPaid,
-        boolean hasPaymentProof
+        boolean isPaid
     ) {}
 
     public record SecondChanceOfferView(
