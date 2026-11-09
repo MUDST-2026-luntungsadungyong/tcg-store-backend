@@ -9,6 +9,7 @@ import com.mythix.tcg.auction.persistence.AuctionEvidenceRepository;
 import com.mythix.tcg.auction.persistence.AuctionPhotoRepository;
 import com.mythix.tcg.auction.persistence.AuctionRepository;
 import com.mythix.tcg.catalog.domain.Card;
+import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.collection.persistence.CollectionRepository;
 import com.mythix.tcg.product.domain.CardCondition;
 import com.mythix.tcg.product.domain.Product;
@@ -60,6 +61,7 @@ public class AuctionService {
     private final AuctionCancellationRepository cancellations;
     private final AuctionEvidenceRepository evidence;
     private final ProductRepository products;
+    private final CardRepository cards;
     private final SellerProductRepository sellerProducts;
     private final CollectionRepository collections;
     private final UserRepository users;
@@ -77,7 +79,7 @@ public class AuctionService {
                 Card card = product.getCard();
                 var key = new CollectionKey(card.getId(), CardCondition.code(product.getCondition()), product.getLanguage());
                 return new InventoryItem(product.getId(), card.getId(), card.getName(), card.getSetName(),
-                    referenceImage(card), card.getCardNumber(), card.getRarity(), product.getCondition(),
+                    referenceImage(card), card.getCardNumber(), card.getRarity(), product.getCondition(), product.getLanguage(),
                     product.getStatus(), availableForAuction(product), collectionKeys.contains(key));
             }).toList();
     }
@@ -119,7 +121,9 @@ public class AuctionService {
     public AuctionView updateDraft(Long sellerId, Long id, DraftForm form) {
         Auction auction = lockedOwnedAuction(sellerId, id);
         requireDraft(auction);
-        boolean productChanged = !Objects.equals(auction.getProductId(), form.getProductId());
+        boolean productChanged = !Objects.equals(auction.getProductId(), form.getProductId())
+            || !Objects.equals(auction.getCardId(), form.getCardId() == null && form.getProductId() != null ? auction.getCardId() : form.getCardId())
+            || auction.getQuantity() != (form.getQuantity() == null ? 1 : form.getQuantity());
         updateDraftFields(auction, form);
         updatePhoto(id, FRONT, form.getFrontImage(), productChanged);
         updatePhoto(id, BACK, form.getBackImage(), productChanged);
@@ -143,23 +147,26 @@ public class AuctionService {
             return view(auction);
         }
 
-        if (auction.getProductId() == null || auction.getCondition() == null || auction.getStartPrice() == null
+        if (auction.getCardId() == null || auction.getCondition() == null || auction.getStartPrice() == null
             || auction.getStartMode() == null || auction.getDurationHours() == null) {
-            throw invalid("Select seller inventory, a condition, a start price, a start mode and a duration");
+            throw invalid("Select a catalog card or seller inventory, a condition, a start price, a start mode and a duration");
         }
         validateGrading(auction, true);
         if (photos.findPhotoIds(List.of(id)).size() != 2) {
             throw invalid("Upload an actual front and back card photo before publishing");
         }
 
-        Product product = products.findByIdForUpdate(auction.getProductId())
-            .filter(item -> item.getSeller().getId().equals(sellerId))
-            .orElseThrow(() -> conflict("The selected seller inventory no longer exists"));
-        if (availableForAuction(product) < 1) {
-            throw conflict("The selected seller inventory is no longer available");
-        }
-        if (!auction.getCondition().equals(CardCondition.code(product.getCondition()))) {
-            throw conflict("Auction condition must match the selected inventory's current condition");
+        Product product = null;
+        if (auction.getProductId() != null) {
+            product = products.findByIdForUpdate(auction.getProductId())
+                .filter(item -> item.getSeller().getId().equals(sellerId))
+                .orElseThrow(() -> conflict("The selected seller inventory no longer exists"));
+            if (availableForAuction(product) < auction.getQuantity()) {
+                throw conflict("The selected seller inventory is no longer available");
+            }
+            if (!auction.getCondition().equals(CardCondition.code(product.getCondition()))) {
+                throw conflict("Auction condition must match the selected inventory's current condition");
+            }
         }
         // Sample the clock after acquiring stock, which can block behind checkout.
         Instant now = Instant.now();
@@ -177,8 +184,8 @@ public class AuctionService {
         auction.setStartAt(start);
         auction.setEndAt(start.plus(Duration.ofHours(auction.getDurationHours())));
         auction.setUpdatedAt(now);
-        auction.setStockHeld(true);
-        product.setAuctionReserved(product.getAuctionReserved() + 1);
+        auction.setStockHeld(product != null);
+        if (product != null) product.setAuctionReserved(product.getAuctionReserved() + auction.getQuantity());
         return view(auction);
     }
 
@@ -265,10 +272,10 @@ public class AuctionService {
         }
         Product product = products.findByIdForUpdate(auction.getProductId())
             .orElseThrow(() -> new IllegalStateException("Auction held stock references missing inventory"));
-        if (product.getAuctionReserved() < 1) {
+        if (product.getAuctionReserved() < auction.getQuantity()) {
             throw new IllegalStateException("Auction held stock is missing from inventory");
         }
-        product.setAuctionReserved(product.getAuctionReserved() - 1);
+        product.setAuctionReserved(product.getAuctionReserved() - auction.getQuantity());
         auction.setStockHeld(false);
     }
 
@@ -279,7 +286,17 @@ public class AuctionService {
                 .filter(item -> item.getSeller().getId().equals(auction.getSellerId()))
                 .orElseThrow(() -> missing("Seller inventory not found"));
         }
-        Card card = product == null ? null : product.getCard();
+        Card card = product != null ? product.getCard() : form.getCardId() == null ? null
+            : cards.findById(form.getCardId()).orElseThrow(() -> missing("Catalog card not found"));
+        if (product != null && form.getCardId() != null && !product.getCard().getId().equals(form.getCardId()))
+            throw invalid("Catalog card does not match inventory");
+        int quantity = form.getQuantity() == null ? 1 : form.getQuantity();
+        if (quantity < 1) throw invalid("Quantity must be at least 1");
+        auction.setQuantity(quantity);
+        String language = product != null ? product.getLanguage() : upper(form.getLanguage());
+        if (language == null) language = "EN";
+        if (!Set.of("EN", "JP", "TH").contains(language)) throw invalid("Language must be EN, JP, or TH");
+        auction.setLanguage(language);
         auction.setProductId(form.getProductId());
         auction.setCardId(card == null ? null : card.getId());
         auction.setCardName(card == null ? null : card.getName());
@@ -356,7 +373,7 @@ public class AuctionService {
             CancellationView cancellation = request == null ? null : cancellationView(a, request,
                 sellers.get(a.getSellerId()), files.getOrDefault(request.getId(), List.of()), false);
             return new AuctionView(a.getId(), a.getStatus(), a.getProductId(), a.getCardId(), a.getCardName(),
-                a.getSetName(), a.getImageUrl(), a.getCondition(), a.getGradingCompany(), a.getGrade(),
+                a.getSetName(), a.getImageUrl(), a.getCondition(), a.getQuantity(), a.getLanguage(), a.getGradingCompany(), a.getGrade(),
                 a.getCertNumber(), a.getStartPrice(), a.getReservePrice(), a.getBuyItNowPrice(), a.getStartMode(),
                 a.getStartAt(), a.getEndAt(), a.getDurationHours(), a.getBidCount(), a.getHighestBid(),
                 a.getUpdatedAt(), now, existing.contains(FRONT) ? base + "front" : null,
@@ -385,6 +402,8 @@ public class AuctionService {
     }
 
     private static void validateGrading(Auction auction, boolean requireComplete) {
+        if (auction.getQuantity() > 1 && (auction.getGradingCompany() != null || auction.getGrade() != null || auction.getCertNumber() != null))
+            throw invalid("Multi-copy lots must be ungraded");
         if (auction.getGradingCompany() != null && !GRADERS.contains(auction.getGradingCompany())) {
             throw invalid("Grading company must be PSA, BGS, or CGC");
         }

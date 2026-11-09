@@ -109,6 +109,51 @@ class BuyerAuctionIntegrationTests {
     }
 
     @Test
+    void directCatalogLotBuyoutCreatesExactLotOrderAndPortfolio() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("100.00"), null, new BigDecimal("3001.00"));
+        product.setAuctionReserved(0);
+        products.saveAndFlush(product);
+        auction.setProductId(null);
+        auction.setStockHeld(false);
+        auction.setQuantity(3);
+        auction.setLanguage("JP");
+        auctions.saveAndFlush(auction);
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/buyout").header("Authorization", buyer1Auth))
+            .andExpect(status().isOk());
+        Auction won = auctions.findById(auction.getId()).orElseThrow();
+        Order order = orders.findById(won.getOrderId()).orElseThrow();
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("3001.00");
+        mvc.perform(get("/api/user/auction-portfolio").header("Authorization", buyer1Auth))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.wonItems[0].quantity").value(3))
+            .andExpect(jsonPath("$.wonItems[0].hasPaymentProof").value(false));
+        String path = "/api/orders/" + order.getId();
+        mvc.perform(get(path).header("Authorization", buyer1Auth)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].quantity").value(3))
+            .andExpect(jsonPath("$.items[0].itemTotal").value(3001));
+        byte[] png = java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aGGQAAAAASUVORK5CYII=");
+        var proof = new org.springframework.mock.web.MockMultipartFile("file", "slip.png", "image/png", png);
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(path + "/payment-proof")
+            .file(proof).header("Authorization", buyer1Auth)).andExpect(status().isNoContent());
+        mvc.perform(get("/api/user/auction-portfolio").header("Authorization", buyer1Auth))
+            .andExpect(jsonPath("$.wonItems[0].hasPaymentProof").value(true));
+        String sellerPath = "/api/seller/orders/" + order.getId();
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(sellerPath + "/status")
+            .header("Authorization", sellerAuth).contentType("application/json")
+            .content("{\"status\":\"CONFIRMED\"}")).andExpect(status().isOk());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(sellerPath + "/status")
+            .header("Authorization", sellerAuth).contentType("application/json")
+            .content("{\"status\":\"SENT\",\"trackingNumber\":\"TCG12345\"}")).andExpect(status().isOk());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(path + "/status")
+            .header("Authorization", buyer1Auth).contentType("application/json")
+            .content("{\"status\":\"FULFILLED\"}")).andExpect(status().isOk());
+        var entry = collections.findByUserIdOrderByCreatedAtDesc(buyer1.getId()).getFirst();
+        assertThat(entry.getQuantity()).isEqualTo(3);
+        assertThat(entry.getLanguage()).isEqualTo("JP");
+    }
+
+    @Test
     void testDiscoveryAndMaskedBidHistory() throws Exception {
         Auction auction = createActiveAuction(new BigDecimal("100.00"), new BigDecimal("300.00"), new BigDecimal("1000.00"));
 

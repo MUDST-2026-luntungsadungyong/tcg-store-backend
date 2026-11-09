@@ -153,6 +153,14 @@ Checkout errors use `CHECKOUT_NOT_ALLOWED` (403), `EMPTY_CART`, `LISTING_NOT_AVA
 
 Existing PostgreSQL Docker volumes are upgraded by the Flyway-based `migrations-local` service in `docker-compose.desktop.yml` before `backend-local` starts. Flyway records immutable versioned migrations in `flyway_schema_history`, validates checksums on later starts, and prevents the API from starting when migration or Hibernate schema validation fails.
 
+## Auction lots (SCRUM-82)
+
+- Seller draft create and update accept multipart fields `productId` for seller inventory or `cardId` for a direct Global Catalog lot. Direct lots accept `language` (`EN`, `JP` or `TH`, default `EN`). Inventory lots inherit the inventory item's language.
+- `quantity` is a positive integer and defaults to 1. Prices apply to the entire lot. Publishing an inventory lot reserves its full quantity. Multi-copy lots must be ungraded and both actual photos must show all copies.
+- Auction orders contain one line for the lot. Its `quantity` counts the copies and its purchase price is the whole-lot amount. Order totals and item totals preserve that amount. Direct checkout still prices items per unit.
+- The winning buyer submits a JPG, PNG or WebP of at most 5 MiB as multipart part `file` to `POST /api/orders/{orderId}/payment-proof` while the order is pending and before the payment deadline. The buyer portfolio reports `hasPaymentProof` for each won order.
+- Deploy with Flyway V16 already applied. On the shared Neon history, V14 is Collection Privacy and V15 is Auction Bidding, Settlement and Portfolio.
+
 ## Error shape
 
 Feature ใหม่ควรตอบรูปแบบเดียวกัน:

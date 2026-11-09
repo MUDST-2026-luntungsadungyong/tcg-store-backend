@@ -299,10 +299,10 @@ public class AuctionBidService {
         if (auction.getProductId() != null) {
             product = productRepository.findByIdForUpdate(auction.getProductId()).orElse(null);
             if (product != null && product.getCost() != null) {
-                costBasis = product.getCost();
+                costBasis = product.getCost().multiply(BigDecimal.valueOf(auction.getQuantity()));
             }
         }
-        if (product == null || !auction.isStockHeld() || product.getAuctionReserved() < 1) {
+        if (auction.getProductId() != null && (product == null || !auction.isStockHeld() || product.getAuctionReserved() < auction.getQuantity())) {
             throw conflict("Auction stock is no longer held");
         }
 
@@ -328,12 +328,13 @@ public class AuctionBidService {
         Order savedOrder = orderRepository.save(order);
 
         if (product != null) {
-            // Allocate 1 stock unit from auction_reserved to order reserved
-            product.setAuctionReserved(Math.max(0, product.getAuctionReserved() - 1));
-            product.setReserved(product.getReserved() + 1);
+            // Move the lot from auction holds to order reservations
+            product.setAuctionReserved(Math.max(0, product.getAuctionReserved() - auction.getQuantity()));
+            product.setReserved(product.getReserved() + auction.getQuantity());
             productRepository.save(product);
 
-            OrderItem item = OrderItem.builder()
+        }
+        OrderItem item = OrderItem.builder()
                 .order(savedOrder)
                 .product(product)
                 .seller(seller)
@@ -341,11 +342,10 @@ public class AuctionBidService {
                 .productNameSnapshot(auction.getCardName() != null ? auction.getCardName() : "Card")
                 .shopNameSnapshot(seller.getFullName())
                 .priceAtPurchase(buyoutPrice)
-                .costAtPurchase(costBasis)
-                .quantity(1)
+                .costAtPurchase(product != null && product.getCost() != null ? product.getCost() : BigDecimal.ZERO)
+                .quantity(auction.getQuantity())
                 .build();
-            orderItemRepository.save(item);
-        }
+        orderItemRepository.save(item);
 
         // 4. Update Auction state
         auction.setStatus(BUYOUT_COMPLETED);

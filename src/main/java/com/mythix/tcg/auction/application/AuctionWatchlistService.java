@@ -97,6 +97,8 @@ public class AuctionWatchlistService {
                 a.getSetName(),
                 a.getImageUrl(),
                 a.getCondition(),
+                a.getQuantity(),
+                a.getLanguage(),
                 a.getGradingCompany(),
                 a.getGrade(),
                 a.getCertNumber(),

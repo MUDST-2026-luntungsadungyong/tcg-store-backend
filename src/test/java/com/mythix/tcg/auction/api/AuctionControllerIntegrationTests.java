@@ -88,6 +88,25 @@ class AuctionControllerIntegrationTests {
     }
 
     @Test
+    void catalogLotPublishesWithoutInventoryAndInventoryLotsReserveAllCopies() throws Exception {
+        var catalogDraft = photos(draft()).param("cardId", product.getCard().getId())
+            .param("quantity", "3").param("condition", "NM").param("startPrice", "3001")
+            .param("startMode", "NOW").param("durationHours", "24");
+        long directId = saveDraft(catalogDraft).path("id").asLong();
+        publish(directId).andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
+        assertThat(heldStock()).isZero();
+
+        Product lot = fixtures.product(seller, 3, "SHOW");
+        long lotId = saveDraft(photos(setup(draft(), lot.getId(), "3001", "NOW", "24"))
+            .param("quantity", "3")).path("id").asLong();
+        publish(lotId).andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
+        assertThat(products.findById(lot.getId()).orElseThrow().getAuctionReserved()).isEqualTo(3);
+        mvc.perform(post(AUCTIONS + "/{id}/cancel", lotId).header("Authorization", sellerAuth))
+            .andExpect(status().isOk());
+        assertThat(products.findById(lot.getId()).orElseThrow().getAuctionReserved()).isZero();
+    }
+
+    @Test
     void sellerAndAdminRoutesEnforceCurrentRoleAndResourceOwnership() throws Exception {
         mvc.perform(get(AUCTIONS)).andExpect(status().isUnauthorized());
         mvc.perform(get(AUCTIONS).header("Authorization", fixtures.bearer(customer))).andExpect(status().isForbidden());

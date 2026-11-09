@@ -136,11 +136,11 @@ public class AuctionSettlementService {
         if (auction.getProductId() != null) {
             product = productRepository.findByIdForUpdate(auction.getProductId()).orElse(null);
             if (product != null && product.getCost() != null) {
-                costBasis = product.getCost();
+                costBasis = product.getCost().multiply(BigDecimal.valueOf(auction.getQuantity()));
             }
         }
 
-        if (product == null || !auction.isStockHeld() || product.getAuctionReserved() < 1) {
+        if (auction.getProductId() != null && (product == null || !auction.isStockHeld() || product.getAuctionReserved() < auction.getQuantity())) {
             throw conflict("Auction stock is no longer held");
         }
         User winner = userRepository.findById(winnerId).orElse(null);
@@ -167,12 +167,13 @@ public class AuctionSettlementService {
         Order savedOrder = orderRepository.save(order);
 
         if (product != null) {
-            // Allocate 1 unit from auction_reserved to order reserved
-            product.setAuctionReserved(Math.max(0, product.getAuctionReserved() - 1));
-            product.setReserved(product.getReserved() + 1);
+            // Move the lot from auction holds to order reservations
+            product.setAuctionReserved(Math.max(0, product.getAuctionReserved() - auction.getQuantity()));
+            product.setReserved(product.getReserved() + auction.getQuantity());
             productRepository.save(product);
 
-            OrderItem item = OrderItem.builder()
+        }
+        OrderItem item = OrderItem.builder()
                 .order(savedOrder)
                 .product(product)
                 .seller(seller)
@@ -180,11 +181,10 @@ public class AuctionSettlementService {
                 .productNameSnapshot(auction.getCardName() != null ? auction.getCardName() : "Card")
                 .shopNameSnapshot(seller.getFullName())
                 .priceAtPurchase(finalPrice)
-                .costAtPurchase(costBasis)
-                .quantity(1)
+                .costAtPurchase(product != null && product.getCost() != null ? product.getCost() : BigDecimal.ZERO)
+                .quantity(auction.getQuantity())
                 .build();
-            orderItemRepository.save(item);
-        }
+        orderItemRepository.save(item);
 
         auction.setStatus(AWAITING_PAYMENT);
         auction.setWinnerId(winnerId);
@@ -268,9 +268,8 @@ public class AuctionSettlementService {
             .orElseThrow(() -> notFound("Auction card not found"));
 
         for (OrderItem item : orderItemRepository.findByOrderId(order.getId())) {
-            Product product = item.getProduct();
             String condition = auction.getCondition();
-            String language = product.getLanguage();
+            String language = auction.getLanguage();
             CollectionItem entry = collectionRepository.findByUserIdAndCardIdAndConditionAndLanguage(
                 buyer.getId(), card.getId(), condition, language
             ).orElseGet(() -> CollectionItem.builder().user(buyer).card(card)
@@ -331,6 +330,7 @@ public class AuctionSettlementService {
             auction.getId(),
             auction.getCardName(),
             auction.getImageUrl(),
+            auction.getQuantity(),
             offer.getOfferPrice(),
             offer.getStatus(),
             offer.getExpiresAt(),
@@ -346,7 +346,7 @@ public class AuctionSettlementService {
             .flatMap(offer -> auctionRepository.findById(offer.getAuctionId())
                 .filter(auction -> auction.getStatus() == DEFAULTED)
                 .map(auction -> new SecondChanceOfferView(offer.getId(), auction.getId(), auction.getCardName(),
-                    auction.getImageUrl(), offer.getOfferPrice(), offer.getStatus(), offer.getExpiresAt(),
+                    auction.getImageUrl(), auction.getQuantity(), offer.getOfferPrice(), offer.getStatus(), offer.getExpiresAt(),
                     offer.getCreatedAt())).stream()).toList();
     }
 
@@ -410,31 +410,18 @@ public class AuctionSettlementService {
 
         Product product = null;
         if (auction.getProductId() != null) {
-            product = productRepository.findByIdForUpdate(auction.getProductId()).orElse(null);
-            if (product != null) {
-                if (product.availableStock() < 1) {
-                    throw conflict("Inventory is no longer available for this offer");
-                }
-                product.setReserved(product.getReserved() + 1);
-                productRepository.save(product);
-
-                OrderItem item = OrderItem.builder()
-                    .order(savedOrder)
-                    .product(product)
-                    .seller(seller)
-                    .cardId(auction.getCardId() != null ? auction.getCardId() : "N/A")
-                    .productNameSnapshot(auction.getCardName() != null ? auction.getCardName() : "Card")
-                    .shopNameSnapshot(seller.getFullName())
-                    .priceAtPurchase(price)
-                    .costAtPurchase(product.getCost() != null ? product.getCost() : BigDecimal.ZERO)
-                    .quantity(1)
-                    .build();
-                orderItemRepository.save(item);
-            }
+            product = productRepository.findByIdForUpdate(auction.getProductId())
+                .orElseThrow(() -> conflict("Inventory is no longer available for this offer"));
+            if (product.availableStock() < auction.getQuantity())
+                throw conflict("Inventory is no longer available for this offer");
+            product.setReserved(product.getReserved() + auction.getQuantity());
+            productRepository.save(product);
         }
-        if (product == null) {
-            throw conflict("Inventory is no longer available for this offer");
-        }
+        orderItemRepository.save(OrderItem.builder().order(savedOrder).product(product).seller(seller)
+            .cardId(auction.getCardId()).productNameSnapshot(auction.getCardName())
+            .shopNameSnapshot(seller.getFullName()).priceAtPurchase(price)
+            .costAtPurchase(product != null && product.getCost() != null ? product.getCost() : BigDecimal.ZERO)
+            .quantity(auction.getQuantity()).build());
 
         auction.setStatus(AWAITING_PAYMENT);
         auction.setWinnerId(bidderId);
@@ -535,7 +522,7 @@ public class AuctionSettlementService {
     private void releaseStockToSeller(Auction auction) {
         if (auction.isStockHeld() && auction.getProductId() != null) {
             productRepository.findByIdForUpdate(auction.getProductId()).ifPresent(p -> {
-                p.setAuctionReserved(Math.max(0, p.getAuctionReserved() - 1));
+                p.setAuctionReserved(Math.max(0, p.getAuctionReserved() - auction.getQuantity()));
                 productRepository.save(p);
             });
             auction.setStockHeld(false);

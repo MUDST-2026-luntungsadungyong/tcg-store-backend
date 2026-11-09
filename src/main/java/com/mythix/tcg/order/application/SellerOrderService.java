@@ -256,7 +256,7 @@ public class SellerOrderService {
                         BigDecimal price = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
                         BigDecimal cost = item.getCostAtPurchase() != null ? item.getCostAtPurchase() : BigDecimal.ZERO;
 
-                        totalRevenue = totalRevenue.add(price.multiply(qty));
+                        totalRevenue = totalRevenue.add("AUCTION".equals(order.getOrderType()) ? price : price.multiply(qty));
                         totalCost = totalCost.add(cost.multiply(qty));
                     }
                 }
@@ -289,7 +289,7 @@ public class SellerOrderService {
             BigDecimal qty = BigDecimal.valueOf(item.getQuantity());
             BigDecimal price = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
             BigDecimal cost = item.getCostAtPurchase() != null ? item.getCostAtPurchase() : BigDecimal.ZERO;
-            BigDecimal itemTotal = price.multiply(qty);
+            BigDecimal itemTotal = "AUCTION".equals(order.getOrderType()) ? price : price.multiply(qty);
             BigDecimal itemTotalCost = cost.multiply(qty);
             BigDecimal itemProfit = itemTotal.subtract(itemTotalCost);
 

@@ -27,6 +27,10 @@ public class Auction {
     @Column(nullable = false)
     private Long sellerId;
     private Long productId;
+    @Column(nullable = false)
+    private int quantity = 1;
+    @Column(nullable = false, length = 10)
+    private String language = "EN";
     @Column(length = 100)
     private String creationKey;
 

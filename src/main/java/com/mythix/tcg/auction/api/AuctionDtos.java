@@ -17,6 +17,9 @@ public final class AuctionDtos {
     @Setter
     public static class DraftForm {
         private Long productId;
+        private String cardId;
+        private Integer quantity;
+        private String language;
         private String condition;
         private String gradingCompany;
         private String grade;
@@ -32,11 +35,11 @@ public final class AuctionDtos {
     }
 
     public record InventoryItem(Long productId, String cardId, String cardName, String setName, String imageUrl,
-                                String cardNumber, String rarity, String condition, String status,
+                                String cardNumber, String rarity, String condition, String language, String status,
                                 int availableQuantity, boolean collectionMatch) {}
 
     public record AuctionView(Long id, Auction.Status status, Long productId, String cardId, String cardName,
-                              String setName, String imageUrl, String condition, String gradingCompany, String grade,
+                              String setName, String imageUrl, String condition, int quantity, String language, String gradingCompany, String grade,
                               String certNumber, BigDecimal startPrice, BigDecimal reservePrice,
                               BigDecimal buyItNowPrice, Auction.StartMode startMode, Instant startAt, Instant endAt,
                               Integer durationHours, int bidCount, BigDecimal highestBid, Instant updatedAt,
