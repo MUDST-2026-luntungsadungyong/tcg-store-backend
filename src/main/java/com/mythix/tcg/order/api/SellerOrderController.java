@@ -51,7 +51,7 @@ public class SellerOrderController {
             @Valid @RequestBody UpdateOrderStatusRequest request) {
 
         SellerOrderResponse response = sellerOrderService.updateOrderStatus(
-                user.userId(), orderId, request.status(), request.note(), request.trackingNumber());
+                user.userId(), orderId, request.status(), request.note(), request.trackingNumber(), Boolean.TRUE.equals(request.noBuyerContact()));
         return ResponseEntity.ok(response);
     }
 

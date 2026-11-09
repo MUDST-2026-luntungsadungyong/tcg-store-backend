@@ -218,6 +218,17 @@ public class AuctionSettlementService {
         return auctionRepository.findIdByOrderId(orderId).flatMap(auctionRepository::findByIdForUpdate);
     }
 
+    public void closeCancelledOrder(Auction auction, boolean noBuyerContact) {
+        auction.setStatus(noBuyerContact ? DEFAULTED : CANCELLED);
+        auction.setUpdatedAt(Instant.now());
+        events.publishEvent(new AuctionLiveUpdates.Changed(auction.getId()));
+        if (noBuyerContact) {
+            sendNotification(auction.getWinnerId(), NotificationTypes.AUCTION_DEFAULTED_WARNING,
+                "ร้านค้ายกเลิกออเดอร์ประมูลเพราะยังไม่ได้รับการติดต่อจากคุณ",
+                "/orders/" + auction.getOrderId());
+        }
+    }
+
 
     @Transactional
     public void transferAuctionCardToPersonalBinder(Order order) {
