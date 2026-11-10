@@ -1,0 +1,131 @@
+name: Deploy backend to AKS demo
+
+on:
+  workflow_run:
+    workflows: ["Build, Verify and Publish Container Image"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aks-demo-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+      ACR_NAME: tcgstorecimah2026
+      ACR_LOGIN_SERVER: tcgstorecimah2026.azurecr.io
+      AKS_RESOURCE_GROUP: rg-tcg-store-aks-demo
+      AKS_CLUSTER: aks-tcg-store-demo
+      KUBE_NAMESPACE: tcg-store-aks-demo
+
+    steps:
+      - name: Checkout the verified main commit
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          fetch-depth: 0
+
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to Azure Container Registry
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Set reproducible image metadata
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "epoch=$(git show -s --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+          echo "created=$(git show -s --format=%cI HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Build and push the verified commit to ACR
+        id: build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ env.ACR_LOGIN_SERVER }}/tcg-store-backend:sha-${{ env.SOURCE_SHA }}
+          outputs: type=image,push=true,rewrite-timestamp=true
+          build-args: |
+            SOURCE_DATE_EPOCH=${{ steps.source.outputs.epoch }}
+            OCI_CREATED=${{ steps.source.outputs.created }}
+            OCI_REVISION=${{ env.SOURCE_SHA }}
+            OCI_VERSION=sha-${{ env.SOURCE_SHA }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Install kubectl and get AKS credentials
+        shell: bash
+        run: |
+          az aks install-cli --install-location "$RUNNER_TEMP/kubectl"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+          az aks get-credentials --resource-group "$AKS_RESOURCE_GROUP" \
+            --name "$AKS_CLUSTER" --admin --file "$RUNNER_TEMP/kubeconfig" \
+            --overwrite-existing
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Pin the exact ACR digest in both overlays
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          for manifest in infra/kubernetes/overlays/aks-demo/kustomization.yaml \
+                          infra/kubernetes/overlays/aks-demo/migration/kustomization.yaml; do
+            sed -i -E "s#^    digest: sha256:[0-9a-f]{64}$#    digest: ${IMAGE_DIGEST}#" "$manifest"
+            test "$(grep -Fxc "    digest: ${IMAGE_DIGEST}" "$manifest")" -eq 1
+          done
+          kubectl apply --dry-run=server -k infra/kubernetes/overlays/aks-demo
+
+      - name: Run database migration before rollout
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${SOURCE_SHA:0:7}"
+          job_name="tcg-store-backend-migration-${short_sha}"
+          kubectl kustomize infra/kubernetes/overlays/aks-demo/migration |
+            sed "s#^  name: tcg-store-backend-migration$#  name: ${job_name}#" > "$RUNNER_TEMP/migration.yaml"
+          grep -Fq "  name: ${job_name}" "$RUNNER_TEMP/migration.yaml"
+          kubectl apply --dry-run=server -f "$RUNNER_TEMP/migration.yaml"
+          kubectl apply -f "$RUNNER_TEMP/migration.yaml"
+          kubectl wait -n "$KUBE_NAMESPACE" --for=condition=complete \
+            "job/${job_name}" --timeout=10m
+
+      - name: Roll out backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl apply -k infra/kubernetes/overlays/aks-demo
+          kubectl rollout status -n "$KUBE_NAMESPACE" \
+            deployment/tcg-store-backend --timeout=10m
+          kubectl get deployment,job,pods,service -n "$KUBE_NAMESPACE" -o wide
+
+      - name: Show migration logs on failure
+        if: failure()
+        shell: bash
+        run: |
+          short_sha="${SOURCE_SHA:0:7}"
+          kubectl logs -n "$KUBE_NAMESPACE" \
+            "job/tcg-store-backend-migration-${short_sha}" --tail=100 || true
