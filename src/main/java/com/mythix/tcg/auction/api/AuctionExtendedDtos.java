@@ -76,7 +76,10 @@ public final class AuctionExtendedDtos {
         boolean isWatching,
         boolean isHighBidder,
         String frontImageUrl,
-        String backImageUrl
+        String backImageUrl,
+        Long winnerId,
+        BigDecimal winningBid,
+        Long orderId
     ) {}
 
     public record AuctionSummaryView(

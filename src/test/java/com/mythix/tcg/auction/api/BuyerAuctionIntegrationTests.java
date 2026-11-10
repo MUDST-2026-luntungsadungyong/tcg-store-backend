@@ -552,4 +552,134 @@ class BuyerAuctionIntegrationTests {
             .andExpect(status().isOk()).andExpect(jsonPath("$.totalInvested").value(300.00));
     }
 
+    @Test
+    void testBidBelowBuyItNowAuctionRemainsActive() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("1000.00"), null, new BigDecimal("4000.00"));
+
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids")
+                .header("Authorization", buyer1Auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 2000.00}"))
+            .andExpect(status().isOk());
+
+        Auction updated = auctions.findById(auction.getId()).orElseThrow();
+        assertThat(updated.getStatus()).isEqualTo(Auction.Status.ACTIVE);
+        assertThat(updated.getHighestBid()).isEqualByComparingTo("2000.00");
+        assertThat(updated.getLeadingBidderId()).isEqualTo(buyer1.getId());
+        assertThat(updated.getWinnerId()).isNull();
+        assertThat(updated.getOrderId()).isNull();
+    }
+
+    @Test
+    void testBidEqualBuyItNowClosesImmediatelyAndCreatesOrder() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("1000.00"), null, new BigDecimal("4000.00"));
+
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids")
+                .header("Authorization", buyer1Auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 4000.00}"))
+            .andExpect(status().isOk());
+
+        Auction closed = auctions.findById(auction.getId()).orElseThrow();
+        assertThat(closed.getStatus()).isEqualTo(Auction.Status.AWAITING_BUYER_CONTACT);
+        assertThat(closed.getWinnerId()).isEqualTo(buyer1.getId());
+        assertThat(closed.getWinningBid()).isEqualByComparingTo("4000.00");
+        assertThat(closed.getOrderId()).isNotNull();
+
+        Order order = orders.findById(closed.getOrderId()).orElseThrow();
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("4000.00");
+        assertThat(order.getBuyer().getId()).isEqualTo(buyer1.getId());
+        assertThat(order.getStatus()).isEqualTo("AWAITING_BUYER_CONTACT");
+    }
+
+    @Test
+    void testBidAboveBuyItNowClosesImmediatelyAndCappedAtBuyItNow() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("1000.00"), null, new BigDecimal("4000.00"));
+
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids")
+                .header("Authorization", buyer1Auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 4500.00}"))
+            .andExpect(status().isOk());
+
+        Auction closed = auctions.findById(auction.getId()).orElseThrow();
+        assertThat(closed.getStatus()).isEqualTo(Auction.Status.AWAITING_BUYER_CONTACT);
+        assertThat(closed.getWinnerId()).isEqualTo(buyer1.getId());
+        // Price must be capped at Buy It Now price!
+        assertThat(closed.getWinningBid()).isEqualByComparingTo("4000.00");
+        assertThat(closed.getOrderId()).isNotNull();
+
+        Order order = orders.findById(closed.getOrderId()).orElseThrow();
+        assertThat(order.getTotalAmount()).isEqualByComparingTo("4000.00");
+        assertThat(order.getBuyer().getId()).isEqualTo(buyer1.getId());
+    }
+
+    @Test
+    void testConcurrentBidsAfterBuyoutFailsAndExactlyOneWinnerAndOneOrder() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("1000.00"), null, new BigDecimal("4000.00"));
+
+        // First bid reaches Buy It Now
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids")
+                .header("Authorization", buyer1Auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 4000.00}"))
+            .andExpect(status().isOk());
+
+        // Subsequent bid fails with 409 Conflict
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids")
+                .header("Authorization", buyer2Auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 4100.00}"))
+            .andExpect(status().isConflict());
+
+        Auction closed = auctions.findById(auction.getId()).orElseThrow();
+        assertThat(closed.getWinnerId()).isEqualTo(buyer1.getId());
+        assertThat(closed.getWinningBid()).isEqualByComparingTo("4000.00");
+
+        // Exactly one order exists and points to winner buyer1
+        assertThat(closed.getOrderId()).isNotNull();
+        Order order = orders.findById(closed.getOrderId()).orElseThrow();
+        assertThat(order.getBuyer().getId()).isEqualTo(buyer1.getId());
+    }
+
+    @Test
+    void testMultipleCardsInOneAuctionRejectedByApi() throws Exception {
+        var req = AuctionApiFixtures.setup(
+            AuctionApiFixtures.photos(AuctionApiFixtures.draft()),
+            product.getId(), "100.00", "NOW", "24"
+        ).param("quantity", "2");
+
+        mvc.perform(req.header("Authorization", sellerAuth))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Auctions can only contain exactly one card"));
+    }
+
+    @Test
+    void testNormalBiddingWithoutBuyItNowStillWorks() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("100.00"), null, null);
+
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids")
+                .header("Authorization", buyer1Auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 150.00}"))
+            .andExpect(status().isOk());
+
+        Auction a1 = auctions.findById(auction.getId()).orElseThrow();
+        assertThat(a1.getStatus()).isEqualTo(Auction.Status.ACTIVE);
+        assertThat(a1.getHighestBid()).isEqualByComparingTo("150.00");
+        assertThat(a1.getLeadingBidderId()).isEqualTo(buyer1.getId());
+
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids")
+                .header("Authorization", buyer2Auth)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"amount\": 200.00}"))
+            .andExpect(status().isOk());
+
+        Auction a2 = auctions.findById(auction.getId()).orElseThrow();
+        assertThat(a2.getStatus()).isEqualTo(Auction.Status.ACTIVE);
+        assertThat(a2.getHighestBid()).isEqualByComparingTo("200.00");
+        assertThat(a2.getLeadingBidderId()).isEqualTo(buyer2.getId());
+        assertThat(a2.getWinnerId()).isNull();
+        assertThat(a2.getOrderId()).isNull();
+    }
 }
