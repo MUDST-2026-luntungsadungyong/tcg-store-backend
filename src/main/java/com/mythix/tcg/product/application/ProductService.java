@@ -1,5 +1,6 @@
 package com.mythix.tcg.product.application;
 
+import com.mythix.tcg.catalog.persistence.CardNameSearch;
 import com.mythix.tcg.product.api.ProductPageResponse;
 import com.mythix.tcg.product.api.ProductResponse;
 import com.mythix.tcg.product.domain.Product;
@@ -30,15 +31,15 @@ public class ProductService {
     public ProductPageResponse browseProducts(String search, String rarity, String stage, String condition,
                                              String language, String cardId, Long sellerId, BigDecimal minPrice,
                                              BigDecimal maxPrice, Pageable pageable) {
+        String term = CardNameSearch.term(search);
         Specification<Product> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
             // Always enforce status = 'SHOW' for public browsing
             predicates.add(cb.equal(root.get("status"), "SHOW"));
 
-            // Search by card name (case-insensitive)
-            if (search != null && !search.isBlank()) {
-                predicates.add(cb.like(cb.lower(root.get("card").get("name")), "%" + search.trim().toLowerCase() + "%"));
+            if (!term.isEmpty()) {
+                predicates.add(CardNameSearch.matches(root.get("card"), query, cb, term));
             }
 
             // Filter by rarity (case-insensitive)

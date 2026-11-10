@@ -1,6 +1,7 @@
 package com.mythix.tcg.catalog.api;
 
 import com.mythix.tcg.catalog.domain.Card;
+import com.mythix.tcg.catalog.persistence.CardNameSearch;
 import com.mythix.tcg.catalog.persistence.CardRepository;
 import lombok.RequiredArgsConstructor;
 import jakarta.validation.constraints.Max;
@@ -28,8 +29,9 @@ public class CardController {
 
         Pageable pageable = PageRequest.of(page, size);
         Page<Card> result;
-        if (search != null && !search.isBlank()) {
-            result = cardRepository.findByNameContainingIgnoreCase(search.trim(), pageable);
+        String term = CardNameSearch.term(search);
+        if (!term.isEmpty()) {
+            result = cardRepository.findAll((card, query, cb) -> CardNameSearch.matches(card, query, cb, term), pageable);
         } else {
             result = cardRepository.findAll(pageable);
         }

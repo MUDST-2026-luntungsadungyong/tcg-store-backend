@@ -5,6 +5,7 @@ import com.mythix.tcg.catalog.persistence.CardRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -12,6 +13,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -21,7 +23,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,7 +74,7 @@ class CardControllerTest {
     void getCards_withSearch_returnsFilteredCards() {
         Card card = createSampleCard("base1-58", "Pikachu");
         Page<Card> pagedCards = new PageImpl<>(List.of(card), PageRequest.of(0, 20), 1);
-        when(cardRepository.findByNameContainingIgnoreCase(eq("Pikachu"), any(Pageable.class)))
+        when(cardRepository.findAll(ArgumentMatchers.<Specification<Card>>any(), any(Pageable.class)))
                 .thenReturn(pagedCards);
 
         ResponseEntity<Page<Card>> response = controller.getCards(0, 20, "  Pikachu  ");
@@ -82,7 +83,7 @@ class CardControllerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getContent()).hasSize(1);
         assertThat(response.getBody().getContent().get(0).getName()).isEqualTo("Pikachu");
-        verify(cardRepository).findByNameContainingIgnoreCase(eq("Pikachu"), any(Pageable.class));
+        verify(cardRepository).findAll(ArgumentMatchers.<Specification<Card>>any(), any(Pageable.class));
     }
 
     @Test

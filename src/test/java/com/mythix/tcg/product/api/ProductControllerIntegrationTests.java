@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -52,6 +53,9 @@ class ProductControllerIntegrationTests {
     private CardRepository cardRepository;
 
     @Autowired
+    private JdbcTemplate jdbc;
+
+    @Autowired
     private UserRepository userRepository;
 
     @Autowired
@@ -78,6 +82,7 @@ class ProductControllerIntegrationTests {
         productRepository.deleteAll();
         sellerProfileRepository.deleteAll();
         userRepository.deleteAll();
+        jdbc.update("DELETE FROM card_search_names");
         cardRepository.deleteAll();
 
         seller = userRepository.save(User.builder()
@@ -112,6 +117,48 @@ class ProductControllerIntegrationTests {
                 .imageSmall("https://images.com/char-small.png")
                 .imageLarge("https://images.com/char.png")
                 .build());
+    }
+
+    @Test
+    void thaiNames_ShouldSearchCatalogAndPublicListingsWithoutDuplicateResults() throws Exception {
+        jdbc.update("""
+                INSERT INTO card_search_names (card_id, language, name, search_name, source)
+                VALUES (?, 'th', ?, ?, 'test'), (?, 'th', ?, ?, 'test')
+                """, charizardCard.getId(), "ลิซาร์ดอน", "ลิซาร์ดอน",
+                charizardCard.getId(), "ลิซาร์ดอน VMAX", "ลิซาร์ดอนvmax");
+        productRepository.save(Product.builder()
+                .seller(seller)
+                .card(charizardCard)
+                .price(new BigDecimal("300.00"))
+                .condition("Near Mint")
+                .status("SHOW")
+                .onHand(2)
+                .reserved(0)
+                .build());
+        productRepository.save(Product.builder()
+                .seller(seller)
+                .card(charizardCard)
+                .price(new BigDecimal("100.00"))
+                .condition("Near Mint")
+                .status("HIDE")
+                .onHand(1)
+                .reserved(0)
+                .build());
+
+        mockMvc.perform(get("/api/cards").param("search", "ลิซาร์ดอน"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(charizardCard.getId()));
+
+        for (String term : new String[]{"ลิซาร์ดอน", "โปเกมอน ลิซาร์ดอน VMAX", "pokemon", "Pokémon", "โปเกมอน"}) {
+            mockMvc.perform(get("/api/products").param("search", term).param("maxPrice", "400"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalElements").value(1))
+                    .andExpect(jsonPath("$.items[0].name").value("Charizard VMAX"));
+        }
+        mockMvc.perform(get("/api/products").param("search", "ลิซาร์ดอน ex"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
     }
 
     @Test
