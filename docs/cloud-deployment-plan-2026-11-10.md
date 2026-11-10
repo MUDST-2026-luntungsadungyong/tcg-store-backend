@@ -13,11 +13,11 @@ Domain ที่ผู้ใช้ให้มา: `tcgmihix.store` (จดท�
 - **API route ภายใต้ domain:** Cloudflare Pages Function proxy `/api/*` ไปยัง OKE ingress/load balancer; frontend ใช้ `VITE_API_BASE_URL=/api`
 - **Database:** Neon PostgreSQL เดิม แยก staging/production branch
 - **รูปภาพ:** Neon Object Storage แบบ S3-compatible หาก bucket มีอยู่ใน Neon แล้ว
-- **CI/CD:** GitHub Actions ตรวจ/ทดสอบ/build multi-arch image และ deploy manifests ไป OKE จาก `main`; ใช้ short-lived OCI auth/least privilege
+- **CI/CD:** merge เข้า `main` แล้ว `docker-build.yml` verify และ publish multi-arch image ไป GHCR; deploy staging/production เป็น manual `workflow_dispatch` ผ่าน self-hosted runner `tcg-deploy` ตาม workflow ปัจจุบัน
 
 Cloudflare Pages เสิร์ฟ frontend แบบ static ได้ตรงกับ Vite ส่วน Pages Function ทำให้ API อยู่ใต้ origin เดียวกันโดยไม่ต้องเพิ่ม Cloud Load Balancer แยกนอก cluster; OKE เป็น backend Kubernetes จริงของ deployment ตามข้อกำหนดโปรเจกต์ ข้อแลกเปลี่ยนคือ free node มีความเสี่ยง idle reclamation และไม่ให้ HA/SLA
 
-เนื่องจาก Kubernetes เป็นส่วนหนึ่งของโปรเจกต์ ให้ใช้ **OCI OKE Basic Cluster + worker node OCI Ampere A1 Always Free** เป็น Kubernetes environment สำหรับ staging/ทดลอง deploy โดยแยกจาก production path ข้างต้นในช่วงแรก Basic Cluster ไม่มีค่าคลัสเตอร์และ A1 อยู่ใน Always Free แต่มีเพียง 2 OCPU/12 GB รวมต่อ tenancy และ instance ที่ idle ตามเกณฑ์ 7 วันอาจถูก reclaim จึงไม่ควรพึ่งเป็น production ที่ต้องพร้อมใช้งานต่อเนื่องโดยไม่มีงบสำรอง
+เนื่องจาก Kubernetes เป็นส่วนหนึ่งของโปรเจกต์ ให้ใช้ **OCI OKE Basic Cluster + worker node OCI Ampere A1 Always Free** เป็น Kubernetes backend ของแอป Basic Cluster ไม่มีค่าคลัสเตอร์และ A1 อยู่ใน Always Free แต่มีเพียง 2 OCPU/12 GB รวมต่อ tenancy และ instance ที่ idle ตามเกณฑ์ 7 วันอาจถูก reclaim จึงเป็น deployment แบบ hobby/portfolio ที่ยอมรับ downtime ได้ ไม่ใช่บริการที่รับประกัน uptime
 
 ## ตัวเลือก Kubernetes ฟรี: OCI OKE Basic + Ampere A1
 
@@ -47,18 +47,21 @@ OCI มีตัวเลือก Kubernetes ที่เข้ากับง�
 ### Frontend — `tcg-store-frontend`
 
 - React + TypeScript + Vite; `npm run build` สร้าง static output ที่ `dist`
-- API URL อ่านจาก `VITE_API_BASE_URL`; รองรับ relative path `/api`
+- API URL อ่านจาก `VITE_API_BASE_URL`; รองรับ relative path `/api`; Pages Function proxy และ `_routes.json` เพิ่มแล้วใน branch `fix/cloud-workspace-setup` และรอ merge เข้า `main`
 - มี Dockerfile/Nginx สำหรับ container อยู่แล้ว แต่ Pages ไม่จำเป็นต้องรัน container
-- ยังไม่มี Pages Function proxy ใน repo
 
 ### Backend — `tcg-store-backend`
 
-- Spring Boot / Java 21; Dockerfile multi-stage และรัน non-root
+- Spring Boot / Java 21; multi-stage Dockerfile รัน non-root และรองรับ multi-arch `amd64`/`arm64`
+- `.github/workflows/docker-build.yml` รัน verify/security/supply-chain steps และ publish immutable GHCR image เมื่อ push `main`
+- มี Kustomize base, Neon application/migration overlays, health probes, resource requests/limits, Flyway migration Job และ deploy script `scripts/deploy-neon-kubernetes.ps1` อยู่แล้ว
+- `deploy-staging.yml`/`deploy-production.yml` เป็น workflow แบบ manual และต้องใช้ self-hosted runner label `tcg-deploy` พร้อม cluster context และ release variables; ยังไม่มีการยืนยันว่า runner/context ปัจจุบันเชื่อม OCI OKE
 - Neon profile ใช้ `NEON_JDBC_URL`, `NEON_DB_USERNAME`, `NEON_DB_PASSWORD`; Hikari สูงสุด 5 connections/instance
 - มี Flyway migration runner แยก ใช้ profile `neon,migration`
 - มี Actuator liveness/readiness และ `GET /api/health`
-- ใช้ S3-compatible object storage ผ่าน `OBJECT_STORAGE_*`; runbook ระบุ Neon Object Storage แต่ `neon.ts` ยังไม่ได้ประกาศ bucket จึงต้องยืนยัน bucket/credentials จริงก่อน deploy
-- ยังไม่มี Cloud Run workflow หรือ Kubernetes manifests/workflow สำหรับ OKE
+- Neon overlay ยังมี placeholder สำหรับ image SHA, CORS origin และ object-storage endpoint/public URL; ยังไม่มี public ingress/TLS สำหรับ OKE ใน overlay นี้
+- Secret example มีไว้บอก key contract เท่านั้น; ต้อง provision secret จริงและยืนยัน GHCR pull access ก่อน deploy
+- ใช้ S3-compatible object storage ผ่าน `OBJECT_STORAGE_*`; ต้องยืนยัน bucket/credentials จริงก่อน deploy
 
 ## Free-tier ที่ต้องคุม
 
@@ -69,7 +72,6 @@ OCI มีตัวเลือก Kubernetes ที่เข้ากับง�
 | OCI OKE + A1 | OKE Basic Cluster ฟรี; A1 Free tenancy รวม 1,500 OCPU-hours + 9,000 GB-hours/เดือน (2 OCPU/12 GB); load balancer 10 Mbps และ outbound transfer 10 TB free; A1 idle instances may be reclaimed ([OCI Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm), [OKE pricing](https://www.oracle.com/ca-en/cloud/price-list/)) |
 | Cloud Run (fallback) | Request-based Free Tier 180,000 vCPU-seconds, 360,000 GiB-seconds และ 2 ล้าน requests/เดือน รวมต่อ billing account; 1 vCPU ใช้โควตา CPU ได้ราว 50 ชั่วโมงรับงาน/เดือน จึงอาจเริ่มคิดค่าใช้จ่ายก่อนครบ 2 ล้าน requests ([Cloud Run pricing](https://cloud.google.com/run/pricing)) |
 | Neon Free | 100 CU-hours, 1 GB Postgres, 5 GB Object Storage และ 5 GB public transfer ต่อ project/เดือน; Postgres และ Object Storage ใช้ transfer quota ร่วมกัน ([Neon pricing](https://neon.com/pricing)) |
-| Cloud Build/Artifact Registry | Cloud Build 2,500 build-minutes/เดือน; Artifact Registry 0.5 GiB storage free ต่อ billing account จึงควรลบ image เก่าด้วย cleanup policy ([Cloud Build](https://cloud.google.com/build/pricing), [Artifact Registry](https://cloud.google.com/artifact-registry/pricing)) |
 
 OCI Free Tier ต้องยืนยัน account/region capacity และ Always Free eligibility ของ resource ทุกชิ้นก่อนสร้าง; เลือก OCI home region ให้ใกล้ Neon เพื่อจำกัด DB latency
 
@@ -84,7 +86,9 @@ flowchart LR
   OKE -->|TLS PostgreSQL| Neon[Neon staging / production branch]
   OKE -->|S3 API| Objects[Neon Object Storage]
   GH[GitHub] -->|frontend main| Pages
-  GH -->|backend main: verify, multi-arch image, migration, deploy| OKE
+  GH -->|main: verify and publish multi-arch image| GHCR[GHCR immutable SHA image]
+  Runner[Self-hosted tcg-deploy runner<br/>manual release workflow] -->|migration gate and rollout| OKE
+  GHCR -->|pull image| OKE
 ```
 
 Pages Function route ใช้ file-based routing เช่น `functions/api/[[path]].ts` เพื่อรับ `/api` และ subpaths ต่อจากนั้น; ฟังก์ชันส่ง request ต่อไปยัง OKE ingress/load balancer URL โดยรักษา method, path/query, Authorization, content type และ body และต้องไม่ cache response ของ API/auth ([Pages Function routing](https://developers.cloudflare.com/pages/functions/routing/)). ตั้ง production environment variable เช่น `API_ORIGIN=https://<oke-ingress-host>`; frontend ตั้ง `VITE_API_BASE_URL=/api`.
@@ -116,8 +120,9 @@ Cloudflare Pages ต้องผูก custom domain ผ่าน Pages dashboar
 
 - สร้าง OKE **Basic** cluster และ managed node pool หนึ่ง node ใน Always Free home region; ก่อน apply ตรวจ quota, ARM-compatible node image, networking/IP/LB resources และราคาใน tenancy
 - ใช้ Dockerfile/build workflow สร้าง multi-arch `linux/arm64` image ผูก tag กับ Git SHA; เก็บ image ใน GHCR หรือ registry ที่เลือกและตั้ง cleanup
-- สร้าง Kubernetes manifests สำหรับ Deployment, Service, ingress, readiness/liveness probes, resource requests/limits และ Secret/config; จำกัด JVM/container memory ให้เหลือ headroom สำหรับระบบบน 12 GB node
-- GitHub Actions ต้องผ่าน `./mvnw verify` ก่อน deploy จาก `main`; ใช้ OCI authentication แบบจำกัดสิทธิ์ใน CI และเก็บ key material เป็น protected GitHub secret หากยังใช้ federation ไม่ได้
+- ใช้ Kustomize base และ Neon overlay ที่มีอยู่เป็นจุดเริ่ม; เพิ่ม/ปรับ OKE-specific overlay ให้มี public ingress/LB + TLS, CORS/object-storage values, immutable image SHA และ GHCR image pull access โดยไม่ commit secret
+- ปรับ replicas/HPA/requests ให้พอดีกับ A1 node เดียว; อย่าสมมติว่ามี high availability จาก replica 2 เมื่อ worker มีเพียง node เดียว
+- หลัง merge `main`, ใช้ immutable multi-arch image ที่ `docker-build.yml` publish; deploy-staging/production workflows ปัจจุบันเป็น manual และใช้ self-hosted `tcg-deploy` runner จึงต้องเชื่อม kube context/credential กับ OCI ก่อน หรือเตรียม runner ที่เข้าถึง OKE ได้
 - Runtime env: `SPRING_PROFILES_ACTIVE=neon`, port 8080, `NEON_*`, `APP_JWT_SECRET`, `OBJECT_STORAGE_*`; จำกัด CORS ให้ `https://tcgmihix.store` (และ `www` เฉพาะถ้าใช้เป็น origin)
 - ก่อน rollout ให้รัน migration Job จาก image เดียวกันด้วย `neon,migration`; หยุด deploy หาก migration ไม่ผ่าน
 - ตรวจ `GET /api/health`, Actuator readiness, ingress/TLS และรูปภาพหลัง deploy; สร้างวิธี backup/restore และขั้นตอนสร้าง cluster/node ใหม่หากโดน reclaim
