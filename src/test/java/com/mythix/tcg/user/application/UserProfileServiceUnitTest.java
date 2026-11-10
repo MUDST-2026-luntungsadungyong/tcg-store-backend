@@ -78,7 +78,7 @@ class UserProfileServiceUnitTest {
     @DisplayName("updateProfile() - อัปเดตข้อมูลชื่อและเบอร์ติดต่อสำเร็จ")
     void updateProfile_success() {
         // Arrange
-        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleUser));
         ProfileRequest request = new ProfileRequest("Red Ketchum", "089-999-0000", "red_line", "red_fb", null, "https://avatar.com/img.png");
 
         // Act
@@ -97,7 +97,7 @@ class UserProfileServiceUnitTest {
     @DisplayName("updateProfile() - เปลี่ยนอีเมลใหม่สำเร็จเมื่ออีเมลไม่ซ้ำในระบบ")
     void updateProfile_changeEmail_success() {
         // Arrange
-        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleUser));
         when(userRepository.existsByEmail("newemail@mythix.com")).thenReturn(false);
         ProfileRequest request = new ProfileRequest(null, null, null, null, "NewEmail@Mythix.com", null);
 
@@ -113,7 +113,7 @@ class UserProfileServiceUnitTest {
     @DisplayName("updateProfile() - โยน DuplicateEmailException เมื่อเปลี่ยนไปใช้อีเมลที่มีคนใช้อยู่แล้ว")
     void updateProfile_duplicateEmail_throwsException() {
         // Arrange
-        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleUser));
         when(userRepository.existsByEmail("taken@mythix.com")).thenReturn(true);
         ProfileRequest request = new ProfileRequest(null, null, null, null, "taken@mythix.com", null);
 
@@ -126,7 +126,7 @@ class UserProfileServiceUnitTest {
     @DisplayName("updateProfile() - เมื่อส่งอีเมลเดิม (หรือตัวพิมพ์ต่างกัน) ต้องไม่อัปเดตซ้ำและไม่โยน Error")
     void updateProfile_sameEmail_doesNotThrow() {
         // Arrange
-        when(userRepository.findById(1L)).thenReturn(Optional.of(sampleUser));
+        when(userRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(sampleUser));
         ProfileRequest request = new ProfileRequest("Updated Name", null, null, null, "ASH@MYTHIX.COM", null);
 
         // Act

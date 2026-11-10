@@ -15,6 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -119,10 +120,15 @@ class AuthControllerIntegrationTests {
                 .content("{\"name\":\"Naphat\",\"email\":\"naphat@example.com\",\"password\":\"password123\"}"))
             .andExpect(status().isCreated());
 
+        var savedUser = userRepository.findByEmail("naphat@example.com").orElseThrow();
+        savedUser.setAvatarUrl("https://example.com/avatar.png");
+        userRepository.saveAndFlush(savedUser);
+
         String loginResponse = mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"naphat@example.com\",\"password\":\"password123\"}"))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.avatarUrl").value("https://example.com/avatar.png"))
             .andReturn().getResponse().getContentAsString();
         String token = objectMapper.readTree(loginResponse).path("token").asText();
 
@@ -133,7 +139,33 @@ class AuthControllerIntegrationTests {
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.email").value("naphat@example.com"))
+            .andExpect(jsonPath("$.avatarUrl").value("https://example.com/avatar.png"))
             .andExpect(jsonPath("$.sellerStatus").value("NONE"));
+    }
+
+    @Test
+    void avatarRemovalRequiresAuthenticationAndPersistsOnlyForCaller() throws Exception {
+        String token = registerAndGetToken();
+        var user = userRepository.findByEmail("naphat@example.com").orElseThrow();
+        user.setAvatarUrl("https://example.com/shared.png");
+        userRepository.saveAndFlush(user);
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Other\",\"email\":\"other@example.com\",\"password\":\"password123\"}"))
+            .andExpect(status().isCreated());
+        var other = userRepository.findByEmail("other@example.com").orElseThrow();
+        other.setAvatarUrl("https://example.com/shared.png");
+        userRepository.saveAndFlush(other);
+
+        mockMvc.perform(delete("/api/users/profile/avatar")).andExpect(status().isUnauthorized());
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getAvatarUrl()).isNotNull();
+        String response = mockMvc.perform(delete("/api/users/profile/avatar").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(objectMapper.readTree(response).has("avatarUrl")).isTrue();
+        assertThat(objectMapper.readTree(response).get("avatarUrl").isNull()).isTrue();
+        assertThat(userRepository.findById(user.getId()).orElseThrow().getAvatarUrl()).isNull();
+        assertThat(userRepository.findById(other.getId()).orElseThrow().getAvatarUrl()).isEqualTo("https://example.com/shared.png");
+        mockMvc.perform(delete("/api/users/profile/avatar").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk());
     }
 
     @Test
