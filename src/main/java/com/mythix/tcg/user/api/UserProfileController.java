@@ -4,6 +4,7 @@ import com.mythix.tcg.auth.security.AuthenticatedUser;
 import com.mythix.tcg.user.application.UserProfileService;
 import com.mythix.tcg.user.application.UserAvatarService;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.validation.Valid;
@@ -35,6 +36,11 @@ public class UserProfileController {
     public ProfileResponse uploadAvatar(@AuthenticationPrincipal AuthenticatedUser user,
         @RequestParam("image") MultipartFile image) {
         return userAvatarService.upload(user.userId(), image);
+    }
+
+    @DeleteMapping("/avatar")
+    public ProfileResponse removeAvatar(@AuthenticationPrincipal AuthenticatedUser user) {
+        return userAvatarService.remove(user.userId());
     }
 
     @GetMapping

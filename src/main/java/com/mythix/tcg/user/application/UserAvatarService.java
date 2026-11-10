@@ -23,10 +23,19 @@ public class UserAvatarService {
 
     @Transactional
     public ProfileResponse upload(Long userId, MultipartFile image) {
-        var user = users.findById(userId).orElseThrow(InvalidCredentialsException::new);
+        var user = users.findByIdForUpdate(userId).orElseThrow(InvalidCredentialsException::new);
         // Reuse validated, transaction-aware object storage. Old URLs may still
         // be referenced elsewhere, so replacing an avatar does not delete them.
         user.setAvatarUrl(images.store(image));
+        return ProfileResponse.from(user);
+    }
+
+    @Transactional
+    public ProfileResponse remove(Long userId) {
+        var user = users.findByIdForUpdate(userId).orElseThrow(InvalidCredentialsException::new);
+        // Existing URLs can be shared with product images or other users. Retain
+        // the object until ownership/reference tracking can prove it is unused.
+        user.setAvatarUrl(null);
         return ProfileResponse.from(user);
     }
 }

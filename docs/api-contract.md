@@ -12,7 +12,8 @@
 | Login | `POST /auth/login` | Public | Implemented on `feat/scrum-9-auth-api` |
 | Current user | `GET /auth/me` | Bearer | Implemented on `feat/scrum-9-auth-api` |
 | Forgot/reset password | `POST /auth/forgot-password`, `POST /auth/reset-password` | Public/token | frontend มี client แต่ Jira backend ยังไม่กำหนด |
-| Update profile | `PUT /users/{userId}` | Bearer/owner | SCRUM-6; ก่อน implement ควรเปลี่ยนเป็น `/users/me` เพื่อลด IDOR risk |
+| Profile | `GET/PUT /users/profile` | Bearer | Current user's profile |
+| Profile photo | `GET/POST/DELETE /users/profile/avatar` | Bearer | Current user's photo |
 | Browse products | `GET /products`, `GET /products/{id}` | Public | Implemented on `feat/scrum-10-browse-products-api` |
 | Seller inventory | `GET/POST /seller/products` | Bearer/Seller | SCRUM-7 |
 | Seller listing | `PUT/DELETE /seller/products/{id}` | Bearer/owner | SCRUM-7 |
@@ -25,6 +26,12 @@
 | Personal collection | `GET/POST /collection`, `DELETE /collection/{id}` | Bearer | SCRUM-28 |
 
 `/admin/*` มี client placeholder ใน frontend แต่ไม่อยู่ใน Jira backend scope ชุดนี้ จึงยังไม่ถือเป็น committed contract
+
+## Profile photo
+
+All paths use the authenticated user, never a supplied user ID. `POST /users/profile/avatar` accepts multipart form field `image`; it validates and stores the image and returns the updated profile with `avatarUrl`. `GET /users/profile/avatar` returns the current managed image bytes with `Cache-Control: no-store`. `DELETE /users/profile/avatar` clears the saved URL and returns the updated profile with a null `avatarUrl`; it is idempotent. Login's `user` and `GET /auth/me` also include `avatarUrl` (null when absent).
+
+Replacement and deletion retain the previous object. Profile URLs can be set directly and may refer to images shared with other users or product listings, so a URL or storage prefix alone does not establish exclusive ownership. Safe garbage collection requires reference and ownership tracking across all writers. Upload storage removes a newly created object if the database transaction rolls back.
 
 ## Notifications (F-06)
 
