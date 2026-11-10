@@ -217,7 +217,10 @@ public class AuctionDiscoveryService {
             isWatching,
             isHighBidder,
             front,
-            back
+            back,
+            auction.getWinnerId(),
+            auction.getWinningBid(),
+            auction.getOrderId()
         );
     }
 

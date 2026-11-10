@@ -44,7 +44,8 @@ public final class AuctionDtos {
                               BigDecimal buyItNowPrice, Auction.StartMode startMode, Instant startAt, Instant endAt,
                               Integer durationHours, int bidCount, BigDecimal highestBid, Instant updatedAt,
                               Instant serverTime, String frontImageUrl, String backImageUrl,
-                              CancellationView cancellationRequest) {}
+                              CancellationView cancellationRequest,
+                              Long winnerId, BigDecimal winningBid, Long orderId) {}
 
     public record CancellationView(Long id, Long auctionId, Auction.Status auctionStatus, String cardName,
                                    Long productId, String imageUrl, String condition, BigDecimal highestBid, Instant endAt,

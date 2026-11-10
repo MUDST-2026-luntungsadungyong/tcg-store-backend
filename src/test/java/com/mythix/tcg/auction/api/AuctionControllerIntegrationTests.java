@@ -88,19 +88,25 @@ class AuctionControllerIntegrationTests {
     }
 
     @Test
-    void catalogLotPublishesWithoutInventoryAndInventoryLotsReserveAllCopies() throws Exception {
-        var catalogDraft = photos(draft()).param("cardId", product.getCard().getId())
+    void catalogLotPublishesWithoutInventoryAndInventoryLotsReserveCard() throws Exception {
+        var multipleCardsDraft = photos(draft()).param("cardId", product.getCard().getId())
             .param("quantity", "3").param("condition", "NM").param("startPrice", "3001")
             .param("startMode", "NOW").param("durationHours", "24");
+        mvc.perform(multipleCardsDraft.header("Authorization", sellerAuth))
+            .andExpect(status().isBadRequest());
+
+        var catalogDraft = photos(draft()).param("cardId", product.getCard().getId())
+            .param("quantity", "1").param("condition", "NM").param("startPrice", "3001")
+            .param("startMode", "NOW").param("durationHours", "24");
         long directId = saveDraft(catalogDraft).path("id").asLong();
-        publish(directId).andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
+        publish(directId).andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(1));
         assertThat(heldStock()).isZero();
 
         Product lot = fixtures.product(seller, 3, "SHOW");
         long lotId = saveDraft(photos(setup(draft(), lot.getId(), "3001", "NOW", "24"))
-            .param("quantity", "3")).path("id").asLong();
-        publish(lotId).andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(3));
-        assertThat(products.findById(lot.getId()).orElseThrow().getAuctionReserved()).isEqualTo(3);
+            .param("quantity", "1")).path("id").asLong();
+        publish(lotId).andExpect(status().isOk()).andExpect(jsonPath("$.quantity").value(1));
+        assertThat(products.findById(lot.getId()).orElseThrow().getAuctionReserved()).isEqualTo(1);
         mvc.perform(post(AUCTIONS + "/{id}/cancel", lotId).header("Authorization", sellerAuth))
             .andExpect(status().isOk());
         assertThat(products.findById(lot.getId()).orElseThrow().getAuctionReserved()).isZero();

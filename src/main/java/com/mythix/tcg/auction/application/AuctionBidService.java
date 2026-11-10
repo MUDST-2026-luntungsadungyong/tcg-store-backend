@@ -83,6 +83,13 @@ public class AuctionBidService {
             throw invalid("Bid amount must be at least " + minRequired.toPlainString() + " THB");
         }
 
+        BigDecimal buyItNowPrice = auction.getBuyItNowPrice();
+        if (buyItNowPrice != null && amount.compareTo(buyItNowPrice) >= 0) {
+            AuctionBid buyoutBid = processBuyout(auction, bidderId, buyItNowPrice, now).bid();
+            User bidder = userRepository.findById(bidderId).orElse(null);
+            return toBidView(buyoutBid, bidder, true);
+        }
+
         Long previousHighBidderId = auction.getLeadingBidderId();
 
         // Check if there is an active proxy bid that can outbid this manual bid
@@ -97,6 +104,26 @@ public class AuctionBidService {
         }
 
         if (activeProxy != null) {
+            BigDecimal proxyIncrement = calculateIncrement(amount);
+            BigDecimal counterAmount = amount.add(proxyIncrement);
+            if (counterAmount.compareTo(activeProxy.getMaxBidAmount()) > 0) {
+                counterAmount = activeProxy.getMaxBidAmount();
+            }
+
+            if (buyItNowPrice != null && counterAmount.compareTo(buyItNowPrice) >= 0) {
+                AuctionBid manualBid = bidRepository.save(AuctionBid.builder()
+                    .auctionId(auctionId)
+                    .bidderId(bidderId)
+                    .bidAmount(amount)
+                    .bidType(MANUAL)
+                    .createdAt(now)
+                    .build());
+                processBuyout(auction, activeProxy.getBidderId(), buyItNowPrice, now);
+                notifyOutbid(bidderId, auction);
+                User bidder = userRepository.findById(bidderId).orElse(null);
+                return toBidView(manualBid, bidder, true);
+            }
+
             // First record the bidder's manual bid
             AuctionBid manualBid = bidRepository.save(AuctionBid.builder()
                 .auctionId(auctionId)
@@ -107,12 +134,6 @@ public class AuctionBidService {
                 .build());
 
             // Then proxy bids back automatically
-            BigDecimal proxyIncrement = calculateIncrement(amount);
-            BigDecimal counterAmount = amount.add(proxyIncrement);
-            if (counterAmount.compareTo(activeProxy.getMaxBidAmount()) > 0) {
-                counterAmount = activeProxy.getMaxBidAmount();
-            }
-
             bidRepository.save(AuctionBid.builder()
                 .auctionId(auctionId)
                 .bidderId(activeProxy.getBidderId())
@@ -189,6 +210,13 @@ public class AuctionBidService {
             throw invalid("Max bid amount must be at least " + minRequired.toPlainString() + " THB");
         }
 
+        BigDecimal buyItNowPrice = auction.getBuyItNowPrice();
+        if (buyItNowPrice != null && maxAmount.compareTo(buyItNowPrice) >= 0) {
+            AuctionBid buyoutBid = processBuyout(auction, bidderId, buyItNowPrice, now).bid();
+            User bidder = userRepository.findById(bidderId).orElse(null);
+            return toBidView(buyoutBid, bidder, true);
+        }
+
         Long previousHighBidderId = auction.getLeadingBidderId();
 
         // Check if there is already an existing proxy bid by another bidder
@@ -217,6 +245,23 @@ public class AuctionBidService {
                 if (compCounter.compareTo(compMax) > 0) {
                     compCounter = compMax;
                 }
+
+                if (buyItNowPrice != null && compCounter.compareTo(buyItNowPrice) >= 0) {
+                    AuctionBid underBid = bidRepository.save(AuctionBid.builder()
+                        .auctionId(auctionId)
+                        .bidderId(bidderId)
+                        .bidAmount(maxAmount)
+                        .maxBidAmount(maxAmount)
+                        .bidType(PROXY)
+                        .createdAt(now)
+                        .build());
+
+                    processBuyout(auction, existingCompetitorProxy.getBidderId(), buyItNowPrice, now);
+                    notifyOutbid(bidderId, auction);
+                    User bidder = userRepository.findById(bidderId).orElse(null);
+                    return toBidView(underBid, bidder, true);
+                }
+
                 // Save this outbid proxy attempt
                 AuctionBid underBid = bidRepository.save(AuctionBid.builder()
                     .auctionId(auctionId)
@@ -279,6 +324,8 @@ public class AuctionBidService {
         return toBidView(bid, bidder, true);
     }
 
+    record BuyoutOutcome(AuctionBid bid, SettlementSummaryView summary) {}
+
     @Transactional
     public SettlementSummaryView executeBuyout(Long auctionId, Long buyerId) {
         Instant now = Instant.now();
@@ -289,10 +336,17 @@ public class AuctionBidService {
         }
 
         BigDecimal buyoutPrice = auction.getBuyItNowPrice();
+        if (auction.getHighestBid() != null && buyoutPrice.compareTo(auction.getHighestBid()) <= 0) {
+            throw conflict("Buy-It-Now is no longer available at this price");
+        }
 
+        return processBuyout(auction, buyerId, buyoutPrice, now).summary();
+    }
+
+    private BuyoutOutcome processBuyout(Auction auction, Long buyerId, BigDecimal buyoutPrice, Instant now) {
         // 1. Create buyout bid record
-        bidRepository.save(AuctionBid.builder()
-            .auctionId(auctionId)
+        AuctionBid bid = bidRepository.save(AuctionBid.builder()
+            .auctionId(auction.getId())
             .bidderId(buyerId)
             .bidAmount(buyoutPrice)
             .bidType(BUYOUT)
@@ -300,9 +354,6 @@ public class AuctionBidService {
             .build());
 
         // 2. Calculate platform fee and seller net amount
-        if (auction.getHighestBid() != null && buyoutPrice.compareTo(auction.getHighestBid()) <= 0) {
-            throw conflict("Buy-It-Now is no longer available at this price");
-        }
         var policy = commission.policy();
         BigDecimal fee = policy.feeFor(buyoutPrice);
         BigDecimal sellerNet = buyoutPrice.subtract(fee);
@@ -346,7 +397,6 @@ public class AuctionBidService {
             product.setAuctionReserved(Math.max(0, product.getAuctionReserved() - auction.getQuantity()));
             product.setReserved(product.getReserved() + auction.getQuantity());
             productRepository.save(product);
-
         }
         OrderItem item = OrderItem.builder()
                 .order(savedOrder)
@@ -390,7 +440,7 @@ public class AuctionBidService {
                 + " กรุณารอผู้ซื้อเพื่อตกลงการชำระเงินและจัดส่ง",
             "/workspace/orders?orderId=" + savedOrder.getId());
 
-        return new SettlementSummaryView(
+        SettlementSummaryView summary = new SettlementSummaryView(
             auction.getId(),
             auction.getCardName(),
             buyoutPrice,
@@ -401,6 +451,7 @@ public class AuctionBidService {
             AWAITING_BUYER_CONTACT,
             now
         );
+        return new BuyoutOutcome(bid, summary);
     }
 
     @Transactional(readOnly = true)

@@ -290,8 +290,13 @@ public class AuctionService {
             : cards.findById(form.getCardId()).orElseThrow(() -> missing("Catalog card not found"));
         if (product != null && form.getCardId() != null && !product.getCard().getId().equals(form.getCardId()))
             throw invalid("Catalog card does not match inventory");
-        int quantity = form.getQuantity() == null ? 1 : form.getQuantity();
-        if (quantity < 1) throw invalid("Quantity must be at least 1");
+        if (form.getQuantity() != null && form.getQuantity() > 1) {
+            throw invalid("Auctions can only contain exactly one card");
+        }
+        if (form.getQuantity() != null && form.getQuantity() < 1) {
+            throw invalid("Quantity must be at least 1");
+        }
+        int quantity = 1;
         auction.setQuantity(quantity);
         String language = product != null ? product.getLanguage() : upper(form.getLanguage());
         if (language == null) language = "EN";
@@ -377,7 +382,8 @@ public class AuctionService {
                 a.getCertNumber(), a.getStartPrice(), a.getReservePrice(), a.getBuyItNowPrice(), a.getStartMode(),
                 a.getStartAt(), a.getEndAt(), a.getDurationHours(), a.getBidCount(), a.getHighestBid(),
                 a.getUpdatedAt(), now, existing.contains(FRONT) ? base + "front" : null,
-                existing.contains(BACK) ? base + "back" : null, cancellation);
+                existing.contains(BACK) ? base + "back" : null, cancellation,
+                a.getWinnerId(), a.getWinningBid(), a.getOrderId());
         }).toList();
     }
 
