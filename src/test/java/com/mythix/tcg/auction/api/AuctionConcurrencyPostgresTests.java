@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -118,6 +119,50 @@ class AuctionConcurrencyPostgresTests {
             assertThat(json.readTree(result.getResponse().getContentAsByteArray()).path("id").asLong()).isEqualTo(id);
         }
         assertThat(auctionReserved()).isEqualTo(1);
+    }
+
+    @Test
+    void simultaneousBuyoutsCreateOnlyOneOrderAndMoveStockOnce() throws Exception {
+        var draft = photos(setup(draft(), product.getId(), "100", "NOW", "24"))
+            .param("buyItNowPrice", "900")
+            .header("Authorization", sellerAuth);
+        var response = mvc.perform(draft).andExpect(status().isCreated()).andReturn().getResponse();
+        long id = json.readTree(response.getContentAsByteArray()).path("id").asLong();
+        assertThat(statusOf(publish(id))).isEqualTo(200);
+        String firstBuyer = fixtures.bearer(fixtures.user("USER", "NONE"));
+        String secondBuyer = fixtures.bearer(fixtures.user("USER", "NONE"));
+        String buyout = "/api/auctions/" + id + "/buyout";
+        List<MvcResult> results = race(
+            () -> mvc.perform(post(buyout).header("Authorization", firstBuyer)).andReturn(),
+            () -> mvc.perform(post(buyout).header("Authorization", secondBuyer)).andReturn());
+        assertThat(results).extracting(AuctionConcurrencyPostgresTests::statusOf).containsExactlyInAnyOrder(200, 409);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE local_card_id = ?",
+            Integer.class, product.getId())).isEqualTo(1);
+        assertThat(auctionReserved()).isZero();
+        assertThat(products.findById(product.getId()).orElseThrow().getReserved()).isEqualTo(1);
+    }
+
+    @Test
+    void buyoutAndManualBidSerializeWithoutCreatingAnotherOrder() throws Exception {
+        var draft = photos(setup(draft(), product.getId(), "100", "NOW", "24"))
+            .param("buyItNowPrice", "900")
+            .header("Authorization", sellerAuth);
+        var response = mvc.perform(draft).andExpect(status().isCreated()).andReturn().getResponse();
+        long id = json.readTree(response.getContentAsByteArray()).path("id").asLong();
+        assertThat(statusOf(publish(id))).isEqualTo(200);
+        String firstBuyer = fixtures.bearer(fixtures.user("USER", "NONE"));
+        String secondBuyer = fixtures.bearer(fixtures.user("USER", "NONE"));
+        String room = "/api/auctions/" + id;
+        List<MvcResult> results = race(
+            () -> mvc.perform(post(room + "/buyout").header("Authorization", firstBuyer)).andReturn(),
+            () -> mvc.perform(post(room + "/bids").header("Authorization", secondBuyer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":150}")).andReturn());
+        assertThat(statusOf(results.getFirst())).isEqualTo(200);
+        assertThat(statusOf(results.getLast())).isIn(200, 409);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE local_card_id = ?",
+            Integer.class, product.getId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT winning_bid FROM auctions WHERE id = ?", java.math.BigDecimal.class, id))
+            .isEqualByComparingTo("900");
     }
 
     @Test

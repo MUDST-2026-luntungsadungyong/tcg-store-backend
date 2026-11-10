@@ -7,6 +7,7 @@ import com.mythix.tcg.auction.application.AuctionWatchlistService;
 import com.mythix.tcg.auction.application.AuctionSettlementService;
 import com.mythix.tcg.auction.domain.Auction;
 import com.mythix.tcg.auction.persistence.AuctionRepository;
+import com.mythix.tcg.auction.persistence.AuctionSecondChanceOfferRepository;
 import com.mythix.tcg.auth.security.JwtService;
 import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.collection.persistence.CollectionRepository;
@@ -18,6 +19,8 @@ import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -32,6 +35,7 @@ import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -52,6 +56,7 @@ class BuyerAuctionIntegrationTests {
     @Autowired private CardRepository cards;
     @Autowired private ProductRepository products;
     @Autowired private AuctionRepository auctions;
+    @Autowired private AuctionSecondChanceOfferRepository offers;
     @Autowired private OrderRepository orders;
     @Autowired private CollectionRepository collections;
     @Autowired private AuctionBidService bidService;
@@ -106,6 +111,119 @@ class BuyerAuctionIntegrationTests {
         product.setAuctionReserved(product.getAuctionReserved() + 1);
         products.save(product);
         return auctions.save(auction);
+    }
+
+    @Test
+    void raisingLeadingProxyCeilingKeepsPublicPriceAndBidCount() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("400"), null, null);
+        String path = "/api/auctions/" + auction.getId() + "/proxy-bid";
+        for (int ceiling : new int[]{800, 1000, 1000}) {
+            mvc.perform(post(path).header("Authorization", buyer1Auth).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"maxAmount\":" + ceiling + "}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.bidAmount").value(400));
+        }
+        Auction updated = auctions.findById(auction.getId()).orElseThrow();
+        assertThat(updated.getBidCount()).isEqualTo(1);
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/bids").header("Authorization", buyer2Auth)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":900}"))
+            .andExpect(status().isOk());
+        assertThat(auctions.findById(auction.getId()).orElseThrow().getHighestBid()).isEqualByComparingTo("950");
+    }
+
+    @Test
+    void cancellingAuctionOrderAlsoClosesAuctionAndReleasesStock() throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("400"), null, new BigDecimal("900"));
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/buyout").header("Authorization", buyer1Auth))
+            .andExpect(status().isOk());
+        Long orderId = auctions.findById(auction.getId()).orElseThrow().getOrderId();
+        mvc.perform(patch("/api/orders/" + orderId + "/status")
+            .header("Authorization", buyer1Auth).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"CANCELLED\",\"note\":\"Cannot proceed\"}"))
+            .andExpect(status().isOk());
+        assertThat(auctions.findById(auction.getId()).orElseThrow().getStatus()).isEqualTo(Auction.Status.CANCELLED);
+        assertThat(products.findById(product.getId()).orElseThrow().getReserved()).isZero();
+        assertThat(orders.findById(orderId).orElseThrow().getStatus()).isEqualTo("CANCELLED");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ACCEPT", "REJECT", "EXPIRE"})
+    void sellerCancelsForNoContactAndRunnerUpCanRespondOnlyWhilePending(String outcome) throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("400"), null, new BigDecimal("900"));
+        String room = "/api/auctions/" + auction.getId();
+        mvc.perform(post(room + "/bids").header("Authorization", buyer2Auth)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":400}")).andExpect(status().isOk());
+        mvc.perform(post(room + "/buyout").header("Authorization", buyer1Auth)).andExpect(status().isOk());
+        Long orderId = auctions.findById(auction.getId()).orElseThrow().getOrderId();
+        mvc.perform(patch("/api/seller/orders/" + orderId + "/status")
+            .header("Authorization", sellerAuth).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"CANCELLED\",\"note\":\"No contact or payment received\",\"noBuyerContact\":true}"))
+            .andExpect(status().isOk());
+        assertThat(auctions.findById(auction.getId()).orElseThrow().getStatus()).isEqualTo(Auction.Status.DEFAULTED);
+        assertThat(products.findById(product.getId()).orElseThrow().getReserved()).isZero();
+
+        var offer = mvc.perform(post("/api/seller/auctions/" + auction.getId() + "/second-chance-offer")
+            .header("Authorization", sellerAuth)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.offerPrice").value(400)).andReturn();
+        long offerId = json.readTree(offer.getResponse().getContentAsByteArray()).path("id").asLong();
+        String respond = "/api/auctions/second-chance/" + offerId + "/respond";
+        mvc.perform(post(respond).param("accept", "true").header("Authorization", buyer1Auth))
+            .andExpect(status().isNotFound());
+        if ("EXPIRE".equals(outcome)) {
+            var expired = offers.findById(offerId).orElseThrow();
+            expired.setCreatedAt(Instant.now().minus(25, ChronoUnit.HOURS));
+            expired.setExpiresAt(Instant.now().minus(1, ChronoUnit.HOURS));
+            offers.saveAndFlush(expired);
+        } else {
+            mvc.perform(post(respond).param("accept", Boolean.toString("ACCEPT".equals(outcome)))
+                .header("Authorization", buyer2Auth)).andExpect(status().isOk());
+        }
+        mvc.perform(post(respond).param("accept", "true").header("Authorization", buyer2Auth))
+            .andExpect(status().isConflict());
+        mvc.perform(get("/api/user/auction-second-chance-offers").header("Authorization", buyer2Auth))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        Auction reassigned = auctions.findById(auction.getId()).orElseThrow();
+        if (!"ACCEPT".equals(outcome)) {
+            assertThat(reassigned.getOrderId()).isEqualTo(orderId);
+            assertThat(reassigned.getStatus()).isEqualTo(Auction.Status.DEFAULTED);
+            assertThat(products.findById(product.getId()).orElseThrow().getReserved()).isZero();
+            return;
+        }
+        assertThat(reassigned.getWinnerId()).isEqualTo(buyer2.getId());
+        assertThat(reassigned.getOrderId()).isNotEqualTo(orderId);
+        assertThat(orders.findById(reassigned.getOrderId()).orElseThrow().getTotalAmount()).isEqualByComparingTo("400");
+        assertThat(products.findById(product.getId()).orElseThrow().getReserved()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void onlyAdminCanResolveASentAuctionAndRepeatIsSafe(boolean delivered) throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("400"), null, new BigDecimal("900"));
+        mvc.perform(post("/api/auctions/" + auction.getId() + "/buyout").header("Authorization", buyer1Auth))
+            .andExpect(status().isOk());
+        Long orderId = auctions.findById(auction.getId()).orElseThrow().getOrderId();
+        String sellerPath = "/api/seller/orders/" + orderId + "/status";
+        String confirm = "/api/admin/orders/" + orderId + "/resolve-auction-shipment";
+        String adminAuth = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        String reason = json.writeValueAsString(java.util.Map.of(
+            "outcome", delivered ? "DELIVERED" : "UNDELIVERED", "reason", "Verified with the carrier"));
+        mvc.perform(post(confirm).header("Authorization", buyer1Auth).contentType(MediaType.APPLICATION_JSON).content(reason))
+            .andExpect(status().isForbidden());
+        mvc.perform(post(confirm).header("Authorization", adminAuth).contentType(MediaType.APPLICATION_JSON).content(reason))
+            .andExpect(status().isBadRequest());
+        mvc.perform(patch(sellerPath).header("Authorization", sellerAuth).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"PENDING_SELLER_ACTION\"}")).andExpect(status().isOk());
+        mvc.perform(patch(sellerPath).header("Authorization", sellerAuth).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"SENT\",\"trackingNumber\":\"TEST-001\"}")).andExpect(status().isOk());
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mvc.perform(post(confirm).header("Authorization", adminAuth).contentType(MediaType.APPLICATION_JSON).content(reason))
+                .andExpect(status().isNoContent());
+        }
+        assertThat(orders.findById(orderId).orElseThrow().getStatus()).isEqualTo(delivered ? "FULFILLED" : "CANCELLED");
+        assertThat(auctions.findById(auction.getId()).orElseThrow().getStatus())
+            .isEqualTo(delivered ? Auction.Status.COMPLETED : Auction.Status.CANCELLED);
+        assertThat(collections.findByUserIdOrderByCreatedAtDesc(buyer1.getId())).hasSize(delivered ? 1 : 0);
+        assertThat(products.findById(product.getId()).orElseThrow().getOnHand()).isEqualTo(9);
+        mvc.perform(get("/api/orders/" + orderId).header("Authorization", buyer2Auth)).andExpect(status().isNotFound());
     }
 
     @Test

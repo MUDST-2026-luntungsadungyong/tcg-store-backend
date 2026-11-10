@@ -4,13 +4,13 @@ import com.mythix.tcg.order.domain.OrderItem;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-public record AdminOrderLogResponse(String id, String orderNumber, String buyerName, String buyerEmail, String status, BigDecimal totalAmount, LocalDateTime createdAt, BigDecimal platformFee, BigDecimal sellerNetAmount, List<AdminOrderLogItemResponse> items) {
+public record AdminOrderLogResponse(String id, String orderNumber, String buyerName, String buyerEmail, String status, BigDecimal totalAmount, LocalDateTime createdAt, BigDecimal platformFee, BigDecimal sellerNetAmount, List<AdminOrderLogItemResponse> items, String orderType) {
  public static AdminOrderLogResponse from(Order order) {
   boolean auctionOrder = "AUCTION".equals(order.getOrderType());
   var items = order.getItems().stream().map(item -> AdminOrderLogItemResponse.from(item, auctionOrder)).toList();
   return new AdminOrderLogResponse(String.valueOf(order.getId()), order.getOrderNumber(), order.getBuyer().getFullName(),
       order.getBuyer().getEmail(), order.getStatus(), order.getTotalAmount(), order.getCreatedAt(),
-      order.getPlatformFee(), order.getSellerNetAmount(), items);
+      order.getPlatformFee(), order.getSellerNetAmount(), items, order.getOrderType());
  }
  public record AdminOrderLogItemResponse(String id, String productName, String cardId, String sellerName,
                                          String sellerEmail, String shopName, BigDecimal price, Integer quantity,

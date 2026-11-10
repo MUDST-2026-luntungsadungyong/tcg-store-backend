@@ -53,7 +53,8 @@ public class SellerOrderDto {
         @Pattern(regexp = "(?i)PENDING|CONFIRMED|AWAITING_BUYER_CONTACT|PENDING_SELLER_ACTION|SENT|FULFILLED|CANCELLED", message = "Status is not supported")
         String status,
         String note,
-        String trackingNumber
+        String trackingNumber,
+        Boolean noBuyerContact
     ) {}
 
     public record SellerProfitSummaryResponse(

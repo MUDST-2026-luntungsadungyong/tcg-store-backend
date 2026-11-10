@@ -168,6 +168,22 @@ public class AuctionBidService {
         Instant now = Instant.now();
         Auction auction = lockAndValidateAuction(auctionId, bidderId, now);
 
+        List<AuctionBid> existingProxies = bidRepository.findProxyBidsByAuctionId(auctionId);
+        if (bidderId.equals(auction.getLeadingBidderId())) {
+            var leadingProxy = existingProxies.stream()
+                .filter(bid -> bidderId.equals(bid.getBidderId()) && bid.getMaxBidAmount() != null
+                    && bid.getBidAmount().compareTo(auction.getHighestBid()) == 0)
+                .findFirst();
+            if (leadingProxy.isPresent()) {
+                AuctionBid bid = leadingProxy.get();
+                if (maxAmount.compareTo(bid.getMaxBidAmount()) < 0) {
+                    throw invalid("An active proxy ceiling can only be increased");
+                }
+                bid.setMaxBidAmount(maxAmount);
+                return toBidView(bid, null, true);
+            }
+        }
+
         BigDecimal minRequired = getNextMinimumBid(auction);
         if (maxAmount.compareTo(minRequired) < 0) {
             throw invalid("Max bid amount must be at least " + minRequired.toPlainString() + " THB");
@@ -176,7 +192,6 @@ public class AuctionBidService {
         Long previousHighBidderId = auction.getLeadingBidderId();
 
         // Check if there is already an existing proxy bid by another bidder
-        List<AuctionBid> existingProxies = bidRepository.findProxyBidsByAuctionId(auctionId);
         AuctionBid existingCompetitorProxy = null;
         for (AuctionBid pb : existingProxies) {
             if (!pb.getBidderId().equals(bidderId) && pb.getMaxBidAmount() != null) {

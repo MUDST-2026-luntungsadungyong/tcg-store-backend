@@ -83,7 +83,7 @@ public class BuyerOrderService {
 
     @Transactional
     public BuyerOrderResponse updateOrderStatus(Long buyerId, Long orderId, String newStatus, String note) {
-        auctionSettlementService.lockAuctionForOrder(orderId);
+        var auction = auctionSettlementService.lockAuctionForOrder(orderId);
         Order order = orderRepository.findByIdAndBuyerId(orderId, buyerId)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
@@ -105,8 +105,37 @@ public class BuyerOrderService {
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
             voucherService.releaseVoucherFromOrder(order);
+            auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, false));
         }
 
+        return mapToBuyerOrderResponse(saveStatus(order, updatedStatus, buyerId, "BUYER", note));
+    }
+
+    @Transactional
+    public void resolveAuctionShipmentAsAdmin(Long adminId, Long orderId, boolean delivered, String reason) {
+        var auction = auctionSettlementService.lockAuctionForOrder(orderId)
+            .orElseThrow(() -> new OrderNotFoundException(orderId));
+        Order order = orderRepository.findById(orderId)
+            .filter(value -> "AUCTION".equals(value.getOrderType()))
+            .orElseThrow(() -> new OrderNotFoundException(orderId));
+        String outcome = delivered ? "FULFILLED" : "CANCELLED";
+        if (outcome.equals(order.getStatus())) {
+            return;
+        }
+        if (!"SENT".equals(order.getStatus())) {
+            throw new OrderStatusValidationException("status", "Only a sent auction order can have its shipment resolved");
+        }
+        if (delivered) {
+            transferOwnershipToBuyer(order);
+        } else {
+            // Dispatch already deducted inventory. Resolve the order without assuming the cards were returned.
+            auctionSettlementService.closeCancelledOrder(auction, false);
+        }
+        saveStatus(order, outcome, adminId, "ADMIN", reason.trim());
+    }
+
+    private Order saveStatus(Order order, String updatedStatus, Long actorId, String actorRole, String note) {
+        String previousStatus = order.getStatus();
         order.setStatus(updatedStatus);
         Order saved = orderRepository.save(order);
 
@@ -114,13 +143,13 @@ public class BuyerOrderService {
                 .order(saved)
                 .fromStatus(previousStatus)
                 .toStatus(updatedStatus)
-                .changedBy(userRepository.getReferenceById(buyerId))
-                .changedByRole("BUYER")
+                .changedBy(userRepository.getReferenceById(actorId))
+                .changedByRole(actorRole)
                 .note(note)
                 .build();
         orderStatusLogRepository.save(log);
 
-        return mapToBuyerOrderResponse(saved);
+        return saved;
     }
 
     private void validateStatusTransition(String from, String to) {

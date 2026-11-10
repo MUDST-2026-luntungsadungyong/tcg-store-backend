@@ -67,7 +67,13 @@ public class SellerOrderService {
 
     @Transactional
     public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note, String trackingNumber) {
-        auctionSettlementService.lockAuctionForOrder(orderId);
+        return updateOrderStatus(sellerId, orderId, newStatus, note, trackingNumber, false);
+    }
+
+    @Transactional
+    public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note,
+                                                 String trackingNumber, boolean noBuyerContact) {
+        var auction = auctionSettlementService.lockAuctionForOrder(orderId);
         Order order = orderRepository.findOrderForSeller(sellerId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found for seller"));
 
@@ -78,6 +84,10 @@ public class SellerOrderService {
             return mapToSellerOrderResponse(order, sellerId);
         }
 
+        if (noBuyerContact && (auction.isEmpty() || !"CANCELLED".equals(updatedStatus)
+                || !"AWAITING_BUYER_CONTACT".equals(previousStatus) || note == null || note.isBlank())) {
+            throw new OrderStatusValidationException("status", "Only an auction awaiting buyer contact can be cancelled for no contact, with a reason");
+        }
         validateStatusTransition(previousStatus, updatedStatus);
         if ("AUCTION".equals(order.getOrderType())
                 && !List.of("PENDING_SELLER_ACTION", "SENT", "CANCELLED").contains(updatedStatus)) {
@@ -95,6 +105,7 @@ public class SellerOrderService {
             deductInventoryOnSend(order);
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
+            auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, noBuyerContact));
         }
 
         String logNote;
