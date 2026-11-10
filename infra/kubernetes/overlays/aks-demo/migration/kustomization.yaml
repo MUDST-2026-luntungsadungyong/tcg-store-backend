@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tcg-store-aks-demo
+
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - ../../../base/migration
+
+images:
+  - name: tcg-store-backend
+    newName: tcgstorecimah2026.azurecr.io/tcg-store-backend
+    digest: sha256:a71c7deb0e383eae41c64004bfdb8ab4ecdd985143c40f90e64258d15e7a74f8
+
+patches:
+  - path: migration-secret-contract.yaml

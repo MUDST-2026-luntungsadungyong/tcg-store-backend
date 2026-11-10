@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tcg-store-backend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # One app replica can be replaced without requiring a second schedulable pod.
+      maxSurge: 0
+      maxUnavailable: 1
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tcg-store-backend
+spec:
+  minReplicas: 1
+  maxReplicas: 1
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tcg-store-backend
+spec:
+  minAvailable: 0
