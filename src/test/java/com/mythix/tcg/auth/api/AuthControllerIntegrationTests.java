@@ -193,6 +193,15 @@ class AuthControllerIntegrationTests {
     }
 
     @Test
+    void forgedMockBearerTokenCannotAuthenticate() throws Exception {
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Buyer\",\"email\":\"buyer@mythix.com\",\"password\":\"password123\"}"))
+            .andExpect(status().isCreated());
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer mock-token-buyer"))
+            .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void avatarRemovalRequiresAuthenticationAndPersistsOnlyForCaller() throws Exception {
         String token = registerAndGetToken();
         var user = userRepository.findByEmail("naphat@example.com").orElseThrow();
