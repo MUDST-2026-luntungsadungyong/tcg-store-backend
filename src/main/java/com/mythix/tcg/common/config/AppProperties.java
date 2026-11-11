@@ -5,10 +5,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.List;
 
 @ConfigurationProperties(prefix = "app")
-public record AppProperties(Cors cors) {
+public record AppProperties(Cors cors, String publicWebUrl) {
 
     public AppProperties {
         cors = cors == null ? new Cors(null) : cors;
+        publicWebUrl = publicWebUrl == null || publicWebUrl.isBlank()
+            ? "http://localhost:5173"
+            : publicWebUrl.replaceAll("/+$", "");
     }
 
     public record Cors(List<String> allowedOrigins) {
