@@ -13,6 +13,7 @@ import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.user.application.AuctionUserLock;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import com.mythix.tcg.auction.api.AuctionLiveUpdates;
@@ -45,6 +46,7 @@ public class AuctionBidService {
     private final ApplicationEventPublisher events;
     private final AuctionBidRepository bidRepository;
     private final UserRepository userRepository;
+    private final AuctionUserLock auctionUserLock;
     private final ProductRepository productRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -93,7 +95,7 @@ public class AuctionBidService {
         Long previousHighBidderId = auction.getLeadingBidderId();
 
         // Check if there is an active proxy bid that can outbid this manual bid
-        List<AuctionBid> proxyBids = bidRepository.findProxyBidsByAuctionId(auctionId);
+        List<AuctionBid> proxyBids = eligibleLeadingProxies(auction, now);
         AuctionBid activeProxy = null;
         for (AuctionBid pb : proxyBids) {
             if (!pb.getBidderId().equals(bidderId) && pb.getMaxBidAmount() != null
@@ -189,7 +191,7 @@ public class AuctionBidService {
         Instant now = Instant.now();
         Auction auction = lockAndValidateAuction(auctionId, bidderId, now);
 
-        List<AuctionBid> existingProxies = bidRepository.findProxyBidsByAuctionId(auctionId);
+        List<AuctionBid> existingProxies = eligibleLeadingProxies(auction, now);
         if (bidderId.equals(auction.getLeadingBidderId())) {
             var leadingProxy = existingProxies.stream()
                 .filter(bid -> bidderId.equals(bid.getBidderId()) && bid.getMaxBidAmount() != null
@@ -487,8 +489,18 @@ public class AuctionBidService {
             throw forbidden("You cannot bid on your own auction");
         }
 
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> notFound("User not found"));
+        // Lock every potentially participating user in stable order, after the auction.
+        // This serializes a concurrent penalty decision without introducing cross-auction lock inversions.
+        var userIds = new java.util.TreeSet<Long>();
+        userIds.add(userId);
+        bidRepository.findProxyBidsByAuctionId(auctionId).stream()
+            .filter(b -> b.getBidderId().equals(auction.getLeadingBidderId()))
+            .forEach(b -> userIds.add(b.getBidderId()));
+        User user = null;
+        for (Long id : userIds) {
+            User locked = auctionUserLock.lock(id).orElseThrow(() -> notFound("User not found"));
+            if (id.equals(userId)) user = locked;
+        }
 
         if (user.isAuctionBanned()) {
             throw forbidden("Your account is currently banned from participating in auctions until " + user.getAuctionBannedUntil());
@@ -505,6 +517,16 @@ public class AuctionBidService {
         return auction;
     }
 
+
+    private List<AuctionBid> eligibleLeadingProxies(Auction auction, Instant now) {
+        Long leader = auction.getLeadingBidderId();
+        if (leader == null) return List.of();
+        User user = userRepository.findById(leader).orElse(null);
+        if (user == null || user.isAuctionBanned()) return List.of();
+        return bidRepository.findProxyBidsByAuctionId(auction.getId()).stream()
+            .filter(b -> leader.equals(b.getBidderId()))
+            .toList();
+    }
 
     private void updateReserveMetStatus(Auction auction) {
         if (auction.getReservePrice() != null && auction.getHighestBid() != null) {

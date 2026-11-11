@@ -37,6 +37,7 @@ import static com.mythix.tcg.auction.api.AuctionApiFixtures.photos;
 import static com.mythix.tcg.auction.api.AuctionApiFixtures.setup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Verifies shared inventory locks on the schema produced by Flyway. */
@@ -140,6 +141,104 @@ class AuctionConcurrencyPostgresTests {
             Integer.class, product.getId())).isEqualTo(1);
         assertThat(auctionReserved()).isZero();
         assertThat(products.findById(product.getId()).orElseThrow().getReserved()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentApprovalOfSameDefaultCreatesOneStrikeAndOneDecision() throws Exception {
+        var draft = photos(setup(draft(), product.getId(), "100", "NOW", "24"))
+            .param("buyItNowPrice", "900").header("Authorization", sellerAuth);
+        long auctionId = json.readTree(mvc.perform(draft).andExpect(status().isCreated()).andReturn()
+            .getResponse().getContentAsByteArray()).path("id").asLong();
+        assertThat(statusOf(publish(auctionId))).isEqualTo(200);
+        User buyer = fixtures.user("USER", "NONE");
+        mvc.perform(post("/api/auctions/" + auctionId + "/buyout").header("Authorization", fixtures.bearer(buyer)))
+            .andExpect(status().isOk());
+        long orderId = jdbc.queryForObject("SELECT order_id FROM auctions WHERE id = ?", Long.class, auctionId);
+        mvc.perform(patch("/api/seller/orders/" + orderId + "/status").header("Authorization", sellerAuth)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"CANCELLED\",\"note\":\"No contact\",\"noBuyerContact\":true}"))
+            .andExpect(status().isOk());
+        long caseId = jdbc.queryForObject("SELECT id FROM auction_default_cases WHERE order_id = ?", Long.class, orderId);
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        String path = "/api/admin/auction-default-cases/" + caseId + "/approve";
+        List<MvcResult> results = race(
+            () -> mvc.perform(post(path).header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"Reviewed\"}")).andReturn(),
+            () -> mvc.perform(post(path).header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"reason\":\"Reviewed\"}")).andReturn());
+        assertThat(results).extracting(AuctionConcurrencyPostgresTests::statusOf).containsExactly(200, 200);
+        assertThat(jdbc.queryForObject("SELECT auction_strikes FROM users WHERE id = ?", Integer.class, buyer.getId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM auction_default_decisions WHERE case_id = ?", Integer.class, caseId)).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentApprovalsForSameBuyerSerializeStrikes() throws Exception {
+        User seller = fixtures.user("USER", "APPROVED");
+        User buyer = fixtures.user("USER", "NONE");
+        long first = createPendingCase(seller, buyer);
+        long second = createPendingCase(seller, buyer);
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        List<MvcResult> results = race(() -> approve(first, admin), () -> approve(second, admin));
+        assertThat(results).extracting(AuctionConcurrencyPostgresTests::statusOf).containsExactly(200, 200);
+        assertThat(jdbc.queryForObject("SELECT auction_strikes FROM users WHERE id = ?", Integer.class, buyer.getId())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM auction_default_decisions WHERE case_id IN (?, ?)", Integer.class, first, second)).isEqualTo(2);
+    }
+
+    @Test
+    void crossParticipantApprovalsDoNotDeadlockWhenNotifyingBothUsers() throws Exception {
+        User first = fixtures.user("USER", "APPROVED");
+        User second = fixtures.user("USER", "APPROVED");
+        long caseOne = createPendingCase(first, second);
+        long caseTwo = createPendingCase(second, first);
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        List<MvcResult> results = race(() -> approve(caseOne, admin), () -> approve(caseTwo, admin));
+        assertThat(results).extracting(AuctionConcurrencyPostgresTests::statusOf).containsExactly(200, 200);
+        assertThat(jdbc.queryForObject("SELECT auction_strikes FROM users WHERE id = ?", Integer.class, first.getId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT auction_strikes FROM users WHERE id = ?", Integer.class, second.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void bidAndPenaltyDecisionForSameBuyerSerializeWithoutDeadlock() throws Exception {
+        User seller = fixtures.user("USER", "APPROVED");
+        User buyer = fixtures.user("USER", "NONE");
+        buyer.setAuctionStrikes(1);
+        users.saveAndFlush(buyer);
+        long pending = createPendingCase(seller, buyer);
+        Product item = fixtures.product(seller, 1, "SHOW", "NM");
+        String sellerToken = fixtures.bearer(seller);
+        long auctionId = json.readTree(mvc.perform(photos(setup(draft(), item.getId(), "100", "NOW", "24"))
+            .header("Authorization", sellerToken)).andExpect(status().isCreated()).andReturn()
+            .getResponse().getContentAsByteArray()).path("id").asLong();
+        mvc.perform(post(AUCTIONS + "/{id}/publish", auctionId).header("Authorization", sellerToken)).andExpect(status().isOk());
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        List<MvcResult> results = race(() -> approve(pending, admin),
+            () -> mvc.perform(post("/api/auctions/" + auctionId + "/bids").header("Authorization", fixtures.bearer(buyer))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":100}")).andReturn());
+        assertThat(statusOf(results.getFirst())).isEqualTo(200);
+        assertThat(statusOf(results.getLast())).isIn(200, 403);
+        assertThat(users.findById(buyer.getId()).orElseThrow().isAuctionBanned()).isTrue();
+    }
+
+    private long createPendingCase(User seller, User buyer) throws Exception {
+        Product item = fixtures.product(seller, 1, "SHOW", "NM");
+        String auth = fixtures.bearer(seller);
+        var draft = photos(setup(draft(), item.getId(), "100", "NOW", "24"))
+            .param("buyItNowPrice", "900").header("Authorization", auth);
+        long auctionId = json.readTree(mvc.perform(draft).andExpect(status().isCreated()).andReturn()
+            .getResponse().getContentAsByteArray()).path("id").asLong();
+        mvc.perform(post(AUCTIONS + "/{id}/publish", auctionId).header("Authorization", auth)).andExpect(status().isOk());
+        mvc.perform(post("/api/auctions/" + auctionId + "/buyout").header("Authorization", fixtures.bearer(buyer))).andExpect(status().isOk());
+        long orderId = jdbc.queryForObject("SELECT order_id FROM auctions WHERE id = ?", Long.class, auctionId);
+        mvc.perform(patch("/api/seller/orders/" + orderId + "/status").header("Authorization", auth)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"CANCELLED\",\"note\":\"No contact\",\"noBuyerContact\":true}"))
+            .andExpect(status().isOk());
+        return jdbc.queryForObject("SELECT id FROM auction_default_cases WHERE order_id = ?", Long.class, orderId);
+    }
+
+    private MvcResult approve(long caseId, String auth) throws Exception {
+        return mvc.perform(post("/api/admin/auction-default-cases/" + caseId + "/approve")
+            .header("Authorization", auth).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"reason\":\"Reviewed\"}")).andReturn();
     }
 
     @Test

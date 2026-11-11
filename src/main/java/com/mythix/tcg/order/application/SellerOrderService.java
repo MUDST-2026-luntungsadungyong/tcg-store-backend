@@ -105,7 +105,7 @@ public class SellerOrderService {
             deductInventoryOnSend(order);
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
-            auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, noBuyerContact));
+            auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, noBuyerContact, effectiveNote));
         }
 
         String logNote;
