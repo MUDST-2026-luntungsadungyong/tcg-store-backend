@@ -284,10 +284,10 @@ class AuctionConcurrencyPostgresTests {
             Integer.class, Long.toString(disputeId))).isEqualTo(1);
         assertThat(jdbc.queryForObject("""
             SELECT count(*) FROM notifications
-            WHERE type = 'AUCTION_DISPUTE_DECIDED'
+            WHERE notification_type = 'AUCTION_DISPUTE_DECIDED'
               AND title = 'Auction dispute decided'
               AND message = 'Decision: Dismissed. Reason: Reviewed'
-              AND action_url = ?
+              AND action_path = ?
             """, Integer.class, "/auction-disputes?disputeId=" + disputeId)).isEqualTo(2);
     }
 
