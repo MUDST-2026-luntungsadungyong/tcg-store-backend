@@ -182,3 +182,17 @@ Feature ใหม่ควรตอบรูปแบบเดียวกัน
 ```
 
 ขั้นต่ำต้องแยก `400` validation, `401` unauthenticated, `403` forbidden, `404` missing resource และ `409` conflict/duplicate/active-order constraint
+
+
+### Auction buyer default review
+
+A seller cancelling an auction order while it awaits buyer contact with `noBuyerContact: true` and a nonblank `note` creates one pending case per auction order, including a later Second Chance order. This snapshots the auction, order, buyer, seller and seller's reason. It does not automatically impose a strike, and Second Chance remains available independently of the review. Existing defaults are not backfilled.
+
+- Authenticated `GET /api/auction-default-cases/me?page=0&size=20` returns a Spring Page of cases where the caller is buyer or seller.
+- Authenticated `GET /api/auction-default-cases/penalty` returns `{ "activeStrikes": 0, "bannedUntil": null }` for the caller.
+- Admin `GET /api/admin/auction-default-cases?page=0&size=20` returns all cases, newest first. Page size is capped at 100.
+- Admin `POST /api/admin/auction-default-cases/{id}/approve`, `/reject`, or `/reverse` takes `{ "reason": "..." }` (required, at most 2000 characters) and returns the case. Approve/reject applies to PENDING, reverse to APPROVED. Repeating the same decision is idempotent; conflicting transitions return 409.
+
+A case contains `id`, `auctionId`, `orderId`, `orderNumber`, `buyerId`, `sellerId`, `reportReason`, `status` (PENDING, APPROVED, REJECTED, REVERSED), `createdAt`, `decidedAt`, `decisionReason`, and `history`. Each history entry has `action`, `reason`, `adminId`, and `createdAt`. Timestamps are UTC ISO-8601.
+
+Confirmed strikes are cumulative: one is a warning, two impose seven days and three or more impose thirty days from approval. On reversal, remaining approved cases are recomputed in approval order using their original approval times; existing legacy strike and ban baseline is retained. Active bans also prohibit automatic proxy counters and accepting a Second Chance offer.

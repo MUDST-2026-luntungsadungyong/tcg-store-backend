@@ -16,11 +16,13 @@ public interface AuctionBidRepository extends JpaRepository<AuctionBid, Long> {
     @Query("""
         select b from AuctionBid b
         where b.auctionId = :auctionId and b.bidderId <> :winnerId
+          and exists (select u.id from User u where u.id = b.bidderId
+              and (u.auctionBannedUntil is null or u.auctionBannedUntil <= :now))
           and not exists (select o.id from AuctionSecondChanceOffer o
               where o.auctionId = :auctionId and o.bidderId = b.bidderId)
         order by b.bidAmount desc, b.createdAt asc, b.id asc
         """)
-    List<AuctionBid> findEligibleRunnerUp(Long auctionId, Long winnerId, Pageable pageable);
+    List<AuctionBid> findEligibleRunnerUp(Long auctionId, Long winnerId, java.time.Instant now, Pageable pageable);
 
     @Query("SELECT b FROM AuctionBid b WHERE b.auctionId = :auctionId AND b.bidType = 'PROXY' ORDER BY b.maxBidAmount DESC, b.createdAt ASC")
     List<AuctionBid> findProxyBidsByAuctionId(@Param("auctionId") Long auctionId);

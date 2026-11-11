@@ -67,6 +67,13 @@ public class User {
     @Column(name = "auction_banned_until")
     private java.time.Instant auctionBannedUntil;
 
+    @Column(name = "auction_penalty_baseline_strikes")
+    private Integer auctionPenaltyBaselineStrikes;
+    @Column(name = "auction_penalty_baseline_ban")
+    private java.time.Instant auctionPenaltyBaselineBan;
+    @Column(name = "auction_penalty_applied_ban")
+    private java.time.Instant auctionPenaltyAppliedBan;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
