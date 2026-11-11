@@ -40,6 +40,8 @@ public class SellerOrderDto {
         String buyerContactLine,
         String buyerContactFacebook,
         BigDecimal sellerRevenue,
+        BigDecimal sellerPlatformFee,
+        BigDecimal sellerNetRevenue,
         BigDecimal sellerCost,
         BigDecimal sellerProfit,
         List<SellerOrderItemResponse> items,
@@ -59,11 +61,28 @@ public class SellerOrderDto {
 
     public record SellerProfitSummaryResponse(
         BigDecimal totalRevenue,
+        BigDecimal totalPlatformFee,
         BigDecimal totalCost,
         BigDecimal netProfit,
         long totalOrders,
         long pendingOrders,
         long fulfilledOrders,
         long cancelledOrders
+    ) {}
+
+    public record SellerMonthlyPointResponse(
+        int year,
+        int month,
+        BigDecimal grossSales,
+        BigDecimal platformFee,
+        BigDecimal netRevenue,
+        BigDecimal totalCost,
+        BigDecimal netProfit,
+        long orderCount
+    ) {}
+
+    public record SellerMonthlyDashboardResponse(
+        SellerMonthlyPointResponse selectedMonth,
+        List<SellerMonthlyPointResponse> lastTwelveMonths
     ) {}
 }

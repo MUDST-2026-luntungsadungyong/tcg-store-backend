@@ -117,7 +117,7 @@ class CheckoutControllerIntegrationTests {
     }
 
     @Test
-    void checkoutWithVoucherAppliesDiscountToBuyerWhileSellerReceivesFullAmount() throws Exception {
+    void checkoutWithVoucherKeepsBuyerDiscountAndDeductsPlatformFeeFromSellerSettlement() throws Exception {
         Voucher voucher = Voucher.builder()
             .code("SAVE10")
             .title("Save 10 Baht")
@@ -153,6 +153,8 @@ class CheckoutControllerIntegrationTests {
             .andExpect(jsonPath("$.subtotalAmount").value(30.00))
             .andExpect(jsonPath("$.discountAmount").value(10.00))
             .andExpect(jsonPath("$.totalAmount").value(20.00))
+              .andExpect(jsonPath("$.platformFee").value(20.00))
+              .andExpect(jsonPath("$.sellerNetAmount").value(10.00))
             .andExpect(jsonPath("$.voucherCode").value("SAVE10"));
 
         entityManager.flush();
@@ -160,7 +162,8 @@ class CheckoutControllerIntegrationTests {
         assertThat(savedOrder.getSubtotalAmount()).isEqualByComparingTo("30.00");
         assertThat(savedOrder.getDiscountAmount()).isEqualByComparingTo("10.00");
         assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo("20.00");
-        assertThat(savedOrder.getSellerNetAmount()).isEqualByComparingTo("30.00");
+        assertThat(savedOrder.getPlatformFee()).isEqualByComparingTo("20.00");
+        assertThat(savedOrder.getSellerNetAmount()).isEqualByComparingTo("10.00");
     }
 
     @Test

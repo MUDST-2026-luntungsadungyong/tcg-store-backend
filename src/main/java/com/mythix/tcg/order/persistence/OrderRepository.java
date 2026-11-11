@@ -48,6 +48,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("select coalesce(sum(o.totalAmount), 0) from Order o")
     BigDecimal totalOrderAmount();
     @Query("select coalesce(sum(o.totalAmount), 0) from Order o where o.status in ('PAID','FULFILLED')") BigDecimal paidOrFulfilledGmv();
+    @Query("select coalesce(sum(o.platformFee), 0) from Order o where o.status <> 'CANCELLED'") BigDecimal totalPlatformFee();
     @EntityGraph(attributePaths = "buyer")
     Page<Order> findAllByOrderByCreatedAtDesc(Pageable pageable);
 

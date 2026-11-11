@@ -42,6 +42,7 @@ public class CheckoutService {
     private final SellerProfileRepository sellerProfileRepository;
     private final NotificationService notificationService;
     private final VoucherService voucherService;
+    private final PlatformFeeService platformFeeService;
 
     /**
      * The buyer row is locked before reading idempotency or cart state. This serializes
@@ -120,6 +121,7 @@ public class CheckoutService {
                 .build());
         }
 
+        BigDecimal platformFee = platformFeeService.currentPolicy().feeFor(total);
         Order order = Order.builder()
             .orderNumber("ORD-TEMP-" + UUID.randomUUID())
             .idempotencyKey(normalizedKey)
@@ -128,8 +130,8 @@ public class CheckoutService {
             .subtotalAmount(total)
             .discountAmount(BigDecimal.ZERO)
             .totalAmount(total)
-            .platformFee(BigDecimal.ZERO)
-            .sellerNetAmount(total)
+            .platformFee(platformFee)
+            .sellerNetAmount(total.subtract(platformFee))
             .items(orderItems)
             .build();
         orderItems.forEach(item -> item.setOrder(order));
@@ -140,8 +142,8 @@ public class CheckoutService {
             order.setDiscountAmount(discount);
             order.setTotalAmount(discountedTotal);
             // Platform subsidizes the discount: seller receives full amount (minus platform fee, if any)
-            BigDecimal platformFee = order.getPlatformFee() != null ? order.getPlatformFee() : BigDecimal.ZERO;
-            order.setSellerNetAmount(total.subtract(platformFee));
+            BigDecimal fee = order.getPlatformFee() != null ? order.getPlatformFee() : BigDecimal.ZERO;
+            order.setSellerNetAmount(total.subtract(fee));
         }
 
         Order saved = orderRepository.save(order);
@@ -221,6 +223,8 @@ public class CheckoutService {
             order.getTotalAmount(),
             order.getSubtotalAmount() != null ? order.getSubtotalAmount() : order.getTotalAmount(),
             order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO,
+            order.getPlatformFee() != null ? order.getPlatformFee() : BigDecimal.ZERO,
+            order.getSellerNetAmount() != null ? order.getSellerNetAmount() : order.getTotalAmount(),
             order.getVoucherCodeSnapshot(),
             items,
             createdAtValue
