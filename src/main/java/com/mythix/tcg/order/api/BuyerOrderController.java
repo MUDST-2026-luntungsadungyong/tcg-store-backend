@@ -2,7 +2,10 @@ package com.mythix.tcg.order.api;
 
 import com.mythix.tcg.auth.security.AuthenticatedUser;
 import com.mythix.tcg.order.api.BuyerOrderDto.BuyerOrderResponse;
+import com.mythix.tcg.order.api.BuyerOrderDto.OrderVerificationResponse;
+import com.mythix.tcg.order.api.BuyerOrderDto.ReorderResponse;
 import com.mythix.tcg.order.application.BuyerOrderService;
+import com.mythix.tcg.order.application.InvoicePdfService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
@@ -10,9 +13,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.util.List;
 
@@ -49,6 +56,40 @@ public class BuyerOrderController {
 
         BuyerOrderResponse response = buyerOrderService.getBuyerOrderById(user.userId(), orderId);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{orderId}/reorder")
+    public ResponseEntity<ReorderResponse> reorder(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable Long orderId) {
+        return ResponseEntity.ok(buyerOrderService.reorder(user.userId(), orderId));
+    }
+
+    @GetMapping(value = "/{orderId}/invoice-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> downloadInvoice(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable Long orderId) {
+        BuyerOrderResponse order = buyerOrderService.getBuyerOrderById(user.userId(), orderId);
+        String verificationUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/orders/verify/{orderNumber}")
+                .buildAndExpand(order.getOrderNumber())
+                .encode()
+                .toUriString();
+        InvoicePdfService.InvoiceFile invoice = buyerOrderService.generateInvoicePdf(
+                user.userId(), orderId, verificationUrl);
+        ContentDisposition disposition = ContentDisposition.attachment()
+                .filename(invoice.filename())
+                .build();
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
+                .contentLength(invoice.content().length)
+                .body(invoice.content());
+    }
+
+    @GetMapping("/verify/{orderNumber}")
+    public ResponseEntity<OrderVerificationResponse> verifyOrder(@PathVariable String orderNumber) {
+        return ResponseEntity.ok(buyerOrderService.verifyOrder(orderNumber));
     }
 
     @PatchMapping("/{orderId}/status")

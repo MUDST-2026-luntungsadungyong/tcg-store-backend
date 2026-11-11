@@ -65,6 +65,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/vouchers").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/vouchers/validate").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/auctions", "/api/auctions/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/orders/verify/**").permitAll()
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 // SellerProductService checks the current database role/status so a token
                 // issued immediately before seller verification does not become stale.
@@ -82,7 +83,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(appProperties.cors().allowedOrigins());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Idempotency-Key", "X-Request-ID"));
-        config.setExposedHeaders(List.of("X-Request-ID"));
+        config.setExposedHeaders(List.of("X-Request-ID", "Content-Disposition"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
