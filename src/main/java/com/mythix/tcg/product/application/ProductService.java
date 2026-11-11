@@ -1,5 +1,7 @@
 package com.mythix.tcg.product.application;
 
+import com.mythix.tcg.catalog.application.CardFuzzySearchService;
+import com.mythix.tcg.catalog.domain.FuzzySearchResult;
 import com.mythix.tcg.catalog.persistence.CardNameSearch;
 import com.mythix.tcg.product.api.ProductPageResponse;
 import com.mythix.tcg.product.api.ProductResponse;
@@ -8,6 +10,7 @@ import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -18,6 +21,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -27,18 +31,71 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final SellerProfileRepository sellerProfileRepository;
 
+    @Autowired(required = false)
+    private CardFuzzySearchService fuzzySearchService;
+
     @Transactional(readOnly = true)
     public ProductPageResponse browseProducts(String search, String rarity, String stage, String condition,
                                              String language, String cardId, Long sellerId, BigDecimal minPrice,
                                              BigDecimal maxPrice, Pageable pageable) {
-        String term = CardNameSearch.term(search);
-        Specification<Product> spec = (root, query, cb) -> {
+        return browseProducts(search, rarity, stage, condition, language, cardId, sellerId, minPrice, maxPrice, false, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public ProductPageResponse browseProducts(String search, String rarity, String stage, String condition,
+                                             String language, String cardId, Long sellerId, BigDecimal minPrice,
+                                             BigDecimal maxPrice, boolean fuzzy, Pageable pageable) {
+        String rawSearch = (search != null) ? search.trim() : "";
+        String term = CardNameSearch.term(rawSearch);
+
+        Specification<Product> spec = createBrowseSpec(term, rarity, stage, condition, language, cardId, sellerId, minPrice, maxPrice);
+        Page<Product> page = productRepository.findAll(spec, pageable);
+
+        String didYouMean = null;
+        boolean fuzzyMatched = false;
+
+        // If no results or fuzzy explicitly requested, try typo suggestion
+        if ((page.isEmpty() || fuzzy) && !rawSearch.isEmpty() && fuzzySearchService != null) {
+            Optional<FuzzySearchResult> suggestionOpt = fuzzySearchService.findBestSuggestion(rawSearch);
+            if (suggestionOpt.isPresent()) {
+                FuzzySearchResult suggestion = suggestionOpt.get();
+                String suggestedTerm = CardNameSearch.term(suggestion.getSuggestedQuery());
+                Specification<Product> fuzzySpec = createBrowseSpec(
+                        suggestedTerm, rarity, stage, condition, language, cardId, sellerId, minPrice, maxPrice);
+                Page<Product> fuzzyPage = productRepository.findAll(fuzzySpec, pageable);
+                if (!fuzzyPage.isEmpty() || page.isEmpty()) {
+                    page = fuzzyPage;
+                    didYouMean = suggestion.getSuggestedQuery();
+                    fuzzyMatched = true;
+                }
+            }
+        }
+
+        List<Long> sellerIds = page.getContent().stream()
+                .map(Product::getSeller)
+                .filter(seller -> seller != null && seller.getId() != null)
+                .map(seller -> seller.getId())
+                .distinct()
+                .toList();
+        Map<Long, String> shopNames = sellerProfileRepository.findByUserIdIn(sellerIds).stream()
+                .collect(Collectors.toMap(profile -> profile.getUser().getId(), profile -> profile.getShopName()));
+        Page<ProductResponse> dtoPage = page.map(product -> ProductResponse.fromEntity(
+                product,
+                product.getSeller() == null ? null : shopNames.get(product.getSeller().getId())));
+
+        return ProductPageResponse.fromPage(dtoPage, didYouMean, rawSearch.isEmpty() ? null : rawSearch, fuzzyMatched);
+    }
+
+    private Specification<Product> createBrowseSpec(String term, String rarity, String stage, String condition,
+                                                    String language, String cardId, Long sellerId, BigDecimal minPrice,
+                                                    BigDecimal maxPrice) {
+        return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
             // Always enforce status = 'SHOW' for public browsing
             predicates.add(cb.equal(root.get("status"), "SHOW"));
 
-            if (!term.isEmpty()) {
+            if (term != null && !term.isEmpty()) {
                 predicates.add(CardNameSearch.matches(root.get("card"), query, cb, term));
             }
 
@@ -79,20 +136,6 @@ public class ProductService {
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
-
-        Page<Product> page = productRepository.findAll(spec, pageable);
-        List<Long> sellerIds = page.getContent().stream()
-                .map(Product::getSeller)
-                .filter(seller -> seller != null && seller.getId() != null)
-                .map(seller -> seller.getId())
-                .distinct()
-                .toList();
-        Map<Long, String> shopNames = sellerProfileRepository.findByUserIdIn(sellerIds).stream()
-                .collect(Collectors.toMap(profile -> profile.getUser().getId(), profile -> profile.getShopName()));
-        Page<ProductResponse> dtoPage = page.map(product -> ProductResponse.fromEntity(
-                product,
-                product.getSeller() == null ? null : shopNames.get(product.getSeller().getId())));
-        return ProductPageResponse.fromPage(dtoPage);
     }
 
     @Transactional(readOnly = true)
@@ -112,22 +155,24 @@ public class ProductService {
     }
 
     private String normalizeCondition(String condition) {
-        String value = condition.trim().toUpperCase().replace('-', ' ').replace('_', ' ');
-        return switch (value) {
-            case "NM", "NEAR MINT" -> "NM";
-            case "LP", "LIGHTLY PLAYED" -> "LP";
-            case "MP", "MODERATELY PLAYED" -> "MP";
-            case "HP", "HEAVILY PLAYED" -> "HP";
-            case "DMG", "DAMAGED" -> "DMG";
-            default -> throw new ProductFilterValidationException("condition", "Condition must be NM, LP, MP, HP, or DMG");
+        String clean = condition.trim().toUpperCase();
+        return switch (clean) {
+            case "NEAR MINT" -> "NM";
+            case "LIGHTLY PLAYED" -> "LP";
+            case "MODERATELY PLAYED" -> "MP";
+            case "HEAVILY PLAYED" -> "HP";
+            case "DAMAGED" -> "DMG";
+            default -> clean;
         };
     }
 
     private String normalizeLanguage(String language) {
-        String value = language.trim().toUpperCase();
-        if (!List.of("EN", "JP", "TH").contains(value)) {
-            throw new ProductFilterValidationException("language", "Language must be EN, JP, or TH");
-        }
-        return value;
+        String clean = language.trim().toUpperCase();
+        return switch (clean) {
+            case "THAI" -> "TH";
+            case "ENGLISH" -> "EN";
+            case "JAPANESE" -> "JP";
+            default -> clean;
+        };
     }
 }

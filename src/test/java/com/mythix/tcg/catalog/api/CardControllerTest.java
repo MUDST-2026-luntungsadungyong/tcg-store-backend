@@ -1,6 +1,9 @@
 package com.mythix.tcg.catalog.api;
 
+import com.mythix.tcg.catalog.application.CardFuzzySearchService;
 import com.mythix.tcg.catalog.domain.Card;
+import com.mythix.tcg.catalog.domain.CardSearchPage;
+import com.mythix.tcg.catalog.domain.FuzzySearchResult;
 import com.mythix.tcg.catalog.persistence.CardRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +35,9 @@ class CardControllerTest {
 
     @Mock
     private CardRepository cardRepository;
+
+    @Mock
+    private CardFuzzySearchService fuzzySearchService;
 
     @InjectMocks
     private CardController controller;
@@ -96,6 +102,66 @@ class CardControllerTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         verify(cardRepository).findAll(any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("getCards() - US-28-1: fuzzy matches misspelled pokamon to Pokemon with suggestion")
+    void getCards_misspelledPokamon_returnsFuzzySuggestion() {
+        Card card = createSampleCard("base1-1", "Pokemon Center");
+        Page<Card> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        Page<Card> fuzzyMatchedPage = new PageImpl<>(List.of(card), PageRequest.of(0, 20), 1);
+
+        when(cardRepository.findAll(ArgumentMatchers.<Specification<Card>>any(), any(Pageable.class)))
+                .thenReturn(emptyPage)
+                .thenReturn(fuzzyMatchedPage);
+
+        when(fuzzySearchService.findBestSuggestion("pokamon")).thenReturn(Optional.of(
+                FuzzySearchResult.builder()
+                        .originalQuery("pokamon")
+                        .suggestedQuery("Pokemon")
+                        .distance(1)
+                        .fuzzyMatched(true)
+                        .build()
+        ));
+
+        ResponseEntity<Page<Card>> response = controller.getCards(0, 20, "pokamon", true, false);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isInstanceOf(CardSearchPage.class);
+        CardSearchPage<Card> searchPage = (CardSearchPage<Card>) response.getBody();
+        assertThat(searchPage.getContent()).hasSize(1);
+        assertThat(searchPage.getDidYouMean()).isEqualTo("Pokemon");
+        assertThat(searchPage.getOriginalQuery()).isEqualTo("pokamon");
+        assertThat(searchPage.getFuzzyMatched()).isTrue();
+    }
+
+    @Test
+    @DisplayName("searchCards() - US-28-1: supports GET /api/cards/search?q=chairzard&fuzzy=true")
+    void searchCards_endpoint_returnsFuzzyResult() {
+        Card card = createSampleCard("base1-4", "Charizard");
+        Page<Card> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
+        Page<Card> fuzzyMatchedPage = new PageImpl<>(List.of(card), PageRequest.of(0, 20), 1);
+
+        when(cardRepository.findAll(ArgumentMatchers.<Specification<Card>>any(), any(Pageable.class)))
+                .thenReturn(emptyPage)
+                .thenReturn(fuzzyMatchedPage);
+
+        when(fuzzySearchService.findBestSuggestion("chairzard")).thenReturn(Optional.of(
+                FuzzySearchResult.builder()
+                        .originalQuery("chairzard")
+                        .suggestedQuery("Charizard")
+                        .distance(2)
+                        .fuzzyMatched(true)
+                        .build()
+        ));
+
+        ResponseEntity<Page<Card>> response = controller.searchCards(0, 20, "chairzard", null, true, false);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isInstanceOf(CardSearchPage.class);
+        CardSearchPage<Card> searchPage = (CardSearchPage<Card>) response.getBody();
+        assertThat(searchPage.getDidYouMean()).isEqualTo("Charizard");
+        assertThat(searchPage.getContent().get(0).getName()).isEqualTo("Charizard");
     }
 
     @Test
