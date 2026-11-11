@@ -57,6 +57,8 @@ public final class CheckoutDto {
         BigDecimal totalAmount,
         BigDecimal subtotalAmount,
         BigDecimal discountAmount,
+        BigDecimal platformFee,
+        BigDecimal sellerNetAmount,
         String voucherCode,
         List<CheckoutItemResponse> items,
         String createdAt
@@ -69,7 +71,7 @@ public final class CheckoutDto {
             List<CheckoutItemResponse> items,
             String createdAt
         ) {
-            this(id, orderNumber, status, totalAmount, totalAmount, BigDecimal.ZERO, null, items, createdAt);
+            this(id, orderNumber, status, totalAmount, totalAmount, BigDecimal.ZERO, BigDecimal.ZERO, totalAmount, null, items, createdAt);
         }
     }
 }
