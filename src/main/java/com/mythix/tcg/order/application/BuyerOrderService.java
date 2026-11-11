@@ -1,10 +1,14 @@
 package com.mythix.tcg.order.application;
 
 import com.mythix.tcg.catalog.domain.Card;
+import com.mythix.tcg.cart.application.CartService;
 import com.mythix.tcg.order.api.BuyerOrderDto.BuyerOrderItemListingDto;
 import com.mythix.tcg.order.api.BuyerOrderDto.BuyerOrderItemResponse;
 import com.mythix.tcg.order.api.BuyerOrderDto.BuyerOrderResponse;
+import com.mythix.tcg.order.api.BuyerOrderDto.OrderVerificationResponse;
 import com.mythix.tcg.order.api.BuyerOrderDto.OrderStatusLogResponse;
+import com.mythix.tcg.order.api.BuyerOrderDto.ReorderItemResponse;
+import com.mythix.tcg.order.api.BuyerOrderDto.ReorderResponse;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
 import com.mythix.tcg.order.persistence.OrderRepository;
@@ -44,6 +48,8 @@ public class BuyerOrderService {
     private final CollectionService collectionService;
     private final VoucherService voucherService;
     private final com.mythix.tcg.auction.application.AuctionSettlementService auctionSettlementService;
+    private final CartService cartService;
+    private final InvoicePdfService invoicePdfService;
 
     @Transactional(readOnly = true)
     public List<BuyerOrderResponse> getBuyerOrders(Long buyerId, String status) {
@@ -79,6 +85,56 @@ public class BuyerOrderService {
                 .orElseThrow(() -> new OrderNotFoundException(orderId));
 
         return mapToBuyerOrderResponse(order);
+    }
+
+    @Transactional
+    public ReorderResponse reorder(Long buyerId, Long orderId) {
+        Order order = orderRepository.findByIdAndBuyerId(orderId, buyerId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+
+        List<CartService.ReorderItemRequest> requests = order.getItems().stream()
+                .map(item -> new CartService.ReorderItemRequest(
+                        item.getProduct() == null ? null : item.getProduct().getId(),
+                        item.getProductNameSnapshot(),
+                        item.getQuantity() == null ? 0 : Math.max(0, item.getQuantity())))
+                .filter(item -> item.quantity() > 0)
+                .toList();
+
+        CartService.ReorderCartResult result = cartService.addAvailableOrderItems(buyerId, requests);
+        List<ReorderItemResponse> itemResponses = result.items().stream()
+                .map(item -> new ReorderItemResponse(
+                        item.listingId(),
+                        item.productName(),
+                        item.requestedQuantity(),
+                        item.addedQuantity(),
+                        item.availableQuantity(),
+                        item.outcome()))
+                .toList();
+        int totalAddedItems = itemResponses.stream().mapToInt(ReorderItemResponse::addedQuantity).sum();
+        boolean hasUnavailableItems = itemResponses.stream()
+                .anyMatch(item -> item.addedQuantity() < item.requestedQuantity());
+        return new ReorderResponse(result.cart(), itemResponses, totalAddedItems, hasUnavailableItems);
+    }
+
+    @Transactional(readOnly = true)
+    public InvoicePdfService.InvoiceFile generateInvoicePdf(Long buyerId, Long orderId, String verificationUrl) {
+        Order order = orderRepository.findByIdAndBuyerId(orderId, buyerId)
+                .orElseThrow(() -> new OrderNotFoundException(orderId));
+        return invoicePdfService.generate(order, verificationUrl);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderVerificationResponse verifyOrder(String orderNumber) {
+        Order order = orderRepository.findByOrderNumber(orderNumber)
+                .orElseThrow(() -> new OrderNotFoundException(orderNumber));
+        String updatedAt = order.getUpdatedAt() == null
+                ? null
+                : order.getUpdatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        return new OrderVerificationResponse(
+                order.getOrderNumber(),
+                order.getStatus(),
+                order.getOrderType(),
+                updatedAt);
     }
 
     @Transactional

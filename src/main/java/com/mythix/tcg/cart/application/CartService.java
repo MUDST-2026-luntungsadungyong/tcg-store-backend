@@ -15,11 +15,26 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 public class CartService {
+
+    public record ReorderItemRequest(Long listingId, String productName, int quantity) {}
+
+    public record ReorderItemResult(
+        String listingId,
+        String productName,
+        int requestedQuantity,
+        int addedQuantity,
+        int availableQuantity,
+        String outcome
+    ) {}
+
+    public record ReorderCartResult(CartResponse cart, List<ReorderItemResult> items) {}
 
     private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
@@ -67,6 +82,78 @@ public class CartService {
         CartItem item = cartItemRepository.findByUserIdAndProductIdWithProduct(userId, listingId)
             .orElseThrow(() -> new CartItemNotFoundException(listingId));
         cartItemRepository.delete(item);
+    }
+
+    @Transactional
+    public ReorderCartResult addAvailableOrderItems(Long userId, List<ReorderItemRequest> requests) {
+        User user = requireMutationUser(userId);
+        Map<Long, CartItem> cartByProductId = new HashMap<>();
+        for (CartItem item : cartItemRepository.findAllByUserIdWithProductForUpdate(userId)) {
+            cartByProductId.put(item.getProduct().getId(), item);
+        }
+
+        List<ReorderItemResult> results = requests.stream()
+            .map(request -> addAvailableOrderItem(user, cartByProductId, request))
+            .toList();
+        return new ReorderCartResult(getCart(userId), results);
+    }
+
+    private ReorderItemResult addAvailableOrderItem(
+        User user,
+        Map<Long, CartItem> cartByProductId,
+        ReorderItemRequest request
+    ) {
+        if (request.listingId() == null) {
+            return unavailableReorderItem(request, 0, "UNAVAILABLE");
+        }
+
+        Product product = productRepository.findByIdForUpdate(request.listingId()).orElse(null);
+        if (product == null || !"SHOW".equalsIgnoreCase(product.getStatus())) {
+            return unavailableReorderItem(request, product == null ? 0 : product.availableStock(), "UNAVAILABLE");
+        }
+
+        int availableQuantity = product.availableStock();
+        CartItem cartItem = cartByProductId.get(product.getId());
+        int currentQuantity = cartItem == null || cartItem.getQuantity() == null ? 0 : cartItem.getQuantity();
+        int remainingCapacity = Math.max(0, availableQuantity - currentQuantity);
+        int addedQuantity = Math.min(request.quantity(), remainingCapacity);
+
+        if (addedQuantity <= 0) {
+            return unavailableReorderItem(request, availableQuantity, "STOCK_LIMIT_REACHED");
+        }
+
+        if (cartItem == null) {
+            cartItem = CartItem.builder().user(user).product(product).quantity(addedQuantity).build();
+            cartByProductId.put(product.getId(), cartItem);
+        } else {
+            cartItem.setQuantity(currentQuantity + addedQuantity);
+        }
+        cartItemRepository.save(cartItem);
+
+        String outcome = addedQuantity == request.quantity() ? "ADDED" : "PARTIALLY_ADDED";
+        return new ReorderItemResult(
+            String.valueOf(product.getId()),
+            request.productName(),
+            request.quantity(),
+            addedQuantity,
+            availableQuantity,
+            outcome
+        );
+    }
+
+    private ReorderItemResult unavailableReorderItem(
+        ReorderItemRequest request,
+        int availableQuantity,
+        String outcome
+    ) {
+        return new ReorderItemResult(
+            request.listingId() == null ? null : String.valueOf(request.listingId()),
+            request.productName(),
+            request.quantity(),
+            0,
+            availableQuantity,
+            outcome
+        );
     }
 
     private User requireUser(Long userId) {
