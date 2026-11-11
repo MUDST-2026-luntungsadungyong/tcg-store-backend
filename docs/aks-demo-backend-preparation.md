@@ -1,6 +1,8 @@
 # Azure AKS demo backend runbook
 
-Status on 11 November 2026: the backend is running on Azure Kubernetes Service.
+Status on 11 November 2026: the backend and frontend are running on Azure
+Kubernetes Service. The public demo URL is
+<https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/>.
 The Azure for Students subscription has $100 credit. Its policy allows resource
 deployment in `malaysiawest`, `indonesiacentral`, `japaneast`, `centralindia`, and
 `indiasouthcentral`. Southeast Asia and East Asia were rejected for resources.
@@ -14,14 +16,16 @@ deployment in `malaysiawest`, `indonesiacentral`, `japaneast`, `centralindia`, a
 | Node pool | One `Standard_D4s_v4` node, 4 vCPU, 64 GB OS disk |
 | Namespace | `tcg-store-aks-demo` |
 | Container registry | `tcgstorecimah2026.azurecr.io` (Basic, `centralindia`) |
-| Image source | Backend `main` commit `29230974531f1cf4461a0c151e976bbe3ed3149d` |
-| Image index digest | `sha256:a71c7deb0e383eae41c64004bfdb8ab4ecdd985143c40f90e64258d15e7a74f8` |
+| Backend image | Pinned ACR digest from the successful `main` deployment workflow |
+| Frontend | Caddy/Vite on AKS; public Azure DNS label, HTTPS, and `/api` proxy |
+| Frontend TLS storage | `managed-csi` persistent volume claim |
 | Database | Neon branch `aks-demo-2026-11-11`, forked from `development`; auto-deletes after seven days |
 | Budget | `tcg-aks-demo-20usd`, USD 20/month with 25%, 50%, and 75% email alerts |
 
-ACR Tasks are disallowed on this Azure for Students subscription, so the image
-was built locally from a clean `origin/main` worktree with Docker Buildx and
-pushed to ACR. AKS has `AcrPull` through its managed identity; the registry
+ACR Tasks are disallowed on this Azure for Students subscription. The first
+image was built locally from a clean `origin/main` worktree and pushed to ACR;
+subsequent images are built by GitHub Actions. AKS has `AcrPull` through its
+managed identity; the registry
 admin account is disabled. The earlier Malaysia West registry was empty and
 deleted because ACR Tasks build was unavailable in that region.
 
@@ -48,8 +52,10 @@ In a second terminal, request `http://127.0.0.1:18080/api/health` and
 `http://127.0.0.1:18080/actuator/health/readiness`. On 11 November both
 reported `UP`; the API reported the database connected and 2,002 cards.
 The migration Job completed and the Deployment was `1/1 Available` on a Ready
-Azure node. The Service is `ClusterIP`, so the API is not yet reachable by a
-public frontend.
+Azure node. The backend Service remains `ClusterIP`. The public frontend's
+Caddy proxy forwards `/api/*` to that Service over the cluster network. The
+homepage and a SPA route returned HTTP 200; public `/api/health` reported `UP`,
+the database connected, and 2,002 cards.
 
 To redeploy, update both Kustomizations to the same new ACR digest, render and
 server dry-run the manifests, run the migration Job first, and only then apply
@@ -62,7 +68,8 @@ be deleted after use.
 
 AKS Free removes only the control-plane management charge. The Linux node's
 public retail price in Malaysia West was USD 0.22/hour on 11 November 2026;
-the OS disk and network add charges. ACR Basic was USD 0.17/day. The budget
+the OS disk, frontend Load Balancer, public IP, TLS storage disk, and network
+add charges. ACR Basic was USD 0.17/day. The budget
 sends alerts but does not stop spending. Check Azure Cost Management daily.
 When the demo no longer needs to stay online, delete the dedicated resource
 group after confirming its contents. Scaling the app to zero does not stop the
@@ -70,11 +77,11 @@ node VM and disk charges. Neon removes the demo branch automatically on
 18 November 2026; verify this after the submission.
 
 The GitHub build workflow publishes to private GHCR. The
-`.github/workflows/deploy-aks-demo.yml` workflow in the deployment branch is
-prepared to run after a successful main-branch build: it uses GitHub OIDC,
-builds the same verified commit to ACR, runs Flyway migration, then rolls out
-the API. Merge the deployment PR and check the first Actions run before
-considering CI/CD live. The federated identity `id-tcg-github-aks-demo` is
-limited to ACR push and admin credentials for this demo AKS cluster. No Azure
-client secret is stored in GitHub. The public frontend/API route is still
-follow-up work.
+`.github/workflows/deploy-aks-demo.yml` workflow ran successfully after the
+main-branch build: it used GitHub OIDC, built the verified commit to ACR, ran
+Flyway migration, and rolled out the API. See the successful
+[backend deploy run](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/42942899284).
+The federated identity `id-tcg-github-aks-demo` is limited to ACR push and
+admin credentials for this demo AKS cluster. No Azure client secret is stored
+in GitHub. The frontend has its own OIDC identity and deployment workflow.
+The purchased domain `tcgmihix.store` still needs DNS access at GoDaddy.
