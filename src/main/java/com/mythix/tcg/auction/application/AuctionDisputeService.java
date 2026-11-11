@@ -85,7 +85,8 @@ public class AuctionDisputeService {
             attachment.setContent(image.content());
             evidence.save(attachment);
         }
-        notifyUser(dispute.getSellerId(), "A dispute was opened for auction #" + auctionId + ".");
+        notifyUser(dispute.getSellerId(), NotificationTypes.AUCTION_DISPUTE_OPENED,
+            "A dispute was opened", "A dispute was opened for auction #" + auctionId + ".", dispute.getId());
         return view(dispute, false);
     }
 
@@ -108,7 +109,8 @@ public class AuctionDisputeService {
             evidence.save(attachment);
         }
         notifyUser(userId.equals(dispute.getBuyerId()) ? dispute.getSellerId() : dispute.getBuyerId(),
-            "New evidence was added to a dispute for auction #" + dispute.getAuctionId() + ".");
+            NotificationTypes.AUCTION_DISPUTE_EVIDENCE_ADDED, "New dispute evidence",
+            "New evidence was added to a dispute for auction #" + dispute.getAuctionId() + ".", dispute.getId());
         return view(dispute, false);
     }
     @Transactional(readOnly = true)
@@ -146,8 +148,17 @@ public class AuctionDisputeService {
         auditLogs.save(AuditLog.builder().actor(users.findById(adminId).orElseThrow())
             .action("AUCTION_DISPUTE_DECISION").targetType("AUCTION_DISPUTE").targetId(id.toString())
             .details(decision + ": " + clean).build());
-        notifyUser(dispute.getBuyerId(), "A decision was recorded for auction #" + dispute.getAuctionId() + ".");
-        notifyUser(dispute.getSellerId(), "A decision was recorded for auction #" + dispute.getAuctionId() + ".");
+        String decisionLabel = switch (decision) {
+            case "FULL_REFUND" -> "Full refund";
+            case "RETURN" -> "Return";
+            default -> "Dismissed";
+        };
+        String boundedReason = clean.length() > 650 ? clean.substring(0, 647) + "..." : clean;
+        String decisionMessage = "Decision: " + decisionLabel + ". Reason: " + boundedReason;
+        notifyUser(dispute.getBuyerId(), NotificationTypes.AUCTION_DISPUTE_DECIDED,
+            "Auction dispute decided", decisionMessage, dispute.getId());
+        notifyUser(dispute.getSellerId(), NotificationTypes.AUCTION_DISPUTE_DECIDED,
+            "Auction dispute decided", decisionMessage, dispute.getId());
         return view(dispute, true);
     }
 
@@ -170,9 +181,9 @@ public class AuctionDisputeService {
         }
     }
 
-    private void notifyUser(Long id, String message) {
+    private void notifyUser(Long id, String type, String title, String message, Long disputeId) {
         users.findById(id).ifPresent(user -> notifications.sendAuctionNotification(user,
-            NotificationTypes.AUCTION_CANCELLATION_DECIDED, "Auction dispute", message, "/auctions/me"));
+            type, title, message, "/auction-disputes?disputeId=" + disputeId));
     }
 
     private void requireAdmin(Long id) {
