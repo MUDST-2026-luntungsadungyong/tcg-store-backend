@@ -13,6 +13,8 @@ public interface AuctionBidRepository extends JpaRepository<AuctionBid, Long> {
 
     List<AuctionBid> findAllByAuctionIdOrderByCreatedAtDescIdDesc(Long auctionId);
 
+    List<AuctionBid> findTop2ByAuctionIdOrderByCreatedAtDescIdDesc(Long auctionId);
+
     @Query("""
         select b from AuctionBid b
         where b.auctionId = :auctionId and b.bidderId <> :winnerId

@@ -196,3 +196,14 @@ A seller cancelling an auction order while it awaits buyer contact with `noBuyer
 A case contains `id`, `auctionId`, `orderId`, `orderNumber`, `buyerId`, `sellerId`, `reportReason`, `status` (PENDING, APPROVED, REJECTED, REVERSED), `createdAt`, `decidedAt`, `decisionReason`, and `history`. Each history entry has `action`, `reason`, `adminId`, and `createdAt`. Timestamps are UTC ISO-8601.
 
 Confirmed strikes are cumulative: one is a warning, two impose seven days and three or more impose thirty days from approval. On reversal, remaining approved cases are recomputed in approval order using their original approval times; existing legacy strike and ban baseline is retained. Active bans also prohibit automatic proxy counters and accepting a Second Chance offer.
+
+### Auction administration and disputes
+
+`GET /api/admin/auctions` (also `/live-feed`) returns a Spring page ordered by update time and ID descending. `page` defaults to 0; `size` defaults to 20 and is capped at 100. Each entry includes the latest bid time, a high-risk flag (latest bidder has an active ban or a strike), and a price anomaly flag (two successive bids at least doubling within five minutes). These flags are review signals, not fraud decisions.
+
+`POST /api/admin/auctions/{id}/pause`, `/resume`, or `/cancel` accepts `{ "reason": "..." }`; `/force-cancel` aliases cancellation. Pause preserves remaining time and resume moves the end time by the pause duration. Cancellation releases held stock. These actions require an administrator and generate participant notifications.
+
+`POST /api/auctions/{id}/disputes` accepts multipart `reason` and one to four `evidence` image files. The winning buyer may open one case within 72 hours of the recorded fulfillment transition. `GET /api/admin/auction-disputes` (also `/api/admin/disputes`) returns a page ordered newest first. Evidence URLs are access controlled. `POST /api/admin/auction-disputes/{id}/decide` accepts `{ "decision": "FULL_REFUND|RETURN|DISMISS", "reason": "..." }`. Decisions record an outcome for off-platform handling; they do not transfer funds or alter ownership.
+
+Participants can reload cases with `GET /api/auction-disputes/me` or `GET /api/auction-disputes/{id}`. Either participant can read the case and evidence and add images to a pending case using multipart `POST /api/auction-disputes/{id}/evidence`, with an eight-image total limit. The 72-hour period uses the auction's persisted UTC receipt time set by buyer confirmation or admin verified delivery. Historical fulfilled auctions without this timestamp cannot open a case automatically.
+Evidence entries include `url`, `submittedBy`, and `createdAt`, ordered by evidence ID. Only the buyer, seller, or an administrator can access the corresponding evidence URL.

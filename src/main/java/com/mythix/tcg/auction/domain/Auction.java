@@ -15,7 +15,7 @@ import java.time.Instant;
 @NoArgsConstructor
 public class Auction {
     public enum Status {
-        DRAFT, SCHEDULED, ACTIVE, ENDED, AWAITING_BUYER_CONTACT, COMPLETED, CANCELLED,
+        DRAFT, SCHEDULED, ACTIVE, PAUSED, ENDED, AWAITING_BUYER_CONTACT, COMPLETED, CANCELLED,
         BUYOUT_COMPLETED, RESERVE_NOT_MET, UNSOLD_NO_BIDS, DEFAULTED
     }
     public enum StartMode { NOW, SCHEDULED }
@@ -65,6 +65,8 @@ public class Auction {
     private StartMode startMode;
     private Instant startAt;
     private Instant endAt;
+    private Instant pausedAt;
+    private Instant receivedAt;
     private Integer durationHours;
 
     @Column(nullable = false)

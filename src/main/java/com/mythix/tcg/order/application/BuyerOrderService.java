@@ -158,6 +158,7 @@ public class BuyerOrderService {
 
         if ("FULFILLED".equalsIgnoreCase(updatedStatus)) {
             transferOwnershipToBuyer(order);
+            auction.ifPresent(value -> value.setReceivedAt(java.time.Instant.now()));
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
             voucherService.releaseVoucherFromOrder(order);
@@ -183,6 +184,7 @@ public class BuyerOrderService {
         }
         if (delivered) {
             transferOwnershipToBuyer(order);
+            auction.setReceivedAt(java.time.Instant.now());
         } else {
             // Dispatch already deducted inventory. Resolve the order without assuming the cards were returned.
             auctionSettlementService.closeCancelledOrder(auction, false);

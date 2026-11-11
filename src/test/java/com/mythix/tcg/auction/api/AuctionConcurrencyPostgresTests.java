@@ -219,6 +219,89 @@ class AuctionConcurrencyPostgresTests {
         assertThat(users.findById(buyer.getId()).orElseThrow().isAuctionBanned()).isTrue();
     }
 
+    @Test
+    void pauseAndBidSerializeOnAuctionRow() throws Exception {
+        long id = saveDraft();
+        assertThat(statusOf(publish(id))).isEqualTo(200);
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        String buyer = fixtures.bearer(fixtures.user("USER", "NONE"));
+        List<MvcResult> results = race(
+            () -> pause(id, admin),
+            () -> mvc.perform(post("/api/auctions/{id}/bids", id).header("Authorization", buyer)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":150}")).andReturn());
+        assertThat(statusOf(results.getFirst())).isEqualTo(200);
+        assertThat(statusOf(results.getLast())).isIn(200, 409);
+        assertThat(jdbc.queryForObject("SELECT status FROM auctions WHERE id = ?", String.class, id)).isEqualTo("PAUSED");
+        assertThat(jdbc.queryForObject("SELECT bid_count FROM auctions WHERE id = ?", Integer.class, id))
+            .isEqualTo(statusOf(results.getLast()) == 200 ? 1 : 0);
+        assertThat(auctionReserved()).isEqualTo(1);
+    }
+
+    @Test
+    void pauseAndBuyoutHaveExactlyOneWinner() throws Exception {
+        var draft = photos(setup(draft(), product.getId(), "100", "NOW", "24"))
+            .param("buyItNowPrice", "900").header("Authorization", sellerAuth);
+        long id = json.readTree(mvc.perform(draft).andExpect(status().isCreated()).andReturn()
+            .getResponse().getContentAsByteArray()).path("id").asLong();
+        assertThat(statusOf(publish(id))).isEqualTo(200);
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        String buyer = fixtures.bearer(fixtures.user("USER", "NONE"));
+        List<MvcResult> results = race(() -> pause(id, admin),
+            () -> mvc.perform(post("/api/auctions/{id}/buyout", id).header("Authorization", buyer)).andReturn());
+        assertThat(results).extracting(AuctionConcurrencyPostgresTests::statusOf).containsExactlyInAnyOrder(200, 409);
+        boolean paused = statusOf(results.getFirst()) == 200;
+        assertThat(jdbc.queryForObject("SELECT status FROM auctions WHERE id = ?", String.class, id))
+            .isEqualTo(paused ? "PAUSED" : "AWAITING_BUYER_CONTACT");
+        assertThat(auctionReserved()).isEqualTo(paused ? 1 : 0);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM order_items WHERE local_card_id = ?", Integer.class,
+            product.getId())).isEqualTo(paused ? 0 : 1);
+    }
+
+    @Test
+    void simultaneousIdenticalDisputeDecisionsCreateOneAuditAndOneNotificationPerParticipant() throws Exception {
+        var draft = photos(setup(draft(), product.getId(), "100", "NOW", "24"))
+            .param("buyItNowPrice", "900").header("Authorization", sellerAuth);
+        long auctionId = json.readTree(mvc.perform(draft).andExpect(status().isCreated()).andReturn()
+            .getResponse().getContentAsByteArray()).path("id").asLong();
+        assertThat(statusOf(publish(auctionId))).isEqualTo(200);
+        User buyer = fixtures.user("USER", "NONE");
+        mvc.perform(post("/api/auctions/{id}/buyout", auctionId).header("Authorization", fixtures.bearer(buyer)))
+            .andExpect(status().isOk());
+        long orderId = jdbc.queryForObject("SELECT order_id FROM auctions WHERE id = ?", Long.class, auctionId);
+        long disputeId = jdbc.queryForObject("""
+            INSERT INTO auction_disputes (auction_id, order_id, buyer_id, seller_id, reason, status, created_at)
+            VALUES (?, ?, ?, ?, 'Damage', 'PENDING', CURRENT_TIMESTAMP) RETURNING id
+            """, Long.class, auctionId, orderId, buyer.getId(), product.getSeller().getId());
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        String path = "/api/admin/auction-disputes/" + disputeId + "/decide";
+        List<MvcResult> results = race(
+            () -> mvc.perform(post(path).header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"DISMISS\",\"reason\":\"Reviewed\"}")).andReturn(),
+            () -> mvc.perform(post(path).header("Authorization", admin).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"decision\":\"DISMISS\",\"reason\":\"Reviewed\"}")).andReturn());
+        assertThat(results).extracting(AuctionConcurrencyPostgresTests::statusOf).containsExactly(200, 200);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'AUCTION_DISPUTE_DECISION' AND target_id = ?",
+            Integer.class, Long.toString(disputeId))).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE title = 'Auction dispute' AND message = ?",
+            Integer.class, "A decision was recorded for auction #" + auctionId + ".")).isEqualTo(2);
+    }
+
+    @Test
+    void auditResponseRetainsIdentifierAfterActorAccountIsDeleted() throws Exception {
+        User deleted = fixtures.user("USER", "NONE");
+        jdbc.update("INSERT INTO audit_logs (actor_id, action, target_type, target_id, details, created_at) VALUES (?, 'AUCTION_BID', 'AUCTION', 'deleted-actor-test', '{}', CURRENT_TIMESTAMP)", deleted.getId());
+        jdbc.update("DELETE FROM users WHERE id = ?", deleted.getId());
+        String admin = fixtures.bearer(fixtures.user("ADMIN", "NONE"));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/admin/audit-logs")
+            .header("Authorization", admin).param("query", "deleted-actor-test"))
+            .andExpect(status().isOk())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.content[0].actorId").value(deleted.getId().toString()))
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.content[0].actorName").value("Deleted account"));
+    }
+    private MvcResult pause(long id, String auth) throws Exception {
+        return mvc.perform(post("/api/admin/auctions/{id}/pause", id).header("Authorization", auth)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"reason\":\"Review\"}")).andReturn();
+    }
     private long createPendingCase(User seller, User buyer) throws Exception {
         Product item = fixtures.product(seller, 1, "SHOW", "NM");
         String auth = fixtures.bearer(seller);

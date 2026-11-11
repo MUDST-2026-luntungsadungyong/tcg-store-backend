@@ -71,6 +71,7 @@ public final class AuctionExtendedDtos {
         BigDecimal buyItNowPrice,
         Instant startAt,
         Instant endAt,
+        Instant pausedAt,
         Instant serverTime,
         int bidCount,
         boolean isWatching,

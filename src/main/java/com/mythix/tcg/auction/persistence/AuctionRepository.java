@@ -39,6 +39,8 @@ public interface AuctionRepository extends JpaRepository<Auction, Long>, JpaSpec
 
     Page<Auction> findAllByStatus(Auction.Status status, Pageable pageable);
 
+    Page<Auction> findAllByStatusIn(Collection<Auction.Status> statuses, Pageable pageable);
+
     List<Auction> findAllByWinnerIdOrderByUpdatedAtDesc(Long winnerId);
 
     long countByWinnerIdAndStatusIn(Long winnerId, Collection<Auction.Status> statuses);
