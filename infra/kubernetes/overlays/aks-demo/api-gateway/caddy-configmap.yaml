@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcg-store-api-gateway-caddy
+data:
+  Caddyfile: |
+    tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com {
+        encode gzip
+
+        @api path /api /api/*
+        handle @api {
+            reverse_proxy tcg-store-backend.tcg-store-aks-demo.svc.cluster.local:80
+        }
+
+        handle {
+            respond "Not Found" 404
+        }
+    }
