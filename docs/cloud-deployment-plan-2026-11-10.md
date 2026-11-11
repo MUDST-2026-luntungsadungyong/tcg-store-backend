@@ -1,5 +1,12 @@
 # แผนขึ้น Cloud สำหรับ TCG Store: Azure AKS
 
+> **สถานะล่าสุด 11 พฤศจิกายน 2026:** frontend และ backend รันบน AKS จริงแล้วที่
+> <https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/> พร้อม HTTPS,
+> Caddy proxy `/api` ไปยัง backend, Neon demo branch และ backend CI/CD ที่
+> [deploy สำเร็จ](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/42942899284).
+> ส่วน Cloudflare Pages ด้านล่างเป็นแผนเดิมที่ยังไม่ได้ใช้; สิ่งที่ยังรอคือ
+> การเข้าถึง DNS ของ GoDaddy เพื่อผูก `tcgmihix.store`.
+
 ตรวจ provider/pricing และปรับแผน: 11 พฤศจิกายน 2026
 Domain ที่ผู้ใช้ให้มา: `tcgmihix.store` (จดทะเบียนกับ GoDaddy)
 ขอบเขต: frontend + backend + Neon เดิม; ไม่ย้าย database
