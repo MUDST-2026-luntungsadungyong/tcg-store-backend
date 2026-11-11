@@ -4,6 +4,12 @@ public final class NotificationTypes {
 
     public static final String ORDER_RESERVED = "ORDER_RESERVED";
     public static final String ORDER_STATUS_CHANGED = "ORDER_STATUS_CHANGED";
+    public static final String ORDER_PLACED_BUYER = "ORDER_PLACED_BUYER";
+    public static final String ORDER_CONFIRMED_BUYER = "ORDER_CONFIRMED_BUYER";
+    public static final String ORDER_CANCELLED_BUYER = "ORDER_CANCELLED_BUYER";
+    public static final String ORDER_CANCELLED_SELLER = "ORDER_CANCELLED_SELLER";
+    public static final String ORDER_FULFILLED_SELLER = "ORDER_FULFILLED_SELLER";
+    public static final String ORDER_SENT_BUYER = "ORDER_SENT_BUYER";
     public static final String SELLER_APPLICATION_SUBMITTED = "SELLER_APPLICATION_SUBMITTED";
     public static final String SELLER_APPLICATION_APPROVED = "SELLER_APPLICATION_APPROVED";
     public static final String SELLER_APPLICATION_REJECTED = "SELLER_APPLICATION_REJECTED";

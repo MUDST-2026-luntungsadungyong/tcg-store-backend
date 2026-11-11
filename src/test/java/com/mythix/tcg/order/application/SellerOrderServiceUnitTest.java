@@ -174,7 +174,7 @@ class SellerOrderServiceUnitTest {
 
         // Act
         when(userRepository.getReferenceById(2L)).thenReturn(seller);
-        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Sent package");
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Sent package", "TRACK-100");
 
         // Assert
         assertThat(response).isNotNull();
