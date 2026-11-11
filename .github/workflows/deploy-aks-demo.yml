@@ -94,7 +94,7 @@ jobs:
           [[ "$IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
           for manifest in infra/kubernetes/overlays/aks-demo/kustomization.yaml \
                           infra/kubernetes/overlays/aks-demo/migration/kustomization.yaml; do
-            sed -i -E "s#^    digest: sha256:[0-9a-f]{64}$#    digest: ${IMAGE_DIGEST}#" "$manifest"
+            sed -i -E "s|^    digest: sha256:[0-9a-f]{64}$|    digest: ${IMAGE_DIGEST}|" "$manifest"
             test "$(grep -Fxc "    digest: ${IMAGE_DIGEST}" "$manifest")" -eq 1
           done
           kubectl apply --dry-run=server -k infra/kubernetes/overlays/aks-demo
@@ -106,7 +106,7 @@ jobs:
           short_sha="${SOURCE_SHA:0:7}"
           job_name="tcg-store-backend-migration-${short_sha}"
           kubectl kustomize infra/kubernetes/overlays/aks-demo/migration |
-            sed "s#^  name: tcg-store-backend-migration$#  name: ${job_name}#" > "$RUNNER_TEMP/migration.yaml"
+            sed "s|^  name: tcg-store-backend-migration$|  name: ${job_name}|" > "$RUNNER_TEMP/migration.yaml"
           grep -Fq "  name: ${job_name}" "$RUNNER_TEMP/migration.yaml"
           kubectl apply --dry-run=server -f "$RUNNER_TEMP/migration.yaml"
           kubectl apply -f "$RUNNER_TEMP/migration.yaml"
