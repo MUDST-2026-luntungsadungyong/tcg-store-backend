@@ -337,6 +337,72 @@ class BuyerAuctionIntegrationTests {
         assertThat(users.findById(buyer2.getId()).orElseThrow().getAuctionStrikes()).isZero();
     }
 
+    @Test
+    void secondChanceSkipsBannedRunnerUpWhenSelectingRecipient() throws Exception {
+        User lowerBidder = fixtures.user("USER", "NONE");
+        Auction auction = createActiveAuction(new BigDecimal("400"), null, new BigDecimal("900"));
+        String room = "/api/auctions/" + auction.getId();
+        mvc.perform(post(room + "/bids").header("Authorization", fixtures.bearer(lowerBidder))
+            .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":400}"))
+            .andExpect(status().isOk());
+        mvc.perform(post(room + "/bids").header("Authorization", buyer2Auth)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":450}"))
+            .andExpect(status().isOk());
+        mvc.perform(post(room + "/buyout").header("Authorization", buyer1Auth)).andExpect(status().isOk());
+        Long orderId = auctions.findById(auction.getId()).orElseThrow().getOrderId();
+        mvc.perform(patch("/api/seller/orders/" + orderId + "/status").header("Authorization", sellerAuth)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"CANCELLED\",\"note\":\"No contact\",\"noBuyerContact\":true}"))
+            .andExpect(status().isOk());
+        buyer2.setAuctionBannedUntil(Instant.now().plus(1, ChronoUnit.DAYS));
+        users.saveAndFlush(buyer2);
+
+        var response = mvc.perform(post("/api/seller/auctions/" + auction.getId() + "/second-chance-offer")
+            .header("Authorization", sellerAuth)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.offerPrice").value(400)).andReturn();
+        long offerId = json.readTree(response.getResponse().getContentAsByteArray()).path("id").asLong();
+        assertThat(offers.findById(offerId).orElseThrow().getBidderId()).isEqualTo(lowerBidder.getId());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void bannedSecondChanceRecipientCannotAcceptButCanDeclineOrAcceptAfterBanExpires(boolean decline) throws Exception {
+        Auction auction = createActiveAuction(new BigDecimal("400"), null, new BigDecimal("900"));
+        String room = "/api/auctions/" + auction.getId();
+        mvc.perform(post(room + "/bids").header("Authorization", buyer2Auth)
+            .contentType(MediaType.APPLICATION_JSON).content("{\"amount\":400}"))
+            .andExpect(status().isOk());
+        mvc.perform(post(room + "/buyout").header("Authorization", buyer1Auth)).andExpect(status().isOk());
+        Long originalOrder = auctions.findById(auction.getId()).orElseThrow().getOrderId();
+        mvc.perform(patch("/api/seller/orders/" + originalOrder + "/status").header("Authorization", sellerAuth)
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"status\":\"CANCELLED\",\"note\":\"No contact\",\"noBuyerContact\":true}"))
+            .andExpect(status().isOk());
+        var response = mvc.perform(post("/api/seller/auctions/" + auction.getId() + "/second-chance-offer")
+            .header("Authorization", sellerAuth)).andExpect(status().isOk()).andReturn();
+        long offerId = json.readTree(response.getResponse().getContentAsByteArray()).path("id").asLong();
+        buyer2.setAuctionBannedUntil(Instant.now().plus(1, ChronoUnit.DAYS));
+        users.saveAndFlush(buyer2);
+        long orderCount = orders.count();
+        String respond = "/api/auctions/second-chance/" + offerId + "/respond";
+
+        mvc.perform(post(respond).param("accept", "true").header("Authorization", buyer2Auth))
+            .andExpect(status().isForbidden());
+        assertThat(offers.findById(offerId).orElseThrow().getStatus().name()).isEqualTo("PENDING");
+        assertThat(orders.count()).isEqualTo(orderCount);
+        assertThat(auctions.findById(auction.getId()).orElseThrow().getOrderId()).isEqualTo(originalOrder);
+
+        if (!decline) {
+            buyer2.setAuctionBannedUntil(Instant.now().minus(1, ChronoUnit.SECONDS));
+            users.saveAndFlush(buyer2);
+        }
+        mvc.perform(post(respond).param("accept", Boolean.toString(!decline)).header("Authorization", buyer2Auth))
+            .andExpect(status().isOk());
+        assertThat(offers.findById(offerId).orElseThrow().getStatus().name())
+            .isEqualTo(decline ? "REJECTED" : "ACCEPTED");
+        assertThat(orders.count()).isEqualTo(orderCount + (decline ? 0 : 1));
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void onlyAdminCanResolveASentAuctionAndRepeatIsSafe(boolean delivered) throws Exception {
