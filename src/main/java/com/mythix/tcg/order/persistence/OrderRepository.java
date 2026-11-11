@@ -18,6 +18,10 @@ import java.math.BigDecimal;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
+    @EntityGraph(attributePaths = {"buyer", "items", "items.seller"})
+    @Query("select distinct o from Order o where o.id = :id")
+    Optional<Order> findForEmailSummary(@Param("id") Long id);
+
     Optional<Order> findByOrderNumber(String orderNumber);
 
     Optional<Order> findByBuyerIdAndIdempotencyKey(Long buyerId, String idempotencyKey);

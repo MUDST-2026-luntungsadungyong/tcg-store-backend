@@ -8,6 +8,7 @@ import com.mythix.tcg.auction.persistence.AuctionDisputeEvidenceRepository;
 import com.mythix.tcg.auction.persistence.AuctionDisputeRepository;
 import com.mythix.tcg.auction.persistence.AuctionRepository;
 import com.mythix.tcg.notification.application.NotificationService;
+import com.mythix.tcg.notification.domain.NotificationTypes;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.user.domain.User;
@@ -79,5 +80,33 @@ class AuctionDisputeServiceTest {
         service.decide(1L, 4L, "DISMISS", "retry");
         assertThrows(AuctionException.class, () -> service.decide(1L, 4L, "RETURN", "change"));
         verify(audit, times(1)).save(any());
+    }
+
+    @Test
+    void decisionNotifiesBothParticipantsWithDisputeSpecificTypeAndActionPath() {
+        var admin = new User();
+        admin.setRole("ADMIN");
+        var buyer = new User();
+        var seller = new User();
+        when(users.findById(1L)).thenReturn(Optional.of(admin));
+        when(users.findById(7L)).thenReturn(Optional.of(buyer));
+        when(users.findById(8L)).thenReturn(Optional.of(seller));
+        var dispute = new AuctionDispute();
+        dispute.setId(41L);
+        dispute.setAuctionId(9L);
+        dispute.setStatus("PENDING");
+        dispute.setBuyerId(7L);
+        dispute.setSellerId(8L);
+        when(disputes.lock(41L)).thenReturn(Optional.of(dispute));
+        when(evidence.findRefs(41L)).thenReturn(List.of());
+
+        service.decide(1L, 41L, "FULL_REFUND", "item damaged");
+
+        verify(notifications).sendAuctionNotification(buyer, NotificationTypes.AUCTION_DISPUTE_DECIDED,
+            "Auction dispute decided", "Decision: Full refund. Reason: item damaged",
+            "/auction-disputes?disputeId=41");
+        verify(notifications).sendAuctionNotification(seller, NotificationTypes.AUCTION_DISPUTE_DECIDED,
+            "Auction dispute decided", "Decision: Full refund. Reason: item damaged",
+            "/auction-disputes?disputeId=41");
     }
 }

@@ -12,12 +12,12 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public interface NotificationEmailRepository extends JpaRepository<NotificationEmail, Long> {
-    @Query("select e from NotificationEmail e where e.sentAt is null and e.nextAttemptAt <= :now and (e.claimedUntil is null or e.claimedUntil < :now) order by e.nextAttemptAt asc, e.id asc")
+    @Query("select e from NotificationEmail e where e.sentAt is null and e.cancelledAt is null and e.failedAt is null and e.nextAttemptAt <= :now and (e.claimedUntil is null or e.claimedUntil < :now) order by e.nextAttemptAt asc, e.id asc")
     List<NotificationEmail> findDue(@Param("now") LocalDateTime now, Pageable pageable);
 
     @Modifying
     @Transactional
-    @Query("update NotificationEmail e set e.claimedUntil = :lease, e.attempts = e.attempts + 1 where e.id = :id and e.sentAt is null and e.nextAttemptAt <= :now and (e.claimedUntil is null or e.claimedUntil < :now)")
+    @Query("update NotificationEmail e set e.claimedUntil = :lease, e.attempts = e.attempts + 1 where e.id = :id and e.sentAt is null and e.cancelledAt is null and e.failedAt is null and e.nextAttemptAt <= :now and (e.claimedUntil is null or e.claimedUntil < :now)")
     int claim(@Param("id") Long id, @Param("now") LocalDateTime now, @Param("lease") LocalDateTime lease);
 
     @Modifying
@@ -29,4 +29,9 @@ public interface NotificationEmailRepository extends JpaRepository<NotificationE
     @Transactional
     @Query("update NotificationEmail e set e.claimedUntil = null, e.nextAttemptAt = :next, e.lastError = :error where e.id = :id")
     int reschedule(@Param("id") Long id, @Param("next") LocalDateTime next, @Param("error") String error);
+
+    @Modifying
+    @Transactional
+    @Query("update NotificationEmail e set e.failedAt = :now, e.claimedUntil = null, e.failureReason = :reason, e.lastError = :reason where e.id = :id")
+    int markFailed(@Param("id") Long id, @Param("now") LocalDateTime now, @Param("reason") String reason);
 }

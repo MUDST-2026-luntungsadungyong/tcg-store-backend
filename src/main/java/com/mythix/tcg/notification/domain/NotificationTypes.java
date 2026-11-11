@@ -21,6 +21,9 @@ public final class NotificationTypes {
     public static final String AUCTION_WATCHLIST_ENDING = "AUCTION_WATCHLIST_ENDING";
     public static final String AUCTION_SECOND_CHANCE = "AUCTION_SECOND_CHANCE";
     public static final String AUCTION_DEFAULTED_WARNING = "AUCTION_DEFAULTED_WARNING";
+    public static final String AUCTION_DISPUTE_OPENED = "AUCTION_DISPUTE_OPENED";
+    public static final String AUCTION_DISPUTE_EVIDENCE_ADDED = "AUCTION_DISPUTE_EVIDENCE_ADDED";
+    public static final String AUCTION_DISPUTE_DECIDED = "AUCTION_DISPUTE_DECIDED";
 
     private NotificationTypes() {
     }
