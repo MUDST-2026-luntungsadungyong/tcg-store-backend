@@ -113,7 +113,7 @@ Invoke-RestMethod https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/
 
 ## สิ่งที่ยังไม่ได้ทำ
 
-Custom domain `tcgmythix.store` ยังรอ Cloudflare nameserver activation/Pages Custom domains; ACR/AKS API origin ปัจจุบันยังเป็น Azure DNS label. หลังผูกโดเมนให้ทดสอบ homepage, `/api/health`, login และ WebSocket ผ่านโดเมนจริง. ระบบแจ้งเตือนปัจจุบันเป็น inbox ในแอป; backend ยังไม่มีตัวส่งอีเมล จึงต้องเลือก email provider และทำ sender authentication DNS ก่อนใช้อีเมลแจ้งเตือน.
+โดเมน `tcgmythix.store` และ sender domain สำหรับ Brevo ใช้งานแล้ว. AKS ตั้งค่า Brevo SMTP และ Kubernetes Secret สำหรับบัญชี SMTP แล้ว; ระบบส่งอีเมลยังปิดอยู่จนกว่าจะปล่อยโค้ดและ migration ใหม่ ตรวจคิวอีเมลที่รอส่ง แล้วจึงเปิดใช้งาน. ระบบ inbox ในแอปยังใช้งานตามปกติ.
 
 ## เอกสารอ้างอิง
 

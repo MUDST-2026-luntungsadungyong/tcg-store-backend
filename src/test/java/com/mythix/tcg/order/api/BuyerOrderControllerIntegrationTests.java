@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -31,6 +32,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -305,6 +307,43 @@ class BuyerOrderControllerIntegrationTests {
                 .andExpect(jsonPath("$.buyerId").doesNotExist())
                 .andExpect(jsonPath("$.sellerEmail").doesNotExist())
                 .andExpect(jsonPath("$.items").doesNotExist());
+    }
+
+    @Test
+    void buyerCancellationNotifiesEachSellerWithOrderLink() throws Exception {
+        mockMvc.perform(patch("/api/orders/" + buyerOrder.getId() + "/status")
+                        .header("Authorization", "Bearer " + buyerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"CANCELLED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        assertThat(notificationRepository.findAll()).anySatisfy(notification -> {
+            assertThat(notification.getRecipient().getId()).isEqualTo(seller.getId());
+            assertThat(notification.getOrder().getId()).isEqualTo(buyerOrder.getId());
+            assertThat(notification.getType()).isEqualTo("ORDER_CANCELLED_BUYER");
+            assertThat(notification.getActionPath()).isEqualTo("/workspace/orders?orderId=" + buyerOrder.getId());
+        });
+    }
+
+    @Test
+    void buyerFulfillmentNotifiesSellerWithOrderLink() throws Exception {
+        buyerOrder.setStatus("SENT");
+        orderRepository.save(buyerOrder);
+
+        mockMvc.perform(patch("/api/orders/" + buyerOrder.getId() + "/status")
+                        .header("Authorization", "Bearer " + buyerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"FULFILLED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FULFILLED"));
+
+        assertThat(notificationRepository.findAll()).anySatisfy(notification -> {
+            assertThat(notification.getRecipient().getId()).isEqualTo(seller.getId());
+            assertThat(notification.getOrder().getId()).isEqualTo(buyerOrder.getId());
+            assertThat(notification.getType()).isEqualTo("ORDER_FULFILLED_SELLER");
+            assertThat(notification.getActionPath()).isEqualTo("/workspace/orders?orderId=" + buyerOrder.getId());
+        });
     }
 }
 

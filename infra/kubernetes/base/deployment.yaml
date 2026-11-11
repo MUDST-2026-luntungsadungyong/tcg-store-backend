@@ -49,6 +49,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: tcg-store-backend-config
+            - secretRef:
+                name: tcg-store-mail-secrets
           env:
             - name: NEON_JDBC_URL
               valueFrom:

@@ -9,6 +9,7 @@ import com.mythix.tcg.collection.persistence.CollectionRepository;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.persistence.OrderItemRepository;
 import com.mythix.tcg.order.persistence.OrderRepository;
+import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.notification.persistence.NotificationRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
@@ -50,6 +51,7 @@ class CheckoutControllerIntegrationTests {
     @Autowired private JwtService jwtService;
     @Autowired private CartItemRepository cartItemRepository;
     @Autowired private OrderRepository orderRepository;
+    @Autowired private OrderStatusLogRepository orderStatusLogRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private OrderItemRepository orderItemRepository;
     @Autowired private ProductRepository productRepository;
@@ -65,6 +67,7 @@ class CheckoutControllerIntegrationTests {
     @BeforeEach
     void setUp() {
         notificationRepository.deleteAll();
+        orderStatusLogRepository.deleteAll();
         orderItemRepository.deleteAll();
         orderRepository.deleteAll();
         cartItemRepository.deleteAll();
@@ -113,6 +116,13 @@ class CheckoutControllerIntegrationTests {
                 assertThat(notification.getRecipient().getId()).isEqualTo(seller.getId());
                 assertThat(notification.getType()).isEqualTo("ORDER_RESERVED");
                 assertThat(notification.getOrder().getId()).isNotNull();
+                assertThat(notification.getActionPath()).startsWith("/workspace/orders?orderId=");
+            })
+            .anySatisfy(notification -> {
+                assertThat(notification.getRecipient().getId()).isEqualTo(buyer.getId());
+                assertThat(notification.getType()).isEqualTo("ORDER_PLACED_BUYER");
+                assertThat(notification.getOrder().getId()).isNotNull();
+                assertThat(notification.getActionPath()).startsWith("/orders/");
             });
     }
 

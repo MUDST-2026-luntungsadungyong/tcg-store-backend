@@ -162,6 +162,7 @@ public class CheckoutService {
         cartItemRepository.deleteAllInBatch(cartItems);
         orderRepository.flush();
         notificationService.notifySellersOfReservation(saved);
+        notificationService.notifyBuyerOrderPlaced(saved);
         return toResponse(saved);
     }
 

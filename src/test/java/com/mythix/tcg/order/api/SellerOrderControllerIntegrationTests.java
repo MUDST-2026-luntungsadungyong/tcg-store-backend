@@ -222,9 +222,11 @@ class SellerOrderControllerIntegrationTests {
         mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
                 .header("Authorization", "Bearer " + sellerToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\":\"SENT\", \"note\":\"sent\"}"))
+                .content("{\"status\":\"SENT\", \"note\":\"sent\", \"trackingNumber\":\"TEST123456\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("SENT"));
+                .andExpect(jsonPath("$.status").value("SENT"))
+                .andExpect(jsonPath("$.trackingNumber").value("TEST123456"))
+                .andExpect(jsonPath("$.shippingCarrier").value("sent"));
 
         Order updated = orderRepository.findById(sellerOrder.getId()).orElseThrow();
         assertThat(updated.getStatus()).isEqualTo("SENT");
@@ -238,8 +240,46 @@ class SellerOrderControllerIntegrationTests {
             .anySatisfy(notification -> {
                 assertThat(notification.getRecipient().getId()).isEqualTo(buyer.getId());
                 assertThat(notification.getOrder().getId()).isEqualTo(sellerOrder.getId());
-                assertThat(notification.getType()).isEqualTo("ORDER_STATUS_CHANGED");
+                assertThat(notification.getType()).isEqualTo("ORDER_SENT_BUYER");
+                assertThat(notification.getActionPath()).isEqualTo("/orders/" + sellerOrder.getId());
             });
+    }
+
+    @Test
+    void updateOrderStatus_Confirmed_NotifiesBuyerWithOrderLink() throws Exception {
+        sellerOrder.setStatus("PENDING");
+        orderRepository.save(sellerOrder);
+
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"CONFIRMED\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        assertThat(notificationRepository.findAll()).anySatisfy(notification -> {
+            assertThat(notification.getRecipient().getId()).isEqualTo(buyer.getId());
+            assertThat(notification.getOrder().getId()).isEqualTo(sellerOrder.getId());
+            assertThat(notification.getType()).isEqualTo("ORDER_CONFIRMED_BUYER");
+            assertThat(notification.getActionPath()).isEqualTo("/orders/" + sellerOrder.getId());
+        });
+    }
+
+    @Test
+    void updateOrderStatus_Cancelled_NotifiesBuyer() throws Exception {
+        mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
+                .header("Authorization", "Bearer " + sellerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"status\":\"CANCELLED\", \"note\":\"cancel\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        assertThat(notificationRepository.findAll()).anySatisfy(notification -> {
+            assertThat(notification.getRecipient().getId()).isEqualTo(buyer.getId());
+            assertThat(notification.getOrder().getId()).isEqualTo(sellerOrder.getId());
+            assertThat(notification.getType()).isEqualTo("ORDER_CANCELLED_SELLER");
+            assertThat(notification.getActionPath()).isEqualTo("/orders/" + sellerOrder.getId());
+        });
     }
 
     @Test
@@ -266,7 +306,7 @@ class SellerOrderControllerIntegrationTests {
         mockMvc.perform(patch("/api/seller/orders/" + sellerOrder.getId() + "/status")
                 .header("Authorization", "Bearer " + sellerToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"status\":\"SENT\", \"note\":\"sent\"}"))
+                .content("{\"status\":\"SENT\", \"note\":\"sent\", \"trackingNumber\":\"TEST123456\"}"))
                 .andExpect(status().isOk());
 
         // Attempt to cancel an already fulfilled order should fail

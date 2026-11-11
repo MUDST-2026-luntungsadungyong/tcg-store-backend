@@ -100,10 +100,18 @@ public class SellerOrderService {
         String effectiveNote = note != null ? note.trim() : "";
 
         if ("SENT".equalsIgnoreCase(updatedStatus)) {
-            if (effectiveTracking.isEmpty() && effectiveNote.isEmpty()) {
+            if (effectiveTracking.isEmpty()) {
                 throw new OrderStatusValidationException("trackingNumber",
                         "Tracking number is required when marking order as SENT");
             }
+            if (effectiveTracking.length() > 120) {
+                throw new OrderStatusValidationException("trackingNumber", "Tracking number is too long");
+            }
+            if (effectiveNote.length() > 120) {
+                throw new OrderStatusValidationException("note", "Shipping carrier is too long");
+            }
+            order.setTrackingNumber(effectiveTracking);
+            order.setShippingCarrier(effectiveNote.isEmpty() ? null : effectiveNote);
             deductInventoryOnSend(order);
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
@@ -136,7 +144,11 @@ public class SellerOrderService {
                 .build();
         orderStatusLogRepository.save(log);
 
-        if ("SENT".equalsIgnoreCase(updatedStatus)) {
+        if ("CONFIRMED".equalsIgnoreCase(updatedStatus)) {
+            notificationService.notifyBuyerOrderConfirmed(saved);
+        } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
+            notificationService.notifyBuyerOfSellerCancellation(saved, note);
+        } else if ("SENT".equalsIgnoreCase(updatedStatus)) {
             notificationService.notifyBuyerOrderSent(saved);
         }
         return mapToSellerOrderResponse(saved, sellerId);
@@ -379,6 +391,8 @@ public class SellerOrderService {
                 order.getId(),
                 order.getOrderNumber(),
                 order.getStatus(),
+                order.getTrackingNumber(),
+                order.getShippingCarrier(),
                 order.getOrderType(),
                 buyer != null ? buyer.getId() : null,
                 buyer != null ? buyer.getFullName() : null,

@@ -21,6 +21,7 @@ import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.collection.application.CollectionService;
 import com.mythix.tcg.collection.api.CollectionDto.AddToCollectionRequest;
 import com.mythix.tcg.voucher.application.VoucherService;
+import com.mythix.tcg.notification.application.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -47,6 +48,7 @@ public class BuyerOrderService {
     private final UserRepository userRepository;
     private final CollectionService collectionService;
     private final VoucherService voucherService;
+    private final NotificationService notificationService;
     private final com.mythix.tcg.auction.application.AuctionSettlementService auctionSettlementService;
     private final CartService cartService;
     private final InvoicePdfService invoicePdfService;
@@ -165,7 +167,13 @@ public class BuyerOrderService {
             auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, false));
         }
 
-        return mapToBuyerOrderResponse(saveStatus(order, updatedStatus, buyerId, "BUYER", note));
+        Order saved = saveStatus(order, updatedStatus, buyerId, "BUYER", note);
+        if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
+            notificationService.notifySellersOfBuyerCancellation(saved, note);
+        } else if ("FULFILLED".equalsIgnoreCase(updatedStatus)) {
+            notificationService.notifySellersOfBuyerFulfillment(saved);
+        }
+        return mapToBuyerOrderResponse(saved);
     }
 
     @Transactional
@@ -326,6 +334,8 @@ public class BuyerOrderService {
                 .sellerFacebook(seller != null ? seller.getContactFacebook() : null)
                 .sellerOtherContact(seller != null ? seller.getContactOther() : null)
                 .status(order.getStatus())
+                .trackingNumber(order.getTrackingNumber())
+                .shippingCarrier(order.getShippingCarrier())
                 .totalAmount(order.getTotalAmount())
                 .totalPrice(order.getTotalAmount())
                 .subtotalAmount(order.getSubtotalAmount() != null ? order.getSubtotalAmount() : order.getTotalAmount())
