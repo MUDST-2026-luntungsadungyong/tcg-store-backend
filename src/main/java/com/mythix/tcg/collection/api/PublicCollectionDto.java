@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
 
 /** Public, buyer-safe representations used by the homepage leaderboard and profiles. */
 public final class PublicCollectionDto {
@@ -88,6 +89,7 @@ public final class PublicCollectionDto {
         private PublicCollector owner;
         private List<CollectionDto.CollectionItemResponse> items;
         private CollectionDto.PageMetadata page;
+        private CollectionComparisonResponse comparison;
     }
 
     @Data
@@ -99,10 +101,41 @@ public final class PublicCollectionDto {
         private String userId;
         private String displayName;
         private String avatarUrl;
+        private Long totalCardsCount;
         private long rareCardCount;
         private long distinctRareCardCount;
+        private Long secretRareCount;
+        private List<String> badges;
         private String role;
         private String sellerStatus;
         private String collectionPrivacy;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class CollectionComparisonResponse {
+        private String targetUserId;
+        private String visitorUserId;
+        private int totalTargetDistinctCards;
+        private int sharedDistinctCards;
+        private int missingDistinctCards;
+        private Map<String, Integer> ownedQuantities;
+        private List<CardComparisonEntry> items;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class CardComparisonEntry {
+        private String cardId;
+        private String cardName;
+        private int targetQuantity;
+        private int visitorQuantity;
+        private boolean owned;
     }
 }

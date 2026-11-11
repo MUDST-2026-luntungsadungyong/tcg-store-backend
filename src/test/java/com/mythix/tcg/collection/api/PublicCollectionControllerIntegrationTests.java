@@ -1,6 +1,7 @@
 package com.mythix.tcg.collection.api;
 
-import tools.jackson.databind.ObjectMapper;
+import com.mythix.tcg.auth.api.RegisterRequest;
+import com.mythix.tcg.auth.application.AuthService;
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.catalog.persistence.CardRepository;
 import com.mythix.tcg.cart.persistence.CartItemRepository;
@@ -23,6 +24,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -36,6 +38,9 @@ class PublicCollectionControllerIntegrationTests {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private AuthService authService;
 
     @Autowired
     private UserRepository userRepository;
@@ -154,7 +159,7 @@ class PublicCollectionControllerIntegrationTests {
     @Test
     void publicCollectionIsReadableWithoutAuthentication() throws Exception {
         User owner = saveUser("Public Collector", "public@example.com");
-        Card rare = saveCard("public-rare", "Rare Holo");
+        Card rare = saveCard("public-rare", "Secret Rare");
         saveItem(owner, rare, 2);
 
         mockMvc.perform(get("/api/collections/" + owner.getId()))
@@ -162,9 +167,38 @@ class PublicCollectionControllerIntegrationTests {
                 .andExpect(jsonPath("$.owner.userId").value(String.valueOf(owner.getId())))
                 .andExpect(jsonPath("$.owner.displayName").value("Public Collector"))
                 .andExpect(jsonPath("$.owner.rareCardCount").value(2))
+                .andExpect(jsonPath("$.owner.secretRareCount").value(2))
+                .andExpect(jsonPath("$.owner.badges", hasItem("Secret Rare Hunter")))
                 .andExpect(jsonPath("$.items", hasSize(1)))
                 .andExpect(jsonPath("$.items[0].quantity").value(2))
                 .andExpect(jsonPath("$.owner.email").doesNotExist());
+    }
+
+    @Test
+    void compareCollectionReturnsOwnedAndMissingQuantitiesForVisitor() throws Exception {
+        User owner = saveUser("Showcase Owner", "owner@example.com");
+        var visitorAuth = authService.register(new RegisterRequest("Visitor Collector", "visitor@example.com", "password123"));
+        User visitor = userRepository.findById(Long.valueOf(visitorAuth.user().id())).orElseThrow();
+
+        Card sharedCard = saveCard("charizard-sar", "Secret Rare");
+        Card missingCard = saveCard("mewtwo-ur", "Ultra Rare");
+
+        saveItem(owner, sharedCard, 3);
+        saveItem(owner, missingCard, 1);
+        saveItem(visitor, sharedCard, 2);
+
+        mockMvc.perform(get("/api/public/collections/" + owner.getId() + "/compare")
+                        .header("Authorization", "Bearer " + visitorAuth.token())
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.targetUserId").value(String.valueOf(owner.getId())))
+                .andExpect(jsonPath("$.visitorUserId").value(String.valueOf(visitor.getId())))
+                .andExpect(jsonPath("$.totalTargetDistinctCards").value(2))
+                .andExpect(jsonPath("$.sharedDistinctCards").value(1))
+                .andExpect(jsonPath("$.missingDistinctCards").value(1))
+                .andExpect(jsonPath("$.ownedQuantities.charizard-sar").value(2))
+                .andExpect(jsonPath("$.ownedQuantities.mewtwo-ur").value(0))
+                .andExpect(jsonPath("$.items", hasSize(2)));
     }
 
     @Test
