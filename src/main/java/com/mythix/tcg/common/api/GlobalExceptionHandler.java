@@ -364,4 +364,16 @@ public class GlobalExceptionHandler {
             .body(new ApiError("VOUCHER_NOT_APPLICABLE", exception.getMessage(), Map.of()));
     }
 
+    @ExceptionHandler(VoucherCodeAlreadyExistsException.class)
+    public ResponseEntity<ApiError> voucherCodeAlreadyExists(VoucherCodeAlreadyExistsException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("VOUCHER_CODE_EXISTS", exception.getMessage(), Map.of("code", exception.getMessage())));
+    }
+
+    @ExceptionHandler(VoucherValidationException.class)
+    public ResponseEntity<ApiError> voucherValidation(VoucherValidationException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_VALIDATION_ERROR", exception.getMessage(), exception.getFieldErrors()));
+    }
+
 }

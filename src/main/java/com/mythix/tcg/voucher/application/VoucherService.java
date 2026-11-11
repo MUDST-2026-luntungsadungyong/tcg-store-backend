@@ -4,6 +4,7 @@ import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import com.mythix.tcg.voucher.api.VoucherDto.*;
+import com.mythix.tcg.voucher.api.VoucherLiveUpdates;
 import com.mythix.tcg.voucher.application.VoucherExceptions.*;
 import com.mythix.tcg.voucher.domain.UserVoucher;
 import com.mythix.tcg.voucher.domain.Voucher;
@@ -11,13 +12,18 @@ import com.mythix.tcg.voucher.persistence.UserVoucherRepository;
 import com.mythix.tcg.voucher.persistence.VoucherRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -30,8 +36,39 @@ public class VoucherService {
     private final VoucherRepository voucherRepository;
     private final UserVoucherRepository userVoucherRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_DATE_TIME;
+    public static String formatIsoOffset(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        return dateTime.atZone(ZoneId.systemDefault())
+            .toOffsetDateTime()
+            .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+    }
+
+    public static LocalDateTime parseIsoDateTime(String raw, String fieldName) {
+        if (raw == null || raw.trim().isEmpty()) {
+            throw new VoucherValidationException(fieldName, fieldName + " is required");
+        }
+        String trimmed = raw.trim();
+        ZoneId zone = ZoneId.systemDefault();
+        try {
+            return OffsetDateTime.parse(trimmed).atZoneSameInstant(zone).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Try Instant or LocalDateTime below.
+        }
+        try {
+            return Instant.parse(trimmed).atZone(zone).toLocalDateTime();
+        } catch (DateTimeParseException ignored) {
+            // Try plain LocalDateTime below.
+        }
+        try {
+            return LocalDateTime.parse(trimmed);
+        } catch (DateTimeParseException exception) {
+            throw new VoucherValidationException(fieldName, "Invalid date/time format for " + fieldName);
+        }
+    }
 
     @Transactional(readOnly = true)
     public List<VoucherResponse> getAllAvailableVouchers(Long userId) {
@@ -66,8 +103,8 @@ public class VoucherService {
                     v.getUsedQuota(),
                     remaining,
                     percentage,
-                    v.getStartTime() != null ? v.getStartTime().format(ISO_FORMATTER) : null,
-                    v.getEndTime() != null ? v.getEndTime().format(ISO_FORMATTER) : null,
+                    formatIsoOffset(v.getStartTime()),
+                    formatIsoOffset(v.getEndTime()),
                     v.getIsActive(),
                     isClaimed,
                     canClaim
@@ -108,6 +145,7 @@ public class VoucherService {
             .build();
 
         UserVoucher saved = userVoucherRepository.save(userVoucher);
+        publishChange("CLAIMED", voucher.getId());
         return toUserVoucherResponse(saved);
     }
 
@@ -242,6 +280,7 @@ public class VoucherService {
         order.setVoucherCodeSnapshot(voucher.getCode());
         order.setDiscountAmount(discount);
 
+        publishChange("REDEEMED", voucher.getId());
         return discount;
     }
 
@@ -251,8 +290,10 @@ public class VoucherService {
             return;
         }
         Voucher voucher = voucherRepository.findByIdForUpdate(order.getVoucher().getId()).orElse(null);
+        boolean released = false;
         if (voucher != null && voucher.getUsedQuota() > 0) {
             voucher.setUsedQuota(voucher.getUsedQuota() - 1);
+            released = true;
         }
 
         if (order.getBuyer() != null && voucher != null) {
@@ -264,6 +305,16 @@ public class VoucherService {
                         uv.setOrder(null);
                     }
                 });
+        }
+
+        if (released && voucher != null) {
+            publishChange("RELEASED", voucher.getId());
+        }
+    }
+
+    private void publishChange(String eventType, Long voucherId) {
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new VoucherLiveUpdates.Changed(eventType, voucherId));
         }
     }
 
@@ -280,9 +331,11 @@ public class VoucherService {
             v.getMinSpend(),
             v.getMaxDiscountAmount(),
             uv.getStatus(),
-            uv.getClaimedAt() != null ? uv.getClaimedAt().format(ISO_FORMATTER) : null,
-            uv.getUsedAt() != null ? uv.getUsedAt().format(ISO_FORMATTER) : null,
-            v.getEndTime() != null ? v.getEndTime().format(ISO_FORMATTER) : null
+            formatIsoOffset(uv.getClaimedAt()),
+            formatIsoOffset(uv.getUsedAt()),
+            formatIsoOffset(v.getEndTime()),
+            v.getIsActive(),
+            formatIsoOffset(v.getStartTime())
         );
     }
 }
