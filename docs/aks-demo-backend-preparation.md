@@ -88,4 +88,4 @@ The federated identity `id-tcg-github-aks-demo` is limited to ACR push and
 admin credentials for this demo AKS cluster. No Azure client secret is stored
 in GitHub. The frontend deploys through Cloudflare Pages Git integration from
 `main`; its former AKS deployment workflow was removed.
-The purchased domain `tcgmihix.store` still needs DNS access at GoDaddy.
+The purchased domain `tcgmythix.store` has Cloudflare nameservers set in GoDaddy and is waiting for DNS activation and Pages custom-domain setup.

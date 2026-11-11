@@ -8,10 +8,10 @@
 > Neon demo branch เชื่อมต่อได้, `/api/health` ผ่าน Pages ตอบ `UP` และ
 > WebSocket ตอบ `101 Switching Protocols`. Frontend และ backend deploy จาก
 > GitHub `main` อัตโนมัติ. ดู [API gateway runbook](../infra/kubernetes/overlays/aks-demo/api-gateway/README.md).
-> การผูก `tcgmihix.store` ยังรอการเข้าถึง DNS ของ GoDaddy.
+> GoDaddy ตั้ง Cloudflare nameservers ให้ `tcgmythix.store` แล้ว; รอ DNS activation และผูก Pages Custom domains.
 
 ตรวจ provider/pricing และปรับแผน: 11 พฤศจิกายน 2026
-Domain ที่ผู้ใช้ให้มา: `tcgmihix.store` (จดทะเบียนกับ GoDaddy)
+Domain ที่ผู้ใช้ให้มา: `tcgmythix.store` (จดทะเบียนกับ GoDaddy)
 ขอบเขต: frontend + backend + Neon เดิม; ไม่ย้าย database
 
 ## ข้อสรุป
@@ -25,7 +25,7 @@ Domain ที่ผู้ใช้ให้มา: `tcgmihix.store` (จดท�
 
 ส่วนที่เปิดให้ผู้ใช้เข้าถึงแล้วและงาน DNS ที่เหลือ:
 
-- **Frontend/domain:** Cloudflare Pages ให้บริการ `https://tcg-store-frontend.pages.dev/` แล้ว; `tcgmihix.store` และ `www` ยังรอ DNS
+- **Frontend/domain:** Cloudflare Pages ให้บริการ `https://tcg-store-frontend.pages.dev/` แล้ว; `tcgmythix.store` และ `www` ยังรอ DNS
 - **Backend/Kubernetes:** AKS Free tier ที่สร้างแล้วใน Malaysia West; worker VM, disk และ network คิดแยกจาก control plane
 - **API route:** Pages Function ส่ง `/api` ไปยัง AKS HTTPS API gateway; backend Service ภายในคลัสเตอร์ยังเป็น `ClusterIP`
 - **Database:** ใช้ Neon demo branch ที่แยกจาก development สำหรับ AKS; คง production branch เดิมไว้
@@ -97,15 +97,15 @@ flowchart LR
 
 Pages Function route ใช้ `functions/api/[[path]].ts` รับ `/api` และ subpaths แล้วส่งต่อไปยัง HTTPS AKS origin โดยรักษา method, path/query, Authorization, content type และ body; API response ตั้ง `no-store` และ WebSocket upgrade ส่งต่อได้ ([Pages Function routing](https://developers.cloudflare.com/pages/functions/routing/)). `API_ORIGIN` ตั้งใน Pages Production เป็น Azure HTTPS origin ปัจจุบัน.
 
-ผู้ใช้หน้าเว็บเรียก API ผ่าน `tcg-store-frontend.pages.dev/api`; Pages Functions free limit 100k/day เป็นเพดานหลักของ proxy. หลังผูก `tcgmihix.store` ให้ทดสอบ hostname ใหม่และ CORS อีกครั้ง
+ผู้ใช้หน้าเว็บเรียก API ผ่าน `tcg-store-frontend.pages.dev/api`; Pages Functions free limit 100k/day เป็นเพดานหลักของ proxy. หลังผูก `tcgmythix.store` ให้ทดสอบ hostname ใหม่และ CORS อีกครั้ง
 
 ## Domain และ DNS (GoDaddy → Cloudflare)
 
-1. เพิ่ม `tcgmihix.store` เป็น Cloudflare zone ด้วย Free plan; domain ยังคงจดทะเบียน/ต่ออายุกับ GoDaddy
+1. เพิ่ม `tcgmythix.store` เป็น Cloudflare zone ด้วย Free plan; domain ยังคงจดทะเบียน/ต่ออายุกับ GoDaddy
 2. ก่อนเปลี่ยน nameservers ตรวจ DNS records เดิมและเก็บ MX/TXT/CNAME ที่ยังใช้ (เช่น email, verification); ถ้ามี DNSSEC/DS record ให้ทำตามขั้นตอน Cloudflare ก่อนย้าย
 3. คัดลอก nameservers ที่ Cloudflare จัดให้ แล้วเปลี่ยน authoritative nameservers ที่ GoDaddy; หลังจากนั้นจัดการ DNS records ผ่าน Cloudflare DNS
-4. เชื่อม Pages project กับ apex `tcgmihix.store` ผ่านเมนู Custom domains ใน Pages; Cloudflare ระบุว่า apex domain ต้องใช้ Cloudflare nameservers/zone
-5. เพิ่ม `www.tcgmihix.store` เป็น custom domain แล้วตั้ง redirect ไป apex หรือกลับกันให้เหลือ canonical host เดียว
+4. เชื่อม Pages project กับ apex `tcgmythix.store` ผ่านเมนู Custom domains ใน Pages; Cloudflare ระบุว่า apex domain ต้องใช้ Cloudflare nameservers/zone
+5. เพิ่ม `www.tcgmythix.store` เป็น custom domain แล้วตั้ง redirect ไป apex หรือกลับกันให้เหลือ canonical host เดียว
 6. ตั้ง Pages production branch เป็น `main`; preview deployments ต้องไม่ชี้ Neon production
 7. ทดสอบ TLS, SPA refresh/deep routes, API proxy, login, upload/read/delete รูป และ browser console ก่อนเปิดใช้จริง
 
