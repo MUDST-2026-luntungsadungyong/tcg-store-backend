@@ -1,7 +1,8 @@
 # Azure AKS demo backend runbook
 
-Status on 11 November 2026: the backend and frontend are running on Azure
-Kubernetes Service. The public demo URL is
+Status on 11 November 2026: the backend and API-only Caddy gateway run on
+Azure Kubernetes Service. The frontend runs on Cloudflare Pages at
+<https://tcg-store-frontend.pages.dev/>. The public API origin is
 <https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/>.
 The Azure for Students subscription has $100 credit. Its policy allows resource
 deployment in `malaysiawest`, `indonesiacentral`, `japaneast`, `centralindia`, and
@@ -17,8 +18,8 @@ deployment in `malaysiawest`, `indonesiacentral`, `japaneast`, `centralindia`, a
 | Namespace | `tcg-store-aks-demo` |
 | Container registry | `tcgstorecimah2026.azurecr.io` (Basic, `centralindia`) |
 | Backend image | Pinned ACR digest from the successful `main` deployment workflow |
-| Frontend | Caddy/Vite on AKS; public Azure DNS label, HTTPS, and `/api` proxy |
-| Frontend TLS storage | `managed-csi` persistent volume claim |
+| API gateway | Plain Caddy on AKS; public Azure DNS label, HTTPS, and `/api` proxy; `/` returns 404 |
+| API gateway TLS storage | `managed-csi` persistent volume claim |
 | Database | Neon branch `aks-demo-2026-11-11`, forked from `development`; auto-deletes after seven days |
 | Budget | `tcg-aks-demo-20usd`, USD 20/month with 25%, 50%, and 75% email alerts |
 
@@ -52,10 +53,12 @@ In a second terminal, request `http://127.0.0.1:18080/api/health` and
 `http://127.0.0.1:18080/actuator/health/readiness`. On 11 November both
 reported `UP`; the API reported the database connected and 2,002 cards.
 The migration Job completed and the Deployment was `1/1 Available` on a Ready
-Azure node. The backend Service remains `ClusterIP`. The public frontend's
+Azure node. The backend Service remains `ClusterIP`. The public API gateway's
 Caddy proxy forwards `/api/*` to that Service over the cluster network. The
-homepage and a SPA route returned HTTP 200; public `/api/health` reported `UP`,
-the database connected, and 2,002 cards.
+AKS `/` returns 404 while the Cloudflare Pages homepage returns 200. Public
+`/api/health` through Pages reported `UP`, the database connected, and 2,002
+cards. A Pages login validation POST reached the backend and an auction
+WebSocket handshake returned HTTP 101.
 
 To redeploy, update both Kustomizations to the same new ACR digest, render and
 server dry-run the manifests, run the migration Job first, and only then apply
@@ -68,7 +71,7 @@ be deleted after use.
 
 AKS Free removes only the control-plane management charge. The Linux node's
 public retail price in Malaysia West was USD 0.22/hour on 11 November 2026;
-the OS disk, frontend Load Balancer, public IP, TLS storage disk, and network
+the OS disk, API gateway Load Balancer, public IP, TLS storage disk, and network
 add charges. ACR Basic was USD 0.17/day. The budget
 sends alerts but does not stop spending. Check Azure Cost Management daily.
 When the demo no longer needs to stay online, delete the dedicated resource
@@ -83,5 +86,6 @@ Flyway migration, and rolled out the API. See the successful
 [backend deploy run](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/42942899284).
 The federated identity `id-tcg-github-aks-demo` is limited to ACR push and
 admin credentials for this demo AKS cluster. No Azure client secret is stored
-in GitHub. The frontend has its own OIDC identity and deployment workflow.
+in GitHub. The frontend deploys through Cloudflare Pages Git integration from
+`main`; its former AKS deployment workflow was removed.
 The purchased domain `tcgmihix.store` still needs DNS access at GoDaddy.
