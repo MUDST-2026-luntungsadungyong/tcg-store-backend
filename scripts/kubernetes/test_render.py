@@ -55,6 +55,50 @@ class KubernetesRenderPolicyTests(unittest.TestCase):
         validate_manifests(self.rendered, "staging", self.config)
         self.assertEqual(2, sum(item.get("kind") == "Ingress" for item in self.rendered["application"]))
 
+    def test_api_uses_exact_named_secret_key_references(self):
+        deployment = next(item for item in self.rendered["application"] if item.get("kind") == "Deployment")
+        env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+        actual = {
+            (item["name"], ref["name"], ref["key"])
+            for item in env
+            if (ref := item.get("valueFrom", {}).get("secretKeyRef"))
+        }
+        expected = {
+            ("NEON_JDBC_URL", "tcg-store-backend-secrets", "neon-jdbc-url"),
+            ("NEON_DB_USERNAME", "tcg-store-backend-secrets", "neon-db-username"),
+            ("NEON_DB_PASSWORD", "tcg-store-backend-secrets", "neon-db-password"),
+            ("APP_JWT_SECRET", "tcg-store-backend-secrets", "app-jwt-secret"),
+            ("OBJECT_STORAGE_ACCESS_KEY", "tcg-store-backend-secrets", "object-storage-access-key"),
+            ("OBJECT_STORAGE_SECRET_KEY", "tcg-store-backend-secrets", "object-storage-secret-key"),
+            ("SMTP_USERNAME", "tcg-store-mail-secrets", "SMTP_USERNAME"),
+            ("SMTP_PASSWORD", "tcg-store-mail-secrets", "SMTP_PASSWORD"),
+        }
+        self.assertEqual(expected, actual)
+
+    def test_smtp_secret_keys_must_match_the_approved_mail_secret(self):
+        def mutate(documents):
+            deployment = next(item for item in documents["application"] if item.get("kind") == "Deployment")
+            username = next(item for item in deployment["spec"]["template"]["spec"]["containers"][0]["env"] if item.get("name") == "SMTP_USERNAME")
+            username["valueFrom"]["secretKeyRef"]["key"] = "SMTP_PASSWORD"
+        self.assert_policy_rejects(mutate)
+
+    def test_unapproved_mail_secret_key_is_rejected(self):
+        def mutate(documents):
+            deployment = next(item for item in documents["application"] if item.get("kind") == "Deployment")
+            deployment["spec"]["template"]["spec"]["containers"][0]["env"].append({
+                "name": "SMTP_HOST",
+                "valueFrom": {"secretKeyRef": {"name": "tcg-store-mail-secrets", "key": "SMTP_HOST"}},
+            })
+        self.assert_policy_rejects(mutate)
+
+    def test_external_secret_env_from_remains_forbidden(self):
+        def mutate(documents):
+            deployment = next(item for item in documents["application"] if item.get("kind") == "Deployment")
+            deployment["spec"]["template"]["spec"]["containers"][0].setdefault("envFrom", []).append({
+                "secretRef": {"name": "tcg-store-mail-secrets"},
+            })
+        self.assert_policy_rejects(mutate)
+
     def test_cloud_workloads_require_private_registry_pull_secret(self):
         deployment = next(item for item in self.rendered["application"] if item.get("kind") == "Deployment")
         migration = next(item for item in self.rendered["migration"] if item.get("kind") == "Job")

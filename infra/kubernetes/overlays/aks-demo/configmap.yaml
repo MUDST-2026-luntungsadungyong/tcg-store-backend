@@ -16,3 +16,10 @@ data:
   OBJECT_STORAGE_PATH_STYLE: "true"
   APP_LOG_LEVEL: INFO
   JPA_SHOW_SQL: "false"
+  APP_MAIL_ENABLED: "false"
+  APP_MAIL_FROM: notifications@tcgmythix.store
+  APP_PUBLIC_BASE_URL: https://tcgmythix.store
+  SMTP_HOST: smtp-relay.brevo.com
+  SMTP_PORT: "587"
+  SMTP_AUTH: "true"
+  SMTP_STARTTLS: "true"

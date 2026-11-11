@@ -78,6 +78,8 @@ public class BuyerOrderDto {
         private String sellerFacebook;
         private String sellerOtherContact;
         private String status;
+        private String trackingNumber;
+        private String shippingCarrier;
         private BigDecimal totalAmount;
         private BigDecimal totalPrice;
         private BigDecimal subtotalAmount;

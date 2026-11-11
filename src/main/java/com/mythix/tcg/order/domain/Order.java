@@ -44,6 +44,12 @@ public class Order {
     @Builder.Default
     private String status = "PENDING";
 
+    @Column(name = "tracking_number", length = 120)
+    private String trackingNumber;
+
+    @Column(name = "shipping_carrier", length = 120)
+    private String shippingCarrier;
+
     @Column(name = "subtotal_amount", nullable = false, precision = 12, scale = 2)
     @Builder.Default
     private BigDecimal subtotalAmount = BigDecimal.ZERO;
