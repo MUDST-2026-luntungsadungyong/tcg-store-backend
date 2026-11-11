@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
-import java.util.Map;
+import com.mythix.tcg.auth.application.PasswordResetService;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -20,6 +20,7 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
@@ -38,13 +39,14 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public Map<String, Boolean> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        return Map.of("exists", authService.demoAccountExists(request.email()));
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetService.requestReset(request.email());
     }
 
     @PostMapping("/reset-password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        authService.demoResetPassword(request.email(), request.newPassword());
+        passwordResetService.resetPassword(request.token(), request.newPassword());
     }
 }

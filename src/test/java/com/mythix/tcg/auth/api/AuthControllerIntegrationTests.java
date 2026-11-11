@@ -4,6 +4,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.mythix.tcg.user.persistence.UserRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
+import com.mythix.tcg.auth.persistence.PasswordResetTokenRepository;
+import com.mythix.tcg.notification.persistence.NotificationEmailRepository;
+import com.mythix.tcg.notification.application.SensitiveMailCipher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,7 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "app.auth.demo-reset-enabled=true")
+@SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AuthControllerIntegrationTests {
@@ -38,8 +41,14 @@ class AuthControllerIntegrationTests {
     @Autowired
     private SellerProfileRepository sellerProfileRepository;
 
+    @Autowired private PasswordResetTokenRepository resetTokens;
+    @Autowired private NotificationEmailRepository emailOutbox;
+    @Autowired private SensitiveMailCipher mailCipher;
+
     @BeforeEach
     void clearUsers() {
+        resetTokens.deleteAll();
+        emailOutbox.deleteAll();
         sellerProfileRepository.deleteAll();
         userRepository.deleteAll();
     }
@@ -80,28 +89,45 @@ class AuthControllerIntegrationTests {
     }
 
     @Test
-    void demoResetChecksEmailAndChangesBackendPassword() throws Exception {
-        mockMvc.perform(post("/api/auth/register")
+    void resetUsesSingleUseEmailTokenAndRevokesPreviousLogin() throws Exception {
+        String registered = mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"Naphat\",\"email\":\"naphat@example.com\",\"password\":\"password123\"}"))
-            .andExpect(status().isCreated());
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        String oldJwt = objectMapper.readTree(registered).path("token").asText();
 
         mockMvc.perform(post("/api/auth/forgot-password")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"missing@example.com\"}"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.exists").value(false));
+            .andExpect(status().isNoContent());
+        assertThat(emailOutbox.count()).isZero();
 
         mockMvc.perform(post("/api/auth/forgot-password")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"NAPHAT@example.com\"}"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.exists").value(true));
+            .andExpect(status().isNoContent());
+        var email = emailOutbox.findAll().get(0);
+        assertThat(email.isSensitive()).isTrue();
+        assertThat(email.getBody()).doesNotContain("reset-password", "token=");
+        String body = mailCipher.decrypt(email.getBody());
+        String token = body.split("token=")[1].split("\\n")[0];
+        assertThat(resetTokens.findAll().get(0).getTokenHash()).isNotEqualTo(token);
+
+        mockMvc.perform(post("/api/auth/forgot-password").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\":\"naphat@example.com\"}"))
+            .andExpect(status().isNoContent());
+        assertThat(emailOutbox.count()).isEqualTo(1);
 
         mockMvc.perform(post("/api/auth/reset-password")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"email\":\"naphat@example.com\",\"newPassword\":\"newpassword123\"}"))
+                .content("{\"token\":\"" + token + "\",\"newPassword\":\"newpassword123\"}"))
             .andExpect(status().isNoContent());
+
+        mockMvc.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"token\":\"" + token + "\",\"newPassword\":\"another-password\"}"))
+            .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + oldJwt))
+            .andExpect(status().isUnauthorized());
 
         mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -111,6 +137,29 @@ class AuthControllerIntegrationTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\":\"naphat@example.com\",\"password\":\"newpassword123\"}"))
             .andExpect(status().isOk());
+    }
+
+    @Test
+    void expiredAndSupersededLinksCannotResetPassword() throws Exception {
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"name\":\"Naphat\",\"email\":\"naphat@example.com\",\"password\":\"password123\"}"))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/auth/forgot-password").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"naphat@example.com\"}")).andExpect(status().isNoContent());
+        String first = mailCipher.decrypt(emailOutbox.findAll().get(0).getBody()).split("token=")[1].split("\\n")[0];
+        var record = resetTokens.findAll().get(0);
+        record.setCreatedAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(31));
+        record.setExpiresAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(1));
+        resetTokens.saveAndFlush(record);
+        mockMvc.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"token\":\"" + first + "\",\"newPassword\":\"newpassword123\"}"))
+            .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/auth/forgot-password").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"naphat@example.com\"}")).andExpect(status().isNoContent());
+        mockMvc.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"token\":\"" + first + "\",\"newPassword\":\"newpassword123\"}"))
+            .andExpect(status().isBadRequest());
+        assertThat(emailOutbox.count()).isEqualTo(2);
     }
 
     @Test

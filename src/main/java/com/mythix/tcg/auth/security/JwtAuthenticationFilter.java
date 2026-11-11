@@ -41,26 +41,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String rawToken = header.substring(7);
 
-        // Support local mock tokens for seamless frontend mock/local development
-        if (rawToken.startsWith("mock-jwt-token-") || rawToken.startsWith("mock-token-")) {
-            String email = rawToken.contains("admin") ? "admin@mythix.com" : rawToken.contains("seller") ? "seller@mythix.com" : "buyer@mythix.com";
-            User mockUser = userRepository.findByEmail(email).orElse(null);
-            if (mockUser != null) {
-                AuthenticatedUser user = new AuthenticatedUser(mockUser.getId(), mockUser.getEmail(), mockUser.getRole());
-                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                    user,
-                    null,
-                    List.of(new SimpleGrantedAuthority("ROLE_" + user.role()))
-                );
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-                filterChain.doFilter(request, response);
-                return;
-            }
-        }
-
         try {
             AuthenticatedUser user = jwtService.parseToken(rawToken);
+            User current = userRepository.findById(user.userId()).orElseThrow(() -> new IllegalArgumentException("Unknown user"));
+            if (current.getAuthVersion() != jwtService.authVersion(rawToken)) {
+                throw new IllegalArgumentException("Revoked token");
+            }
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 user,
                 null,

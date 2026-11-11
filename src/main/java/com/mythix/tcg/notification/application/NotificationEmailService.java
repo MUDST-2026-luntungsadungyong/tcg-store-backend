@@ -31,6 +31,7 @@ public class NotificationEmailService {
 
     private final NotificationEmailRepository outbox;
     private final JavaMailSender mailSender;
+    private final SensitiveMailCipher cipher;
 
     @Value("${app.mail.enabled:false}")
     private boolean enabled;
@@ -38,6 +39,18 @@ public class NotificationEmailService {
     private String from;
     @Value("${app.mail.base-url:http://localhost:5173}")
     private String baseUrl;
+
+    @Transactional
+    public void enqueueSensitive(String recipient, String subject, String body, LocalDateTime expiresAt) {
+        NotificationEmail email = new NotificationEmail();
+        email.setRecipientEmail(recipient);
+        email.setSubject(subject);
+        email.setBody(cipher.encrypt(body));
+        email.setSensitive(true);
+        email.setExpiresAt(expiresAt);
+        email.setNextAttemptAt(LocalDateTime.now(ZoneOffset.UTC));
+        outbox.save(email);
+    }
 
     @Transactional
     public void enqueue(UserNotification notification) {
@@ -99,11 +112,15 @@ public class NotificationEmailService {
             LocalDateTime claimedAt = LocalDateTime.now(ZoneOffset.UTC);
             if (outbox.claim(email.getId(), claimedAt, claimedAt.plusMinutes(2)) != 1) continue;
             try {
+                if (email.getExpiresAt() != null && !email.getExpiresAt().isAfter(claimedAt)) {
+                    outbox.markSent(email.getId(), claimedAt);
+                    continue;
+                }
                 SimpleMailMessage message = new SimpleMailMessage();
                 message.setFrom(from);
                 message.setTo(email.getRecipientEmail());
                 message.setSubject(email.getSubject());
-                message.setText(email.getBody());
+                message.setText(email.isSensitive() ? cipher.decrypt(email.getBody()) : email.getBody());
                 mailSender.send(message);
                 outbox.markSent(email.getId(), LocalDateTime.now(ZoneOffset.UTC));
             } catch (Exception error) {

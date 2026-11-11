@@ -5,6 +5,7 @@ import com.mythix.tcg.notification.domain.UserNotification;
 import com.mythix.tcg.notification.persistence.NotificationEmailRepository;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.user.domain.User;
+import com.mythix.tcg.auth.security.JwtProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
@@ -22,7 +23,8 @@ import static org.mockito.Mockito.*;
 class NotificationEmailServiceTest {
     private final NotificationEmailRepository outbox = mock(NotificationEmailRepository.class);
     private final JavaMailSender sender = mock(JavaMailSender.class);
-    private final NotificationEmailService service = new NotificationEmailService(outbox, sender);
+    private final NotificationEmailService service = new NotificationEmailService(outbox, sender,
+        new SensitiveMailCipher(new JwtProperties("test-secret-with-at-least-32-bytes", 60)));
 
     @BeforeEach
     void setUp() {
@@ -75,5 +77,35 @@ class NotificationEmailServiceTest {
         verify(sender).send(message.capture());
         assertThat(message.getValue().getTo()).containsExactly("buyer@test.com");
         verify(outbox).markSent(eq(4L), any(LocalDateTime.class));
+    }
+
+    @Test
+    void sensitiveEmailIsEncryptedAtRestAndDecryptedOnlyForSending() {
+        service.enqueueSensitive("buyer@test.com", "Reset", "https://example.test/reset?token=secret", LocalDateTime.now().plusMinutes(5));
+        var captured = org.mockito.ArgumentCaptor.forClass(NotificationEmail.class);
+        verify(outbox).save(captured.capture());
+        NotificationEmail email = captured.getValue();
+        email.setId(10L);
+        assertThat(email.getBody()).doesNotContain("secret", "https://");
+        when(outbox.findDue(any(), any())).thenReturn(List.of(email));
+        when(outbox.claim(eq(10L), any(), any())).thenReturn(1);
+        service.deliverDue();
+        var message = org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(sender).send(message.capture());
+        assertThat(message.getValue().getText()).contains("token=secret");
+        verify(outbox).markSent(eq(10L), any());
+    }
+
+    @Test
+    void expiredSensitiveMailIsDiscardedWithoutSending() {
+        NotificationEmail email = new NotificationEmail();
+        email.setId(11L);
+        email.setSensitive(true);
+        email.setExpiresAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(1));
+        when(outbox.findDue(any(), any())).thenReturn(List.of(email));
+        when(outbox.claim(eq(11L), any(), any())).thenReturn(1);
+        service.deliverDue();
+        verifyNoInteractions(sender);
+        verify(outbox).markSent(eq(11L), any());
     }
 }

@@ -11,3 +11,11 @@ On AKS, keep keys `SMTP_USERNAME` and `SMTP_PASSWORD` in the `tcg-store-mail-sec
 Email is sent for order reservations and placement, order cancellation, dispatch, seller application decisions, auction cancellation decisions, outbid and win events, actionable seller auction end, second chance, and default warnings. Confirmation and receipt acknowledgement remain in the web inbox only. Admin resolution of auction shipment is excluded from email notifications.
 
 Dispatch emails include the order tracking number and optional carrier. Marking an order as sent requires a nonblank tracking number. This validates presence, not whether the carrier recognizes the number.
+
+## Password recovery
+
+Apply V27 before deploying this release (or TiDB migration 006 on the separate TiDB path). Configure a stable `APP_JWT_SECRET`, `APP_PUBLIC_BASE_URL` and the SMTP settings above. The public base URL is the trusted origin used to build reset links; never derive it from incoming request headers. All API replicas must use the same JWT secret. Rotating that secret invalidates existing login tokens and any queued encrypted recovery emails.
+
+Password recovery requests always return 204 for a syntactically valid email. An existing account is limited to one recovery email per minute. Links expire after 30 minutes, a newer request invalidates its predecessor, and a successful reset invalidates existing JWT sessions. The database holds a SHA-256 token hash; the queued email body is encrypted with an authenticated key derived separately from the JWT secret, and is erased after sending or expiry. Expired recovery emails are discarded without delivery. The worker may retry transient SMTP failures, subject to the link expiry. Configure edge-level request throttling as well, especially for unknown accounts and distributed clients.
+
+`APP_MAIL_ENABLED` still gates the entire notification queue. Keep it disabled until SMTP credentials and sender identity are verified and existing queued notification mail has been reviewed; enabling it starts sending eligible queued mail. If mail is disabled or unavailable, recovery links can expire without delivery, and the user needs to request a fresh link after service is restored.

@@ -22,7 +22,7 @@ public interface NotificationEmailRepository extends JpaRepository<NotificationE
 
     @Modifying
     @Transactional
-    @Query("update NotificationEmail e set e.sentAt = :now, e.claimedUntil = null, e.lastError = null where e.id = :id")
+    @Query("update NotificationEmail e set e.sentAt = :now, e.claimedUntil = null, e.lastError = null, e.body = case when e.sensitive = true then '[removed]' else e.body end where e.id = :id")
     int markSent(@Param("id") Long id, @Param("now") LocalDateTime now);
 
     @Modifying
