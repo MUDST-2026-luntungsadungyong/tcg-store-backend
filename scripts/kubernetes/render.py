@@ -29,6 +29,11 @@ IMAGE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*@sha256:[a-fA-F0-9]{64}$")
 PLACEHOLDERS = re.compile(r"(\.invalid\b|REPLACE_ME|replace-with-|example\.com|changeme)", re.I)
 API_SECRET_KEYS = {"neon-jdbc-url", "neon-db-username", "neon-db-password", "app-jwt-secret", "object-storage-access-key", "object-storage-secret-key"}
 MIGRATION_SECRET_KEYS = {"neon-migration-jdbc-url", "neon-migration-db-username", "neon-migration-db-password"}
+API_SECRET_REFS = {("tcg-store-backend-secrets", key) for key in API_SECRET_KEYS} | {
+    ("tcg-store-mail-secrets", "SMTP_USERNAME"),
+    ("tcg-store-mail-secrets", "SMTP_PASSWORD"),
+}
+MIGRATION_SECRET_REFS = {("tcg-store-backend-secrets", key) for key in MIGRATION_SECRET_KEYS}
 RELEASE_MANAGER = "tcg-release"
 BOOTSTRAP_OR_EPHEMERAL_KINDS = {"Namespace", "ServiceAccount", "Job"}
 
@@ -428,8 +433,16 @@ def validate_manifests(manifests: dict[str, list[dict]], environment: str, confi
             sec = container.get("securityContext", {})
             if sec.get("allowPrivilegeEscalation") is not False or sec.get("readOnlyRootFilesystem") is not True or "ALL" not in sec.get("capabilities", {}).get("drop", []):
                 fail("containers must disable privilege escalation, use a read-only root, and drop all capabilities")
-    api_refs = {item["valueFrom"]["secretKeyRef"]["key"] for item in deploys[0]["spec"]["template"]["spec"]["containers"][0].get("env", []) if "secretKeyRef" in item.get("valueFrom", {})}
-    migration_refs = {item["valueFrom"]["secretKeyRef"]["key"] for item in jobs[0]["spec"]["template"]["spec"]["containers"][0].get("env", []) if "secretKeyRef" in item.get("valueFrom", {})}
+    api_refs = {
+        (item["valueFrom"]["secretKeyRef"].get("name"), item["valueFrom"]["secretKeyRef"].get("key"))
+        for item in deploys[0]["spec"]["template"]["spec"]["containers"][0].get("env", [])
+        if "secretKeyRef" in item.get("valueFrom", {})
+    }
+    migration_refs = {
+        (item["valueFrom"]["secretKeyRef"].get("name"), item["valueFrom"]["secretKeyRef"].get("key"))
+        for item in jobs[0]["spec"]["template"]["spec"]["containers"][0].get("env", [])
+        if "secretKeyRef" in item.get("valueFrom", {})
+    }
     for workload in (deploys[0], jobs[0]):
         pod = workload["spec"]["template"]["spec"]
         for container in pod.get("containers", []):
@@ -441,9 +454,13 @@ def validate_manifests(manifests: dict[str, list[dict]], environment: str, confi
                     secret_ref = entry.get("valueFrom", {}).get("secretKeyRef")
                     if not secret_ref:
                         fail("credential-bearing environment variables must use a named Secret key reference")
-                    if secret_ref.get("name") != "tcg-store-backend-secrets":
+                    env_name = entry.get("name")
+                    if env_name in {"SMTP_USERNAME", "SMTP_PASSWORD"}:
+                        if (secret_ref.get("name"), secret_ref.get("key")) != ("tcg-store-mail-secrets", env_name):
+                            fail("SMTP credentials must use their exact key in the external mail Secret")
+                    elif secret_ref.get("name") != "tcg-store-backend-secrets":
                         fail("credential environment variables must reference the external application Secret contract")
-    if environment != "local" and (api_refs != API_SECRET_KEYS or migration_refs != MIGRATION_SECRET_KEYS):
+    if environment != "local" and (api_refs != API_SECRET_REFS or migration_refs != MIGRATION_SECRET_REFS):
         fail("API/migration Secret key references violate the least-privilege contract")
     policies = [d for d in prerequisites if d.get("kind") == "NetworkPolicy"]
     if environment != "local" and not any(p.get("spec", {}).get("podSelector") == {} and set(p.get("spec", {}).get("policyTypes", [])) == {"Ingress", "Egress"} for p in policies):

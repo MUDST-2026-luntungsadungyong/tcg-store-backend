@@ -49,9 +49,17 @@ spec:
           envFrom:
             - configMapRef:
                 name: tcg-store-backend-config
-            - secretRef:
-                name: tcg-store-mail-secrets
           env:
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-mail-secrets
+                  key: SMTP_USERNAME
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: tcg-store-mail-secrets
+                  key: SMTP_PASSWORD
             - name: NEON_JDBC_URL
               valueFrom:
                 secretKeyRef:

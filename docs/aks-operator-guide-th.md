@@ -113,7 +113,7 @@ Invoke-RestMethod https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/
 
 ## สิ่งที่ยังไม่ได้ทำ
 
-โดเมน `tcgmythix.store` และ sender domain สำหรับ Brevo ใช้งานแล้ว. AKS ตั้งค่า Brevo SMTP และ Kubernetes Secret สำหรับบัญชี SMTP แล้ว; ระบบส่งอีเมลยังปิดอยู่จนกว่าจะปล่อยโค้ดและ migration ใหม่ ตรวจคิวอีเมลที่รอส่ง แล้วจึงเปิดใช้งาน. ระบบ inbox ในแอปยังใช้งานตามปกติ.
+โดเมน `tcgmythix.store` และ sender domain สำหรับ Brevo ใช้งานแล้ว. AKS ตั้งค่า Brevo SMTP และ Secret keys `SMTP_USERNAME`/`SMTP_PASSWORD` แล้ว; Deployment อ้างอิงเฉพาะสอง key นี้. ระบบส่งอีเมลยังปิดอยู่จนกว่าจะปล่อยโค้ดและ migration ใหม่ ตรวจคิวอีเมลที่รอส่ง แล้วจึงเปิดใช้งาน. ระบบ inbox ในแอปยังใช้งานตามปกติ.
 
 ## เอกสารอ้างอิง
 
