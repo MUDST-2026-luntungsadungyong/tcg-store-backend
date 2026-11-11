@@ -1,13 +1,13 @@
 # แผนขึ้น Cloud สำหรับ TCG Store: Azure AKS
 
-> **สถานะล่าสุด 11 พฤศจิกายน 2026:** frontend และ backend ยังรันบน AKS ที่
-> <https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/> พร้อม HTTPS,
-> Caddy proxy `/api` ไปยัง backend, Neon demo branch และ backend CI/CD ที่
-> [deploy สำเร็จ](https://github.com/MUDST-2026-luntungsadungyong/tcg-store-backend/actions/runs/42942899284).
-> **เป้าหมายที่ยืนยันแล้ว:** ให้ Cloudflare Pages เป็น frontend เพียงแห่งเดียว
-> และให้ AKS รับเฉพาะ backend API. กำลังรอบัญชี Cloudflare เพื่อเปิด Pages;
-> หลังทดสอบ URL `pages.dev` แล้วจึงสลับ Caddy บน AKS เป็น API-only gateway
-> ตาม [cutover runbook](../infra/kubernetes/overlays/aks-demo/api-gateway/README.md).
+> **สถานะล่าสุด 11 พฤศจิกายน 2026:** frontend เปิดใช้งานที่
+> <https://tcg-store-frontend.pages.dev/> บน Cloudflare Pages เพียงแห่งเดียว;
+> Pages Function ส่ง `/api` และ WebSocket ไปยัง AKS API gateway ที่
+> <https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/>. AKS รัน
+> backend Spring Boot และ Caddy สำหรับ API เท่านั้น; `/` ของ AKS ตอบ 404.
+> Neon demo branch เชื่อมต่อได้, `/api/health` ผ่าน Pages ตอบ `UP` และ
+> WebSocket ตอบ `101 Switching Protocols`. Frontend และ backend deploy จาก
+> GitHub `main` อัตโนมัติ. ดู [API gateway runbook](../infra/kubernetes/overlays/aks-demo/api-gateway/README.md).
 > การผูก `tcgmihix.store` ยังรอการเข้าถึง DNS ของ GoDaddy.
 
 ตรวจ provider/pricing และปรับแผน: 11 พฤศจิกายน 2026
@@ -19,18 +19,18 @@ Domain ที่ผู้ใช้ให้มา: `tcgmihix.store` (จดท�
 สถานะจริงหลังตั้งค่า Azure for Students:
 
 - **Backend ใช้งานแล้ว:** AKS Free tier ใน `malaysiawest`, โหนด `Standard_D4s_v4` 1 ตัว, Deployment `1/1 Available` และ migration Job `Complete`
-- **Registry:** ACR Basic `tcgstorecimah2026` ใน `centralindia`; build จาก backend `main` ล่าสุดบน Docker Desktop แล้ว push digest ที่ pin ใน AKS overlay เพราะ ACR Tasks ใช้ไม่ได้กับ subscription นักศึกษา
+- **Registry:** ACR Basic `tcgstorecimah2026` ใน `centralindia`; GitHub Actions build backend จาก `main` แล้ว push digest ที่ pin ไป AKS โดยใช้ GitHub OIDC
 - **Database:** Neon branch `aks-demo-2026-11-11` แยกจาก `development`, ลบอัตโนมัติ 18 พฤศจิกายน 2026; health check เชื่อมต่อได้และพบ 2,002 cards
 - **คุมค่าใช้จ่าย:** ตั้ง budget `tcg-aks-demo-20usd` ที่ USD 20/เดือน พร้อม alert 25%, 50%, 75%; budget แจ้งเตือนแต่ไม่หยุดค่าใช้จ่าย
 
-แผนสำหรับส่วนที่ยังต้องเปิดให้ผู้ใช้เข้าถึง:
+ส่วนที่เปิดให้ผู้ใช้เข้าถึงแล้วและงาน DNS ที่เหลือ:
 
-- **Frontend/domain:** Cloudflare Pages ให้บริการ `https://tcgmihix.store` และ `www.tcgmihix.store`
+- **Frontend/domain:** Cloudflare Pages ให้บริการ `https://tcg-store-frontend.pages.dev/` แล้ว; `tcgmihix.store` และ `www` ยังรอ DNS
 - **Backend/Kubernetes:** AKS Free tier ที่สร้างแล้วใน Malaysia West; worker VM, disk และ network คิดแยกจาก control plane
-- **API route สำหรับ demo แรก:** ใช้ AKS `ClusterIP` และ `kubectl port-forward`; ไม่มี domain จำเป็นสำหรับการพิสูจน์ว่าแอปรันบน Kubernetes จริงใน cloud
+- **API route:** Pages Function ส่ง `/api` ไปยัง AKS HTTPS API gateway; backend Service ภายในคลัสเตอร์ยังเป็น `ClusterIP`
 - **Database:** ใช้ Neon demo branch ที่แยกจาก development สำหรับ AKS; คง production branch เดิมไว้
 - **รูปภาพ:** Neon Object Storage แบบ S3-compatible หาก bucket มีอยู่ใน Neon แล้ว
-- **CI/CD:** branch `feat/aks-cloud-deploy` เตรียม `deploy-aks-demo.yml` ให้ทำงานหลัง `docker-build.yml` บน `main` สำเร็จ โดยใช้ GitHub OIDC build commit เดียวกันเข้า ACR, รัน migration แล้ว rollout AKS; ต้อง merge PR และตรวจ run แรกก่อนนับว่า automated deploy สำเร็จ
+- **CI/CD:** Cloudflare Pages deploy frontend จาก GitHub `main`; backend `deploy-aks-demo.yml` ทำงานหลัง `docker-build.yml` บน `main` สำเร็จ ใช้ GitHub OIDC ส่ง image เข้า ACR รัน migration แล้ว rollout AKS
 
 Cloudflare Pages เสิร์ฟ Vite frontend แบบ static ต่อไป ส่วน AKS เป็น Kubernetes backend ที่เลือกสำหรับงานส่งโปรเจกต์ เพราะบัญชี Google Cloud แบบจ่ายเงิน/เครดิตทดลองเดิมใช้ไม่ได้แล้ว การรัน Kubernetes ในเครื่องช่วยทดสอบ manifest แต่ไม่ผ่านเงื่อนไข Grade A ที่ต้องมี workload ทำงานบน cloud จริง AKS Free ยกเว้นเฉพาะค่าจัดการ control plane; worker ไม่ฟรี และต้องลบทรัพยากรหลัง demo
 
@@ -57,7 +57,7 @@ Cloudflare Pages เสิร์ฟ Vite frontend แบบ static ต่อไ�
 - Spring Boot / Java 21; multi-stage Dockerfile รัน non-root และรองรับ multi-arch `amd64`/`arm64`
 - `.github/workflows/docker-build.yml` รัน verify/security/supply-chain steps และ publish immutable GHCR image เมื่อ push `main`
 - มี Kustomize base, Neon application/migration overlays, health probes, resource requests/limits, Flyway migration Job และ deploy script `scripts/deploy-neon-kubernetes.ps1` อยู่แล้ว
-- `deploy-staging.yml`/`deploy-production.yml` เป็น workflow แบบ manual และต้องใช้ self-hosted runner label `tcg-deploy` พร้อม cluster context และ release variables; ยังไม่มีการยืนยันว่า runner/context ปัจจุบันเชื่อม Azure AKS จึงใช้ `kubectl` แบบ manual สำหรับ demo และไม่แก้ workflow release เดิม
+- `deploy-staging.yml`/`deploy-production.yml` เป็น workflow เดิมแบบ manual ที่ใช้ self-hosted runner; AKS demo ใช้ `deploy-aks-demo.yml` แยกต่างหากและมีผลรันสำเร็จแล้ว
 - Neon profile ใช้ `NEON_JDBC_URL`, `NEON_DB_USERNAME`, `NEON_DB_PASSWORD`; Hikari สูงสุด 5 connections/instance
 - มี Flyway migration runner แยก ใช้ profile `neon,migration`
 - มี Actuator liveness/readiness และ `GET /api/health`
@@ -81,22 +81,23 @@ AKS Free ไม่ทำให้ worker compute ฟรี; Neon usage ต่ำ
 
 ```mermaid
 flowchart LR
-  Browser -->|HTTPS tcgmihix.store| Pages[Cloudflare Pages<br/>React + Vite]
+  Browser -->|HTTPS tcg-store-frontend.pages.dev| Pages[Cloudflare Pages<br/>React + Vite]
   Pages -->|static assets| Browser
   Browser -->|same-origin /api/*| Fn[Pages Function proxy]
-  Fn -.->|future HTTPS route; not configured for initial demo| AKS[Azure AKS Free tier<br/>Malaysia West; 1 D4s_v4 node]
+  Fn -->|HTTPS /api and WebSocket| Gateway[AKS Caddy API gateway]
+  Gateway --> AKS[Azure AKS Free tier<br/>Malaysia West; 1 D4s_v4 node]
   AKS -->|TLS PostgreSQL| Neon[Neon AKS demo branch]
   AKS -->|S3 API| Objects[Neon Object Storage]
   GH[GitHub] -->|frontend main| Pages
-  GH -->|main: verify and publish multi-arch image| GHCR[Private GHCR image]
-  Docker[Docker Desktop build from main] -->|push digest| ACR[ACR Basic]
-  Runner[Manual kubectl from operator workstation<br/>demo release] -->|migration gate and rollout| AKS
+  GH -->|main: verify and publish image| GHCR[Private GHCR image]
+  GH -->|backend main: OIDC build and push| ACR[ACR Basic]
+  GH -->|migration gate and rollout| AKS
   ACR -->|managed identity image pull| AKS
 ```
 
-Pages Function route ใช้ file-based routing เช่น `functions/api/[[path]].ts` เพื่อรับ `/api` และ subpaths ต่อจากนั้น; ใน architecture ระยะยาว ฟังก์ชันสามารถส่งต่อไปยัง HTTPS API endpoint เมื่อมีการตั้ง TLS/domain แล้ว โดยรักษา method, path/query, Authorization, content type และ body และไม่ cache API/auth response ([Pages Function routing](https://developers.cloudflare.com/pages/functions/routing/)). AKS demo overlay ปัจจุบันยังไม่มี public endpoint; ใช้ `kubectl port-forward` และ optional Cloudflare Quick Tunnel ชั่วคราวสำหรับ demo เท่านั้น ไม่ตั้ง Pages `API_ORIGIN` ไปยัง HTTP-only endpoint.
+Pages Function route ใช้ `functions/api/[[path]].ts` รับ `/api` และ subpaths แล้วส่งต่อไปยัง HTTPS AKS origin โดยรักษา method, path/query, Authorization, content type และ body; API response ตั้ง `no-store` และ WebSocket upgrade ส่งต่อได้ ([Pages Function routing](https://developers.cloudflare.com/pages/functions/routing/)). `API_ORIGIN` ตั้งใน Pages Production เป็น Azure HTTPS origin ปัจจุบัน.
 
-หลังมี HTTPS API endpoint แล้ว ผู้ใช้หน้าเว็บจึงเรียก API ผ่าน `tcgmihix.store/api`; Pages Functions free limit 100k/day เป็นเพดานหลักของ proxy; ถ้าใช้เกินให้เลือกเพิ่ม Workers plan หรือเรียก ingress โดยตรงและตั้ง CORS ให้ตรง domain
+ผู้ใช้หน้าเว็บเรียก API ผ่าน `tcg-store-frontend.pages.dev/api`; Pages Functions free limit 100k/day เป็นเพดานหลักของ proxy. หลังผูก `tcgmihix.store` ให้ทดสอบ hostname ใหม่และ CORS อีกครั้ง
 
 ## Domain และ DNS (GoDaddy → Cloudflare)
 
@@ -125,11 +126,11 @@ Cloudflare Pages ต้องผูก custom domain ผ่าน Pages dashboar
 - `--tier free` ยกเว้นเฉพาะ control-plane management fee; worker VM และ disk/network ยังคิดเงิน. Free tier ไม่มี financially backed API-server SLA
 - Dockerfile/build workflow ยัง publish multi-architecture image ใน GHCR เมื่อ merge `main`; สำหรับ AKS demo ใช้ Docker Buildx push ไป ACR เพราะ token ปัจจุบันไม่มี `read:packages` และ Azure for Students ไม่อนุญาต ACR Tasks. Pin ACR digest เดียวกันใน application และ migration overlays
 - ใช้ `infra/kubernetes/overlays/aks-demo` และ migration overlay ที่ตั้งค่าแล้ว; API 1 replica, HPA 1..1, `ClusterIP`, probes และ ACR managed-identity pull
-- GitHub `deploy-staging.yml`/`deploy-production.yml` ยังไม่ wired เข้ากับ AKS; cloud bootstrap ครั้งแรกใช้ manual `kubectl` แล้ว และ branch นี้เตรียม `deploy-aks-demo.yml` สำหรับ deploy หลัง build ของ `main` ผ่าน โดยใช้ identity `id-tcg-github-aks-demo` ผ่าน OIDC; ต้อง merge PR และเก็บผล Actions run แรกก่อนส่งงาน
+- GitHub `deploy-staging.yml`/`deploy-production.yml` ไม่ได้ใช้กับ AKS demo; `deploy-aks-demo.yml` deploy จาก `main` สำเร็จแล้วด้วย identity `id-tcg-github-aks-demo` ผ่าน OIDC และมีผล Actions run ให้เก็บเป็นหลักฐาน
 - Runtime env: `SPRING_PROFILES_ACTIVE=neon`, port 8080, `NEON_*`, `APP_JWT_SECRET`, `OBJECT_STORAGE_*`; จำกัด CORS ให้ origin จริงของ frontend ที่ใช้กับ demo (domain production ใช้เมื่อ DNS/TLS พร้อม)
 - รัน migration Job ก่อน rollout โดยใช้ image index digest เดียวกับ API และโปรไฟล์ `neon,migration`; หยุด deploy หาก Job ไม่สำเร็จ
 - ตรวจ AKS resource, control-plane FQDN/cluster access, nodes, migration Job, ready pod และ `GET /api/health`/Actuator readiness; local Kubernetes อย่างเดียวไม่ผ่าน Grade A เพราะ workload ต้องรันบน cloud
-- สำหรับ demo แรกเข้าถึง ClusterIP ผ่าน `kubectl port-forward`; ไม่มี domain/HTTPS endpoint จนกว่าจะตั้ง ingress/TLS แยก
+- สำหรับ demo ปัจจุบัน Pages Function ใช้ AKS HTTPS endpoint ที่ Caddy รับ `/api`; `kubectl port-forward` เป็นวิธีตรวจภายในเพิ่มเติม
 
 ### 3. Frontend/Pages
 
