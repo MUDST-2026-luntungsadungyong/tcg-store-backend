@@ -212,6 +212,7 @@ public class AuctionDiscoveryService {
             auction.getBuyItNowPrice(),
             auction.getStartAt(),
             auction.getEndAt(),
+            auction.getPausedAt(),
             now,
             auction.getBidCount(),
             isWatching,

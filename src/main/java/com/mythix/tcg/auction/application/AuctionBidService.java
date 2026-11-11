@@ -51,6 +51,13 @@ public class AuctionBidService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final NotificationService notificationService;
+    private final AuctionSecurityAudit securityAudit;
+
+    private AuctionBid saveAuditedBid(AuctionBid bid) {
+        AuctionBid saved = bidRepository.save(bid);
+        securityAudit.bid(saved);
+        return saved;
+    }
 
     public static BigDecimal calculateIncrement(BigDecimal currentAmount) {
         if (currentAmount == null || currentAmount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -113,7 +120,7 @@ public class AuctionBidService {
             }
 
             if (buyItNowPrice != null && counterAmount.compareTo(buyItNowPrice) >= 0) {
-                AuctionBid manualBid = bidRepository.save(AuctionBid.builder()
+                AuctionBid manualBid = saveAuditedBid(AuctionBid.builder()
                     .auctionId(auctionId)
                     .bidderId(bidderId)
                     .bidAmount(amount)
@@ -127,7 +134,7 @@ public class AuctionBidService {
             }
 
             // First record the bidder's manual bid
-            AuctionBid manualBid = bidRepository.save(AuctionBid.builder()
+            AuctionBid manualBid = saveAuditedBid(AuctionBid.builder()
                 .auctionId(auctionId)
                 .bidderId(bidderId)
                 .bidAmount(amount)
@@ -136,7 +143,7 @@ public class AuctionBidService {
                 .build());
 
             // Then proxy bids back automatically
-            bidRepository.save(AuctionBid.builder()
+            saveAuditedBid(AuctionBid.builder()
                 .auctionId(auctionId)
                 .bidderId(activeProxy.getBidderId())
                 .bidAmount(counterAmount)
@@ -161,7 +168,7 @@ public class AuctionBidService {
         }
 
         // Normal successful manual bid
-        AuctionBid bid = bidRepository.save(AuctionBid.builder()
+        AuctionBid bid = saveAuditedBid(AuctionBid.builder()
             .auctionId(auctionId)
             .bidderId(bidderId)
             .bidAmount(amount)
@@ -203,6 +210,7 @@ public class AuctionBidService {
                     throw invalid("An active proxy ceiling can only be increased");
                 }
                 bid.setMaxBidAmount(maxAmount);
+                securityAudit.record("AUCTION_PROXY_CEILING_UPDATED", auctionId, bidderId, Map.of("maxAmount", maxAmount));
                 return toBidView(bid, null, true);
             }
         }
@@ -249,7 +257,7 @@ public class AuctionBidService {
                 }
 
                 if (buyItNowPrice != null && compCounter.compareTo(buyItNowPrice) >= 0) {
-                    AuctionBid underBid = bidRepository.save(AuctionBid.builder()
+                    AuctionBid underBid = saveAuditedBid(AuctionBid.builder()
                         .auctionId(auctionId)
                         .bidderId(bidderId)
                         .bidAmount(maxAmount)
@@ -265,7 +273,7 @@ public class AuctionBidService {
                 }
 
                 // Save this outbid proxy attempt
-                AuctionBid underBid = bidRepository.save(AuctionBid.builder()
+                AuctionBid underBid = saveAuditedBid(AuctionBid.builder()
                     .auctionId(auctionId)
                     .bidderId(bidderId)
                     .bidAmount(maxAmount)
@@ -275,7 +283,7 @@ public class AuctionBidService {
                     .build());
 
                 // Save competitor's auto response
-                bidRepository.save(AuctionBid.builder()
+                saveAuditedBid(AuctionBid.builder()
                     .auctionId(auctionId)
                     .bidderId(existingCompetitorProxy.getBidderId())
                     .bidAmount(compCounter)
@@ -301,7 +309,7 @@ public class AuctionBidService {
             effectiveBidAmount = minRequired;
         }
 
-        AuctionBid bid = bidRepository.save(AuctionBid.builder()
+        AuctionBid bid = saveAuditedBid(AuctionBid.builder()
             .auctionId(auctionId)
             .bidderId(bidderId)
             .bidAmount(effectiveBidAmount)
@@ -347,7 +355,7 @@ public class AuctionBidService {
 
     private BuyoutOutcome processBuyout(Auction auction, Long buyerId, BigDecimal buyoutPrice, Instant now) {
         // 1. Create buyout bid record
-        AuctionBid bid = bidRepository.save(AuctionBid.builder()
+        AuctionBid bid = saveAuditedBid(AuctionBid.builder()
             .auctionId(auction.getId())
             .bidderId(buyerId)
             .bidAmount(buyoutPrice)

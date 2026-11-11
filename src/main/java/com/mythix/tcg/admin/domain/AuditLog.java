@@ -4,6 +4,8 @@ import com.mythix.tcg.user.domain.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.NotFound;
+import org.hibernate.annotations.NotFoundAction;
 import java.time.LocalDateTime;
 
 @Entity
@@ -19,8 +21,12 @@ public class AuditLog {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @NotFound(action = NotFoundAction.IGNORE)
     @JoinColumn(name = "actor_id")
     private User actor;
+
+    @Column(name = "actor_id", insertable = false, updatable = false)
+    private Long actorId;
 
     @Column(nullable = false)
     private String action;

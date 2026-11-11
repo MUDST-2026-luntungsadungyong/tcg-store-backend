@@ -65,6 +65,7 @@ public class AuctionService {
     private final SellerProductRepository sellerProducts;
     private final CollectionRepository collections;
     private final UserRepository users;
+    private final AuctionSecurityAudit securityAudit;
     private final SellerProductImageValidator imageValidator = new SellerProductImageValidator();
 
     @Transactional(readOnly = true)
@@ -112,6 +113,7 @@ public class AuctionService {
         auction.setCreatedAt(Instant.now());
         updateDraftFields(auction, form);
         auctions.save(auction);
+        securityAudit.record("AUCTION_CREATED", auction.getId(), sellerId, Map.of());
         updatePhoto(auction.getId(), FRONT, form.getFrontImage(), false);
         updatePhoto(auction.getId(), BACK, form.getBackImage(), false);
         return view(auction);
@@ -127,6 +129,7 @@ public class AuctionService {
         updateDraftFields(auction, form);
         updatePhoto(id, FRONT, form.getFrontImage(), productChanged);
         updatePhoto(id, BACK, form.getBackImage(), productChanged);
+        securityAudit.record("AUCTION_EDITED", id, sellerId, Map.of());
         return view(auction);
     }
 
@@ -136,6 +139,7 @@ public class AuctionService {
         requireDraft(auction);
         // Hibernate-generated test schemas have no database cascade on scalar references.
         photos.deleteAllById(List.of(new AuctionPhoto.Id(id, FRONT), new AuctionPhoto.Id(id, BACK)));
+        securityAudit.record("AUCTION_DRAFT_DELETED", id, sellerId, Map.of());
         auctions.delete(auction);
     }
 
@@ -186,6 +190,7 @@ public class AuctionService {
         auction.setUpdatedAt(now);
         auction.setStockHeld(product != null);
         if (product != null) product.setAuctionReserved(product.getAuctionReserved() + auction.getQuantity());
+        securityAudit.record("AUCTION_PUBLISHED", id, sellerId, Map.of());
         return view(auction);
     }
 
@@ -203,6 +208,7 @@ public class AuctionService {
             throw conflict("This auction has bids. Submit a cancellation request for review");
         }
         cancelLocked(auction, now);
+        securityAudit.record("AUCTION_CANCELLED", id, sellerId, Map.of());
         return view(auction);
     }
 

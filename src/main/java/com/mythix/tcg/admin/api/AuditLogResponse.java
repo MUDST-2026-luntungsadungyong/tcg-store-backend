@@ -23,7 +23,11 @@ public record AuditLogResponse(
         String actorRole = "SYSTEM";
         String actorSellerStatus = null;
 
-        if (log.getActor() != null) {
+        if (log.getActor() == null && log.getActorId() != null) {
+            actorId = String.valueOf(log.getActorId());
+            actorName = "Deleted account";
+            actorRole = "UNKNOWN";
+        } else if (log.getActor() != null) {
             actorId = String.valueOf(log.getActor().getId());
             if (log.getActor().getFullName() != null && !log.getActor().getFullName().isBlank()) {
                 actorName = log.getActor().getFullName();
