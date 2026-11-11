@@ -114,6 +114,7 @@ class AdminSellerServiceUnitTest {
             when(productRepository.countByStatus("SHOW")).thenReturn(42L);
             when(orderRepository.count()).thenReturn(350L);
             when(orderRepository.paidOrFulfilledGmv()).thenReturn(new BigDecimal("125000.00"));
+              when(orderRepository.totalPlatformFee()).thenReturn(new BigDecimal("6250.00"));
 
             AdminDashboardResponse response = adminSellerService.dashboard();
 
@@ -127,12 +128,14 @@ class AdminSellerServiceUnitTest {
             assertThat(response.listedCards()).isEqualTo(42L);
             assertThat(response.totalOrders()).isEqualTo(350L);
             assertThat(response.totalOrderAmount()).isEqualByComparingTo("125000.00");
+              assertThat(response.totalPlatformFee()).isEqualByComparingTo("6250.00");
 
             verify(userRepository).count();
             verify(cardRepository).count();
             verify(productRepository).countByStatus("SHOW");
             verify(orderRepository).count();
             verify(orderRepository).paidOrFulfilledGmv();
+              verify(orderRepository).totalPlatformFee();
         }
     }
 

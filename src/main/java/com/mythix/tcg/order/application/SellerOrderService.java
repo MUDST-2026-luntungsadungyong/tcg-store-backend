@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -105,7 +107,7 @@ public class SellerOrderService {
             deductInventoryOnSend(order);
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
-            auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, noBuyerContact));
+            auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, noBuyerContact, effectiveNote));
         }
 
         String logNote;
@@ -243,6 +245,7 @@ public class SellerOrderService {
         List<Order> allOrders = orderRepository.findAllOrdersBySellerId(sellerId);
 
         BigDecimal totalRevenue = BigDecimal.ZERO;
+        BigDecimal totalPlatformFee = BigDecimal.ZERO;
         BigDecimal totalCost = BigDecimal.ZERO;
 
         long totalOrders = allOrders.size();
@@ -261,23 +264,18 @@ public class SellerOrderService {
             }
 
             if (!"CANCELLED".equalsIgnoreCase(status)) {
-                for (OrderItem item : order.getItems()) {
-                    if (item.getSeller() != null && item.getSeller().getId().equals(sellerId)) {
-                        BigDecimal qty = BigDecimal.valueOf(item.getQuantity());
-                        BigDecimal price = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
-                        BigDecimal cost = item.getCostAtPurchase() != null ? item.getCostAtPurchase() : BigDecimal.ZERO;
-
-                        totalRevenue = totalRevenue.add("AUCTION".equals(order.getOrderType()) ? price : price.multiply(qty));
-                        totalCost = totalCost.add(cost.multiply(qty));
-                    }
-                }
+                SellerFinancials financials = sellerFinancials(order, sellerId);
+                totalRevenue = totalRevenue.add(financials.grossRevenue());
+                totalCost = totalCost.add(financials.totalCost());
+                totalPlatformFee = totalPlatformFee.add(financials.platformFee());
             }
         }
 
-        BigDecimal netProfit = totalRevenue.subtract(totalCost);
+        BigDecimal netProfit = totalRevenue.subtract(totalPlatformFee).subtract(totalCost);
 
         return new SellerProfitSummaryResponse(
                 totalRevenue,
+                totalPlatformFee,
                 totalCost,
                 netProfit,
                 totalOrders,
@@ -285,6 +283,48 @@ public class SellerOrderService {
                 fulfilledOrders,
                 cancelledOrders
         );
+    }
+
+    @Transactional(readOnly = true)
+    public SellerMonthlyDashboardResponse getMonthlyDashboard(Long sellerId, Integer requestedYear, Integer requestedMonth) {
+        YearMonth selected = requestedYear == null || requestedMonth == null
+            ? YearMonth.now()
+            : validateYearMonth(requestedYear, requestedMonth);
+        List<Order> orders = orderRepository.findAllOrdersBySellerId(sellerId);
+        List<SellerMonthlyPointResponse> points = new ArrayList<>();
+        for (int offset = 11; offset >= 0; offset--) {
+            YearMonth period = selected.minusMonths(offset);
+            points.add(monthlyPoint(orders, sellerId, period));
+        }
+        return new SellerMonthlyDashboardResponse(monthlyPoint(orders, sellerId, selected), points);
+    }
+
+    private YearMonth validateYearMonth(int year, int month) {
+        if (year < 2000 || year > 2100 || month < 1 || month > 12) {
+            throw new OrderStatusValidationException("month", "year and month are invalid");
+        }
+        return YearMonth.of(year, month);
+    }
+
+    private SellerMonthlyPointResponse monthlyPoint(List<Order> orders, Long sellerId, YearMonth period) {
+        BigDecimal gross = BigDecimal.ZERO;
+        BigDecimal fee = BigDecimal.ZERO;
+        BigDecimal cost = BigDecimal.ZERO;
+        long count = 0;
+        for (Order order : orders) {
+            if (order.getCreatedAt() == null || !YearMonth.from(order.getCreatedAt()).equals(period)
+                    || "CANCELLED".equalsIgnoreCase(order.getStatus())) continue;
+            SellerFinancials financials = sellerFinancials(order, sellerId);
+            if (financials.hasSellerItems()) {
+                gross = gross.add(financials.grossRevenue());
+                fee = fee.add(financials.platformFee());
+                cost = cost.add(financials.totalCost());
+                count++;
+            }
+        }
+        BigDecimal netRevenue = gross.subtract(fee);
+        return new SellerMonthlyPointResponse(period.getYear(), period.getMonthValue(), gross, fee, netRevenue,
+            cost, netRevenue.subtract(cost), count);
     }
 
     private SellerOrderResponse mapToSellerOrderResponse(Order order, Long sellerId) {
@@ -319,7 +359,9 @@ public class SellerOrderService {
             ));
         }
 
-        BigDecimal sellerProfit = sellerRevenue.subtract(sellerCost);
+        BigDecimal sellerPlatformFee = sellerPlatformFee(order, sellerRevenue);
+        BigDecimal sellerNetRevenue = sellerRevenue.subtract(sellerPlatformFee);
+        BigDecimal sellerProfit = sellerNetRevenue.subtract(sellerCost);
 
         List<OrderStatusLogResponse> logs = orderStatusLogRepository.findByOrderIdOrderByCreatedAtAsc(order.getId())
                 .stream()
@@ -345,6 +387,8 @@ public class SellerOrderService {
                 buyer != null ? buyer.getContactLine() : null,
                 buyer != null ? buyer.getContactFacebook() : null,
                 sellerRevenue,
+                sellerPlatformFee,
+                sellerNetRevenue,
                 sellerCost,
                 sellerProfit,
                 itemDtos,
@@ -353,6 +397,33 @@ public class SellerOrderService {
                 order.getUpdatedAt()
         );
     }
+
+    private SellerFinancials sellerFinancials(Order order, Long sellerId) {
+        BigDecimal sellerRevenue = BigDecimal.ZERO;
+        BigDecimal sellerCost = BigDecimal.ZERO;
+        boolean hasItems = false;
+        for (OrderItem item : order.getItems()) {
+            if (item.getSeller() == null || !item.getSeller().getId().equals(sellerId)) continue;
+            hasItems = true;
+            BigDecimal quantity = BigDecimal.valueOf(item.getQuantity());
+            BigDecimal price = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
+            BigDecimal cost = item.getCostAtPurchase() != null ? item.getCostAtPurchase() : BigDecimal.ZERO;
+            sellerRevenue = sellerRevenue.add("AUCTION".equals(order.getOrderType()) ? price : price.multiply(quantity));
+            sellerCost = sellerCost.add(cost.multiply(quantity));
+        }
+        return new SellerFinancials(sellerRevenue, sellerPlatformFee(order, sellerRevenue), sellerCost, hasItems);
+    }
+
+    private BigDecimal sellerPlatformFee(Order order, BigDecimal sellerRevenue) {
+        BigDecimal fee = order.getPlatformFee() != null ? order.getPlatformFee() : BigDecimal.ZERO;
+        if (fee.signum() == 0 || sellerRevenue.signum() == 0) return BigDecimal.ZERO;
+        if ("AUCTION".equals(order.getOrderType())) return fee;
+        BigDecimal subtotal = order.getSubtotalAmount() != null ? order.getSubtotalAmount() : order.getTotalAmount();
+        if (subtotal == null || subtotal.signum() <= 0) return BigDecimal.ZERO;
+        return fee.multiply(sellerRevenue).divide(subtotal, 2, RoundingMode.HALF_UP);
+    }
+
+    private record SellerFinancials(BigDecimal grossRevenue, BigDecimal platformFee, BigDecimal totalCost, boolean hasSellerItems) {}
 
     private String normalizeStatus(String status) {
         String value = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);

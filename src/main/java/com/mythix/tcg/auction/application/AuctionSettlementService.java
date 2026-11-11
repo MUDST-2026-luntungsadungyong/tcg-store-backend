@@ -22,6 +22,7 @@ import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.order.persistence.OrderStatusLogRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
+import com.mythix.tcg.user.application.AuctionUserLock;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
 import com.mythix.tcg.auction.api.AuctionLiveUpdates;
@@ -53,12 +54,14 @@ public class AuctionSettlementService {
 
 
     private final AuctionRepository auctionRepository;
+    private final AuctionDefaultCaseService defaultCases;
     private final AuctionCommissionService commission;
     private final ApplicationEventPublisher events;
     private final AuctionBidRepository bidRepository;
     private final AuctionSecondChanceOfferRepository secondChanceRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final AuctionUserLock auctionUserLock;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final OrderStatusLogRepository orderStatusLogRepository;
@@ -219,10 +222,14 @@ public class AuctionSettlementService {
     }
 
     public void closeCancelledOrder(Auction auction, boolean noBuyerContact) {
+        closeCancelledOrder(auction, noBuyerContact, null);
+    }
+
+    public void closeCancelledOrder(Auction auction, boolean noBuyerContact, String reason) {
         auction.setStatus(noBuyerContact ? DEFAULTED : CANCELLED);
         auction.setUpdatedAt(Instant.now());
         events.publishEvent(new AuctionLiveUpdates.Changed(auction.getId()));
-        if (noBuyerContact) {
+        if (noBuyerContact && defaultCases.report(auction, reason)) {
             sendNotification(auction.getWinnerId(), NotificationTypes.AUCTION_DEFAULTED_WARNING,
                 "ร้านค้ายกเลิกออเดอร์ประมูลเพราะยังไม่ได้รับการติดต่อจากคุณ",
                 "/orders/" + auction.getOrderId());
@@ -281,7 +288,7 @@ public class AuctionSettlementService {
             throw conflict("A second-chance offer is already pending");
         }
         AuctionBid runnerUp = bidRepository.findEligibleRunnerUp(
-                auctionId, auction.getLeadingBidderId(), PageRequest.ofSize(1))
+                auctionId, auction.getLeadingBidderId(), now, PageRequest.ofSize(1))
             .stream().findFirst().orElseThrow(() -> invalid("No eligible runner-up bidder found for this auction"));
         AuctionSecondChanceOffer offer = secondChanceRepository.save(AuctionSecondChanceOffer.builder()
             .auctionId(auctionId)
@@ -349,6 +356,10 @@ public class AuctionSettlementService {
             secondChanceRepository.save(offer);
             return;
         }
+
+        User eligibleBuyer = auctionUserLock.lock(bidderId)
+            .orElseThrow(() -> notFound("Buyer not found"));
+        if (eligibleBuyer.isAuctionBanned()) throw forbidden("Your account is currently banned from participating in auctions until " + eligibleBuyer.getAuctionBannedUntil());
 
         // Accept offer -> Create Order for runner-up
         offer.setStatus(ACCEPTED);

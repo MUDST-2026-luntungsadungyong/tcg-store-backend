@@ -2,6 +2,7 @@ package com.mythix.tcg.order.application;
 
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.order.api.SellerOrderDto.SellerOrderResponse;
+import com.mythix.tcg.order.api.SellerOrderDto.SellerMonthlyDashboardResponse;
 import com.mythix.tcg.order.api.SellerOrderDto.SellerProfitSummaryResponse;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
@@ -261,6 +262,23 @@ class SellerOrderServiceUnitTest {
         assertThat(summary.totalCost()).isEqualByComparingTo("800.00");
         assertThat(summary.netProfit()).isEqualByComparingTo("450.00");
         assertThat(summary.totalOrders()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("getMonthlyDashboard() - สรุปยอดขายรายเดือน หักค่าธรรมเนียม และคืนกราฟ 12 เดือน")
+    void getMonthlyDashboard_includesPlatformFeeAndTwelveMonthSeries() {
+        sampleOrder.setCreatedAt(LocalDateTime.of(2026, 10, 10, 12, 0));
+        sampleOrder.setSubtotalAmount(new BigDecimal("1250.00"));
+        sampleOrder.setPlatformFee(new BigDecimal("62.50"));
+        when(orderRepository.findAllOrdersBySellerId(2L)).thenReturn(List.of(sampleOrder));
+
+        SellerMonthlyDashboardResponse dashboard = sellerOrderService.getMonthlyDashboard(2L, 2026, 10);
+
+        assertThat(dashboard.lastTwelveMonths()).hasSize(12);
+        assertThat(dashboard.selectedMonth().grossSales()).isEqualByComparingTo("1250.00");
+        assertThat(dashboard.selectedMonth().platformFee()).isEqualByComparingTo("62.50");
+        assertThat(dashboard.selectedMonth().netRevenue()).isEqualByComparingTo("1187.50");
+        assertThat(dashboard.selectedMonth().netProfit()).isEqualByComparingTo("387.50");
     }
 
     @Test
