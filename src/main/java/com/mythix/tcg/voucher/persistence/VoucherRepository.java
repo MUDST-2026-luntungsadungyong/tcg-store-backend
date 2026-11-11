@@ -25,4 +25,10 @@ public interface VoucherRepository extends JpaRepository<Voucher, Long> {
     Optional<Voucher> findByIdForUpdate(@Param("id") Long id);
 
     List<Voucher> findAllByIsActiveTrueOrderByCreatedAtDesc();
+
+    List<Voucher> findAllByOrderByCreatedAtDescIdDesc();
+
+    boolean existsByCodeIgnoreCase(String code);
+
+    boolean existsByCodeIgnoreCaseAndIdNot(String code, Long id);
 }

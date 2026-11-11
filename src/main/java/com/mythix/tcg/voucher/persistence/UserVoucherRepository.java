@@ -2,6 +2,7 @@ package com.mythix.tcg.voucher.persistence;
 
 import com.mythix.tcg.voucher.domain.UserVoucher;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -26,4 +27,13 @@ public interface UserVoucherRepository extends JpaRepository<UserVoucher, Long> 
     boolean existsByUserIdAndVoucherId(Long userId, Long voucherId);
 
     long countByUserIdAndVoucherId(Long userId, Long voucherId);
+
+    long countByVoucherId(Long voucherId);
+
+    @Query("SELECT uv.voucher.id, COUNT(uv) FROM UserVoucher uv GROUP BY uv.voucher.id")
+    List<Object[]> countGroupedByVoucherId();
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("DELETE FROM UserVoucher uv WHERE uv.voucher.id = :voucherId")
+    int deleteAllByVoucherId(@Param("voucherId") Long voucherId);
 }

@@ -40,7 +40,50 @@ public class VoucherDto {
         String status,
         String claimedAt,
         String usedAt,
-        String endTime
+        String endTime,
+        Boolean isActive,
+        String startTime
+    ) {}
+
+    public record AdminVoucherRequest(
+        String code,
+        String title,
+        String description,
+        String discountType,
+        BigDecimal discountValue,
+        BigDecimal minSpend,
+        BigDecimal maxDiscountAmount,
+        Integer totalQuota,
+        String startTime,
+        String endTime,
+        Boolean isActive
+    ) {}
+
+    public record AdminVoucherStatusRequest(
+        Boolean isActive
+    ) {}
+
+    public record AdminVoucherResponse(
+        Long id,
+        String code,
+        String title,
+        String description,
+        String discountType,
+        BigDecimal discountValue,
+        BigDecimal minSpend,
+        BigDecimal maxDiscountAmount,
+        Integer totalQuota,
+        Integer usedQuota,
+        Integer remainingQuota,
+        Integer quotaPercentage,
+        String startTime,
+        String endTime,
+        Boolean isActive,
+        String effectiveStatus,
+        Long claimedCount,
+        Long usedOrdersCount,
+        String createdAt,
+        String updatedAt
     ) {}
 
     public record VoucherValidateRequest(

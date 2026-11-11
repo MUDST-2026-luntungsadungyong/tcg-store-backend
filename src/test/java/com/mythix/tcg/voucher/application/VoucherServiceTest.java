@@ -3,7 +3,9 @@ package com.mythix.tcg.voucher.application;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
+import com.mythix.tcg.voucher.api.VoucherDto.UserVoucherResponse;
 import com.mythix.tcg.voucher.api.VoucherDto.VoucherValidateResponse;
+import com.mythix.tcg.voucher.api.VoucherLiveUpdates;
 import com.mythix.tcg.voucher.domain.UserVoucher;
 import com.mythix.tcg.voucher.domain.Voucher;
 import com.mythix.tcg.voucher.persistence.UserVoucherRepository;
@@ -15,9 +17,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,6 +41,9 @@ class VoucherServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private VoucherService voucherService;
@@ -182,5 +189,41 @@ class VoucherServiceTest {
         assertThat(fixedVoucher.getUsedQuota()).isEqualTo(4);
         assertThat(uv.getStatus()).isEqualTo("CLAIMED");
         assertThat(uv.getOrder()).isNull();
+        verify(eventPublisher).publishEvent(new VoucherLiveUpdates.Changed("RELEASED", 1L));
+    }
+
+    @Test
+    @DisplayName("Claim and wallet mapping include live metadata and emit change events")
+    void shouldIncludeActiveAndStartMetadataAndPublishClaimEvent() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(voucherRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(percentVoucher));
+        when(userVoucherRepository.existsByUserIdAndVoucherId(1L, 2L)).thenReturn(false);
+        when(userVoucherRepository.save(any(UserVoucher.class))).thenAnswer(inv -> {
+            UserVoucher uv = inv.getArgument(0);
+            uv.setId(55L);
+            uv.setClaimedAt(LocalDateTime.now());
+            return uv;
+        });
+
+        UserVoucherResponse claimed = voucherService.claimVoucher(1L, 2L);
+
+        assertThat(claimed.isActive()).isTrue();
+        assertThat(claimed.startTime()).isNotBlank();
+        assertThat(claimed.endTime()).isNotBlank();
+        verify(eventPublisher).publishEvent(new VoucherLiveUpdates.Changed("CLAIMED", 2L));
+
+        when(userVoucherRepository.findAllByUserIdOrderByClaimedAtDesc(1L)).thenReturn(List.of(
+            UserVoucher.builder()
+                .id(55L)
+                .user(user)
+                .voucher(percentVoucher)
+                .status("CLAIMED")
+                .claimedAt(LocalDateTime.now())
+                .build()
+        ));
+        List<UserVoucherResponse> wallet = voucherService.getUserVouchers(1L, null);
+        assertThat(wallet).hasSize(1);
+        assertThat(wallet.get(0).isActive()).isTrue();
+        assertThat(wallet.get(0).startTime()).isNotBlank();
     }
 }
