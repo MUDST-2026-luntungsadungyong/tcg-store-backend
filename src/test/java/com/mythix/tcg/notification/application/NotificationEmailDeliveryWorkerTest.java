@@ -25,8 +25,25 @@ class NotificationEmailDeliveryWorkerTest {
     private final NotificationEmailRepository outbox = mock(NotificationEmailRepository.class);
     private final OrderRepository orders = mock(OrderRepository.class);
     private final JavaMailSender sender = mock(JavaMailSender.class);
+    private final SensitiveMailCipher cipher = new SensitiveMailCipher(new com.mythix.tcg.auth.security.JwtProperties("test-secret-with-at-least-32-bytes", 60));
     private final NotificationEmailDeliveryWorker worker = new NotificationEmailDeliveryWorker(
-        outbox, orders, new InvoicePdfService(), sender);
+        outbox, orders, new InvoicePdfService(), sender, cipher);
+
+    @Test
+    void sensitiveRecoveryBodyIsDecryptedForMimeDelivery() throws Exception {
+        NotificationEmail email = new NotificationEmail();
+        email.setId(91L);
+        email.setRecipientEmail("buyer@example.test");
+        email.setSubject("Reset");
+        email.setSensitive(true);
+        email.setBody(cipher.encrypt("https://example.test/reset?token=secret"));
+        when(outbox.findById(91L)).thenReturn(Optional.of(email));
+        MimeMessage message = new MimeMessage(Session.getInstance(new Properties()));
+        when(sender.createMimeMessage()).thenReturn(message);
+        worker.deliver(91L, "orders@example.test");
+        assertThat(message.getContent().toString()).contains("token=secret");
+        verify(outbox).markSent(eq(91L), any());
+    }
 
     @Test
     void shipmentEmailAttachesGeneratedSummaryWithStatusSnapshotAndVerificationQr() throws Exception {
@@ -78,7 +95,7 @@ class NotificationEmailDeliveryWorkerTest {
         InvoicePdfService oversizedPdf = mock(InvoicePdfService.class);
         when(oversizedPdf.generate(any(), eq("SENT"), anyString()))
             .thenReturn(new InvoicePdfService.InvoiceFile(new byte[5 * 1024 * 1024 + 1], "oversize.pdf"));
-        NotificationEmailDeliveryWorker oversizeWorker = new NotificationEmailDeliveryWorker(outbox, orders, oversizedPdf, sender);
+        NotificationEmailDeliveryWorker oversizeWorker = new NotificationEmailDeliveryWorker(outbox, orders, oversizedPdf, sender, cipher);
 
         org.junit.jupiter.api.Assertions.assertThrows(NotificationEmailAttachmentTooLargeException.class,
             () -> oversizeWorker.deliver(4L, "orders@mythix.test"));
@@ -121,7 +138,7 @@ class NotificationEmailDeliveryWorkerTest {
         InvoicePdfService pdf = mock(InvoicePdfService.class);
         when(pdf.generate(eq(order), eq("SENT"), anyString()))
             .thenReturn(new InvoicePdfService.InvoiceFile("%PDF".getBytes(), "summary.pdf"));
-        NotificationEmailDeliveryWorker configuredWorker = new NotificationEmailDeliveryWorker(outbox, orders, pdf, sender);
+        NotificationEmailDeliveryWorker configuredWorker = new NotificationEmailDeliveryWorker(outbox, orders, pdf, sender, cipher);
         ReflectionTestUtils.setField(configuredWorker, "baseUrl", "https://tcgmythix.store/");
         when(sender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));
 

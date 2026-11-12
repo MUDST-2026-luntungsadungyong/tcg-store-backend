@@ -27,6 +27,7 @@ public class NotificationEmailDeliveryWorker {
     private final OrderRepository orders;
     private final InvoicePdfService invoicePdfService;
     private final JavaMailSender mailSender;
+    private final SensitiveMailCipher cipher;
 
     @Value("${app.mail.base-url:http://localhost:5173}")
     private String baseUrl = "http://localhost:5173";
@@ -44,7 +45,7 @@ public class NotificationEmailDeliveryWorker {
         helper.setFrom(from);
         helper.setTo(email.getRecipientEmail());
         helper.setSubject(email.getSubject());
-        String body = email.getBody();
+        String body = email.isSensitive() ? cipher.decrypt(email.getBody()) : email.getBody();
         if (attachPdf) {
             Order order = orders.findForEmailSummary(email.getAttachmentOrderId())
                 .orElseThrow(() -> new NotificationEmailPermanentFailureException("Order summary source was not found"));

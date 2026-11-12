@@ -16,8 +16,6 @@ spring:
     database-platform: org.hibernate.dialect.H2Dialect
 
 app:
-  auth:
-    demo-reset-enabled: true
   jwt:
     secret: ${APP_JWT_SECRET:256277a7b6bce805ba154fec08b267f9a2484a6e7c4108f1099a5000b1f383d4}
   seller:

@@ -15,7 +15,7 @@ public class NotificationEmail {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "notification_id", nullable = false, unique = true)
+    @Column(name = "notification_id", unique = true)
     private Long notificationId;
 
     @Column(name = "recipient_email", nullable = false, length = 255)
@@ -26,6 +26,12 @@ public class NotificationEmail {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String body;
+
+    @Column(nullable = false)
+    private boolean sensitive;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
 
     @Column(nullable = false)
     private int attempts;
