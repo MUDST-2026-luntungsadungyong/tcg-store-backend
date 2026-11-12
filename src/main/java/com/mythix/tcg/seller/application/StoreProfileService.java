@@ -6,20 +6,28 @@ import com.mythix.tcg.seller.api.StoreProfileResponse;
 import com.mythix.tcg.seller.domain.SellerProfile;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service @RequiredArgsConstructor
 public class StoreProfileService {
     private final SellerProfileRepository repository;
     @Transactional(readOnly = true) public StoreProfileResponse mine(Long userId) { return StoreProfileResponse.from(find(userId)); }
-    @Transactional(readOnly = true) public StoreProfileResponse publicStore(Long userId) { return StoreProfileResponse.from(find(userId)); }
+    @Transactional(readOnly = true)
+    public StoreProfileResponse publicStore(Long userId) {
+        return repository.findByUserId(userId)
+            .map(StoreProfileResponse::publicFrom)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Store profile not found"));
+    }
     @Transactional public StoreProfileResponse update(Long userId, StoreProfileRequest request) {
         SellerProfile profile = find(userId);
         profile.setShopName(request.shopName().trim()); profile.setShopDescription(trim(request.shopDescription()));
         profile.getUser().setPhone(trim(request.phone()));
         profile.getUser().setContactLine(trim(request.line()));
         profile.getUser().setContactFacebook(trim(request.facebook()));
+        profile.getUser().setContactOther(trim(request.otherContact()));
         return StoreProfileResponse.from(profile);
     }
     private SellerProfile find(Long userId) { return repository.findByUserId(userId).orElseThrow(InvalidCredentialsException::new); }

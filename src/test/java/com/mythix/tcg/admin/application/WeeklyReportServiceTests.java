@@ -27,7 +27,7 @@ class WeeklyReportServiceTests {
     void setup() throws Exception {
         jdbc = new JdbcTemplate(new DriverManagerDataSource("jdbc:h2:mem:" + UUID.randomUUID()
             + ";MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1", "sa", ""));
-        String ddl = new ClassPathResource("db/migration/V12__admin_weekly_reports.sql").getContentAsString(StandardCharsets.UTF_8);
+        String ddl = new ClassPathResource("db/migration/V31__admin_weekly_reports.sql").getContentAsString(StandardCharsets.UTF_8);
         var tables = Pattern.compile("(?s)CREATE TABLE \\w+.*?;").matcher(ddl);
         while (tables.find()) jdbc.execute(tables.group());
         jdbc.update("INSERT INTO admin_report_state VALUES (1, ?)", start);

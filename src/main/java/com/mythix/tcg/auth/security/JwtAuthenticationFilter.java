@@ -1,5 +1,7 @@
 package com.mythix.tcg.auth.security;
 
+import com.mythix.tcg.user.domain.User;
+import com.mythix.tcg.user.persistence.UserRepository;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -21,9 +23,11 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, UserRepository userRepository) {
         this.jwtService = jwtService;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -35,8 +39,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
+        String rawToken = header.substring(7);
+
         try {
-            AuthenticatedUser user = jwtService.parseToken(header.substring(7));
+            AuthenticatedUser user = jwtService.parseToken(rawToken);
+            User current = userRepository.findById(user.userId()).orElseThrow(() -> new IllegalArgumentException("Unknown user"));
+            if (current.getAuthVersion() != jwtService.authVersion(rawToken)) {
+                throw new IllegalArgumentException("Revoked token");
+            }
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 user,
                 null,

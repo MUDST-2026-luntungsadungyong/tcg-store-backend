@@ -30,7 +30,8 @@ public class CheckoutController {
         if (request != null) {
             request.validate();
         }
+        String voucherCode = request != null ? request.getVoucherCode() : null;
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(checkoutService.checkout(user.userId(), idempotencyKey));
+            .body(checkoutService.checkout(user.userId(), idempotencyKey, voucherCode));
     }
 }

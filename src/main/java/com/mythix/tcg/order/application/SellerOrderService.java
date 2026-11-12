@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +33,7 @@ import java.util.Map;
 public class SellerOrderService {
 
     private final OrderRepository orderRepository;
+    private final com.mythix.tcg.auction.application.AuctionSettlementService auctionSettlementService;
     private final NotificationService notificationService;
     private final ProductRepository productRepository;
     private final OrderStatusLogRepository orderStatusLogRepository;
@@ -61,6 +64,18 @@ public class SellerOrderService {
 
     @Transactional
     public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note) {
+        return updateOrderStatus(sellerId, orderId, newStatus, note, null);
+    }
+
+    @Transactional
+    public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note, String trackingNumber) {
+        return updateOrderStatus(sellerId, orderId, newStatus, note, trackingNumber, false);
+    }
+
+    @Transactional
+    public SellerOrderResponse updateOrderStatus(Long sellerId, Long orderId, String newStatus, String note,
+                                                 String trackingNumber, boolean noBuyerContact) {
+        var auction = auctionSettlementService.lockAuctionForOrder(orderId);
         Order order = orderRepository.findOrderForSeller(sellerId, orderId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found for seller"));
 
@@ -71,12 +86,49 @@ public class SellerOrderService {
             return mapToSellerOrderResponse(order, sellerId);
         }
 
+        if (noBuyerContact && (auction.isEmpty() || !"CANCELLED".equals(updatedStatus)
+                || !"AWAITING_BUYER_CONTACT".equals(previousStatus) || note == null || note.isBlank())) {
+            throw new OrderStatusValidationException("status", "Only an auction awaiting buyer contact can be cancelled for no contact, with a reason");
+        }
         validateStatusTransition(previousStatus, updatedStatus);
+        if ("AUCTION".equals(order.getOrderType())
+                && !List.of("PENDING_SELLER_ACTION", "SENT", "CANCELLED").contains(updatedStatus)) {
+            throw new OrderStatusValidationException("status", "Invalid seller action for an auction order");
+        }
+
+        String effectiveTracking = trackingNumber != null ? trackingNumber.trim() : "";
+        String effectiveNote = note != null ? note.trim() : "";
 
         if ("SENT".equalsIgnoreCase(updatedStatus)) {
+            if (effectiveTracking.isEmpty()) {
+                throw new OrderStatusValidationException("trackingNumber",
+                        "Tracking number is required when marking order as SENT");
+            }
+            if (effectiveTracking.length() > 120) {
+                throw new OrderStatusValidationException("trackingNumber", "Tracking number is too long");
+            }
+            if (effectiveNote.length() > 120) {
+                throw new OrderStatusValidationException("note", "Shipping carrier is too long");
+            }
+            order.setTrackingNumber(effectiveTracking);
+            order.setShippingCarrier(effectiveNote.isEmpty() ? null : effectiveNote);
             deductInventoryOnSend(order);
         } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
             releaseInventoryOnCancellation(order);
+            auction.ifPresent(value -> auctionSettlementService.closeCancelledOrder(value, noBuyerContact, effectiveNote));
+        }
+
+        String logNote;
+        if ("SENT".equalsIgnoreCase(updatedStatus)) {
+            if (!effectiveTracking.isEmpty()) {
+                logNote = !effectiveNote.isEmpty()
+                        ? effectiveNote + " (Tracking: " + effectiveTracking + ")"
+                        : "Tracking: " + effectiveTracking;
+            } else {
+                logNote = effectiveNote;
+            }
+        } else {
+            logNote = note;
         }
 
         order.setStatus(updatedStatus);
@@ -88,11 +140,15 @@ public class SellerOrderService {
                 .toStatus(updatedStatus)
                 .changedBy(userRepository.getReferenceById(sellerId))
                 .changedByRole("SELLER")
-                .note(note)
+                .note(logNote)
                 .build();
         orderStatusLogRepository.save(log);
 
-        if ("SENT".equalsIgnoreCase(updatedStatus)) {
+        if ("CONFIRMED".equalsIgnoreCase(updatedStatus)) {
+            notificationService.notifyBuyerOrderConfirmed(saved);
+        } else if ("CANCELLED".equalsIgnoreCase(updatedStatus)) {
+            notificationService.notifyBuyerOfSellerCancellation(saved, note);
+        } else if ("SENT".equalsIgnoreCase(updatedStatus)) {
             notificationService.notifyBuyerOrderSent(saved);
         }
         return mapToSellerOrderResponse(saved, sellerId);
@@ -104,16 +160,20 @@ public class SellerOrderService {
                     "Cannot change status of an order that is already " + from);
         }
         if ("CANCELLED".equalsIgnoreCase(to)) {
-            if (!"PENDING".equalsIgnoreCase(from) && !"CONFIRMED".equalsIgnoreCase(from)) {
-                throw new OrderStatusValidationException("status", "Can only cancel PENDING or CONFIRMED orders");
+            if (!List.of("PENDING", "CONFIRMED", "AWAITING_BUYER_CONTACT", "PENDING_SELLER_ACTION").contains(from.toUpperCase(Locale.ROOT))) {
+                throw new OrderStatusValidationException("status", "Order can no longer be cancelled");
+            }
+        } else if ("PENDING_SELLER_ACTION".equalsIgnoreCase(to)) {
+            if (!"AWAITING_BUYER_CONTACT".equalsIgnoreCase(from)) {
+                throw new OrderStatusValidationException("status", "Buyer contact is required before seller action");
             }
         } else if ("CONFIRMED".equalsIgnoreCase(to)) {
             if (!"PENDING".equalsIgnoreCase(from)) {
                 throw new OrderStatusValidationException("status", "Can only confirm PENDING orders");
             }
         } else if ("SENT".equalsIgnoreCase(to)) {
-            if (!"CONFIRMED".equalsIgnoreCase(from)) {
-                throw new OrderStatusValidationException("status", "Can only send CONFIRMED orders");
+            if (!"CONFIRMED".equalsIgnoreCase(from) && !"PENDING_SELLER_ACTION".equalsIgnoreCase(from)) {
+                throw new OrderStatusValidationException("status", "Can only send an order ready for seller action");
             }
         } else if ("FULFILLED".equalsIgnoreCase(to)) {
             throw new OrderStatusValidationException("status", "Only the buyer can fulfill the order");
@@ -197,6 +257,7 @@ public class SellerOrderService {
         List<Order> allOrders = orderRepository.findAllOrdersBySellerId(sellerId);
 
         BigDecimal totalRevenue = BigDecimal.ZERO;
+        BigDecimal totalPlatformFee = BigDecimal.ZERO;
         BigDecimal totalCost = BigDecimal.ZERO;
 
         long totalOrders = allOrders.size();
@@ -215,23 +276,18 @@ public class SellerOrderService {
             }
 
             if (!"CANCELLED".equalsIgnoreCase(status)) {
-                for (OrderItem item : order.getItems()) {
-                    if (item.getSeller() != null && item.getSeller().getId().equals(sellerId)) {
-                        BigDecimal qty = BigDecimal.valueOf(item.getQuantity());
-                        BigDecimal price = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
-                        BigDecimal cost = item.getCostAtPurchase() != null ? item.getCostAtPurchase() : BigDecimal.ZERO;
-
-                        totalRevenue = totalRevenue.add(price.multiply(qty));
-                        totalCost = totalCost.add(cost.multiply(qty));
-                    }
-                }
+                SellerFinancials financials = sellerFinancials(order, sellerId);
+                totalRevenue = totalRevenue.add(financials.grossRevenue());
+                totalCost = totalCost.add(financials.totalCost());
+                totalPlatformFee = totalPlatformFee.add(financials.platformFee());
             }
         }
 
-        BigDecimal netProfit = totalRevenue.subtract(totalCost);
+        BigDecimal netProfit = totalRevenue.subtract(totalPlatformFee).subtract(totalCost);
 
         return new SellerProfitSummaryResponse(
                 totalRevenue,
+                totalPlatformFee,
                 totalCost,
                 netProfit,
                 totalOrders,
@@ -239,6 +295,48 @@ public class SellerOrderService {
                 fulfilledOrders,
                 cancelledOrders
         );
+    }
+
+    @Transactional(readOnly = true)
+    public SellerMonthlyDashboardResponse getMonthlyDashboard(Long sellerId, Integer requestedYear, Integer requestedMonth) {
+        YearMonth selected = requestedYear == null || requestedMonth == null
+            ? YearMonth.now()
+            : validateYearMonth(requestedYear, requestedMonth);
+        List<Order> orders = orderRepository.findAllOrdersBySellerId(sellerId);
+        List<SellerMonthlyPointResponse> points = new ArrayList<>();
+        for (int offset = 11; offset >= 0; offset--) {
+            YearMonth period = selected.minusMonths(offset);
+            points.add(monthlyPoint(orders, sellerId, period));
+        }
+        return new SellerMonthlyDashboardResponse(monthlyPoint(orders, sellerId, selected), points);
+    }
+
+    private YearMonth validateYearMonth(int year, int month) {
+        if (year < 2000 || year > 2100 || month < 1 || month > 12) {
+            throw new OrderStatusValidationException("month", "year and month are invalid");
+        }
+        return YearMonth.of(year, month);
+    }
+
+    private SellerMonthlyPointResponse monthlyPoint(List<Order> orders, Long sellerId, YearMonth period) {
+        BigDecimal gross = BigDecimal.ZERO;
+        BigDecimal fee = BigDecimal.ZERO;
+        BigDecimal cost = BigDecimal.ZERO;
+        long count = 0;
+        for (Order order : orders) {
+            if (order.getCreatedAt() == null || !YearMonth.from(order.getCreatedAt()).equals(period)
+                    || "CANCELLED".equalsIgnoreCase(order.getStatus())) continue;
+            SellerFinancials financials = sellerFinancials(order, sellerId);
+            if (financials.hasSellerItems()) {
+                gross = gross.add(financials.grossRevenue());
+                fee = fee.add(financials.platformFee());
+                cost = cost.add(financials.totalCost());
+                count++;
+            }
+        }
+        BigDecimal netRevenue = gross.subtract(fee);
+        return new SellerMonthlyPointResponse(period.getYear(), period.getMonthValue(), gross, fee, netRevenue,
+            cost, netRevenue.subtract(cost), count);
     }
 
     private SellerOrderResponse mapToSellerOrderResponse(Order order, Long sellerId) {
@@ -254,7 +352,7 @@ public class SellerOrderService {
             BigDecimal qty = BigDecimal.valueOf(item.getQuantity());
             BigDecimal price = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
             BigDecimal cost = item.getCostAtPurchase() != null ? item.getCostAtPurchase() : BigDecimal.ZERO;
-            BigDecimal itemTotal = price.multiply(qty);
+            BigDecimal itemTotal = "AUCTION".equals(order.getOrderType()) ? price : price.multiply(qty);
             BigDecimal itemTotalCost = cost.multiply(qty);
             BigDecimal itemProfit = itemTotal.subtract(itemTotalCost);
 
@@ -273,7 +371,9 @@ public class SellerOrderService {
             ));
         }
 
-        BigDecimal sellerProfit = sellerRevenue.subtract(sellerCost);
+        BigDecimal sellerPlatformFee = sellerPlatformFee(order, sellerRevenue);
+        BigDecimal sellerNetRevenue = sellerRevenue.subtract(sellerPlatformFee);
+        BigDecimal sellerProfit = sellerNetRevenue.subtract(sellerCost);
 
         List<OrderStatusLogResponse> logs = orderStatusLogRepository.findByOrderIdOrderByCreatedAtAsc(order.getId())
                 .stream()
@@ -291,6 +391,9 @@ public class SellerOrderService {
                 order.getId(),
                 order.getOrderNumber(),
                 order.getStatus(),
+                order.getTrackingNumber(),
+                order.getShippingCarrier(),
+                order.getOrderType(),
                 buyer != null ? buyer.getId() : null,
                 buyer != null ? buyer.getFullName() : null,
                 buyer != null ? buyer.getEmail() : null,
@@ -298,6 +401,8 @@ public class SellerOrderService {
                 buyer != null ? buyer.getContactLine() : null,
                 buyer != null ? buyer.getContactFacebook() : null,
                 sellerRevenue,
+                sellerPlatformFee,
+                sellerNetRevenue,
                 sellerCost,
                 sellerProfit,
                 itemDtos,
@@ -307,9 +412,36 @@ public class SellerOrderService {
         );
     }
 
+    private SellerFinancials sellerFinancials(Order order, Long sellerId) {
+        BigDecimal sellerRevenue = BigDecimal.ZERO;
+        BigDecimal sellerCost = BigDecimal.ZERO;
+        boolean hasItems = false;
+        for (OrderItem item : order.getItems()) {
+            if (item.getSeller() == null || !item.getSeller().getId().equals(sellerId)) continue;
+            hasItems = true;
+            BigDecimal quantity = BigDecimal.valueOf(item.getQuantity());
+            BigDecimal price = item.getPriceAtPurchase() != null ? item.getPriceAtPurchase() : BigDecimal.ZERO;
+            BigDecimal cost = item.getCostAtPurchase() != null ? item.getCostAtPurchase() : BigDecimal.ZERO;
+            sellerRevenue = sellerRevenue.add("AUCTION".equals(order.getOrderType()) ? price : price.multiply(quantity));
+            sellerCost = sellerCost.add(cost.multiply(quantity));
+        }
+        return new SellerFinancials(sellerRevenue, sellerPlatformFee(order, sellerRevenue), sellerCost, hasItems);
+    }
+
+    private BigDecimal sellerPlatformFee(Order order, BigDecimal sellerRevenue) {
+        BigDecimal fee = order.getPlatformFee() != null ? order.getPlatformFee() : BigDecimal.ZERO;
+        if (fee.signum() == 0 || sellerRevenue.signum() == 0) return BigDecimal.ZERO;
+        if ("AUCTION".equals(order.getOrderType())) return fee;
+        BigDecimal subtotal = order.getSubtotalAmount() != null ? order.getSubtotalAmount() : order.getTotalAmount();
+        if (subtotal == null || subtotal.signum() <= 0) return BigDecimal.ZERO;
+        return fee.multiply(sellerRevenue).divide(subtotal, 2, RoundingMode.HALF_UP);
+    }
+
+    private record SellerFinancials(BigDecimal grossRevenue, BigDecimal platformFee, BigDecimal totalCost, boolean hasSellerItems) {}
+
     private String normalizeStatus(String status) {
         String value = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
-        if (!List.of("PENDING", "CONFIRMED", "SENT", "FULFILLED", "CANCELLED").contains(value)) {
+        if (!List.of("PENDING", "CONFIRMED", "AWAITING_BUYER_CONTACT", "PENDING_SELLER_ACTION", "SENT", "FULFILLED", "CANCELLED").contains(value)) {
             throw new OrderStatusValidationException("status",
                 "Status must be PENDING, CONFIRMED, SENT, FULFILLED, or CANCELLED");
         }

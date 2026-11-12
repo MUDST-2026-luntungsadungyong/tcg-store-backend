@@ -1,5 +1,6 @@
 package com.mythix.tcg.common.api;
 
+import com.mythix.tcg.auction.application.AuctionException;
 import com.mythix.tcg.auth.application.DuplicateEmailException;
 import com.mythix.tcg.auth.application.InvalidCredentialsException;
 import com.mythix.tcg.admin.application.SellerApplicationNotFoundException;
@@ -21,6 +22,7 @@ import com.mythix.tcg.collection.application.CollectionListingNotFoundException;
 import com.mythix.tcg.collection.application.CollectionItemNotFoundException;
 import com.mythix.tcg.collection.application.CollectionValidationException;
 import com.mythix.tcg.collection.application.CollectionUserNotFoundException;
+import com.mythix.tcg.collection.application.PublicCollectionPrivateException;
 import com.mythix.tcg.collection.application.PublicCollectionUserNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import com.mythix.tcg.order.application.OrderNotFoundException;
@@ -32,6 +34,9 @@ import com.mythix.tcg.order.application.EmptyCartException;
 import com.mythix.tcg.order.application.OrderStatusValidationException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
+import com.mythix.tcg.notification.application.StockAlreadyAvailableException;
+import com.mythix.tcg.voucher.application.VoucherExceptions.*;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
@@ -48,6 +53,24 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(StockAlreadyAvailableException.class)
+    public ResponseEntity<ApiError> stockAlreadyAvailable(StockAlreadyAvailableException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("STOCK_ALREADY_AVAILABLE", exception.getMessage(), null));
+    }
+
+    @ExceptionHandler(AuctionException.class)
+    public ResponseEntity<ApiError> auction(AuctionException exception) {
+        return ResponseEntity.status(exception.getStatus())
+            .body(new ApiError(exception.getCode(), exception.getMessage(), null));
+    }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ResponseEntity<ApiError> stockLockContention() {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("CONCURRENT_UPDATE", "The data changed concurrently. Refresh and retry.", null));
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiError> validation(MethodArgumentNotValidException exception) {
@@ -221,6 +244,12 @@ public class GlobalExceptionHandler {
             .body(new ApiError("INVALID_CREDENTIALS", "Authenticated user is no longer available", Map.of()));
     }
 
+    @ExceptionHandler(PublicCollectionPrivateException.class)
+    public ResponseEntity<ApiError> publicCollectionPrivate(PublicCollectionPrivateException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(new ApiError("COLLECTION_PRIVATE", exception.getMessage(), Map.of()));
+    }
+
     @ExceptionHandler(PublicCollectionUserNotFoundException.class)
     public ResponseEntity<ApiError> publicCollectionUserNotFound(PublicCollectionUserNotFoundException exception) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -317,4 +346,41 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
             .body(new ApiError("VALIDATION_ERROR", "Request validation failed", fields));
     }
+
+    @ExceptionHandler(VoucherNotFoundException.class)
+    public ResponseEntity<ApiError> voucherNotFound(VoucherNotFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(new ApiError("VOUCHER_NOT_FOUND", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(VoucherAlreadyClaimedException.class)
+    public ResponseEntity<ApiError> voucherAlreadyClaimed(VoucherAlreadyClaimedException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_ALREADY_CLAIMED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(VoucherQuotaExhaustedException.class)
+    public ResponseEntity<ApiError> voucherQuotaExhausted(VoucherQuotaExhaustedException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_QUOTA_EXHAUSTED", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(VoucherNotApplicableException.class)
+    public ResponseEntity<ApiError> voucherNotApplicable(VoucherNotApplicableException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_NOT_APPLICABLE", exception.getMessage(), Map.of()));
+    }
+
+    @ExceptionHandler(VoucherCodeAlreadyExistsException.class)
+    public ResponseEntity<ApiError> voucherCodeAlreadyExists(VoucherCodeAlreadyExistsException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("VOUCHER_CODE_EXISTS", exception.getMessage(), Map.of("code", exception.getMessage())));
+    }
+
+    @ExceptionHandler(VoucherValidationException.class)
+    public ResponseEntity<ApiError> voucherValidation(VoucherValidationException exception) {
+        return ResponseEntity.badRequest()
+            .body(new ApiError("VOUCHER_VALIDATION_ERROR", exception.getMessage(), exception.getFieldErrors()));
+    }
+
 }

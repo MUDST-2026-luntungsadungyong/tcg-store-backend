@@ -13,6 +13,7 @@ import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.persistence.SellerProfileRepository;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.user.persistence.UserRepository;
+import com.mythix.tcg.voucher.application.VoucherService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,8 @@ public class CheckoutService {
     private final UserRepository userRepository;
     private final SellerProfileRepository sellerProfileRepository;
     private final NotificationService notificationService;
+    private final VoucherService voucherService;
+    private final PlatformFeeService platformFeeService;
 
     /**
      * The buyer row is locked before reading idempotency or cart state. This serializes
@@ -47,6 +50,11 @@ public class CheckoutService {
      */
     @Transactional
     public CheckoutResponse checkout(Long buyerId, String idempotencyKey) {
+        return checkout(buyerId, idempotencyKey, null);
+    }
+
+    @Transactional
+    public CheckoutResponse checkout(Long buyerId, String idempotencyKey, String voucherCode) {
         String normalizedKey = normalizeIdempotencyKey(idempotencyKey);
         User buyer = userRepository.findByIdForUpdate(buyerId)
             .orElseThrow(CheckoutNotAllowedException::new);
@@ -113,17 +121,30 @@ public class CheckoutService {
                 .build());
         }
 
+        BigDecimal platformFee = platformFeeService.currentPolicy().feeFor(total);
         Order order = Order.builder()
             .orderNumber("ORD-TEMP-" + UUID.randomUUID())
             .idempotencyKey(normalizedKey)
             .buyer(buyer)
             .status("PENDING")
+            .subtotalAmount(total)
+            .discountAmount(BigDecimal.ZERO)
             .totalAmount(total)
-            .platformFee(BigDecimal.ZERO)
-            .sellerNetAmount(total)
+            .platformFee(platformFee)
+            .sellerNetAmount(total.subtract(platformFee))
             .items(orderItems)
             .build();
         orderItems.forEach(item -> item.setOrder(order));
+
+        if (voucherCode != null && !voucherCode.trim().isEmpty()) {
+            BigDecimal discount = voucherService.applyVoucherToOrder(voucherCode, buyer, total, order);
+            BigDecimal discountedTotal = total.subtract(discount).max(BigDecimal.ZERO);
+            order.setDiscountAmount(discount);
+            order.setTotalAmount(discountedTotal);
+            // Platform subsidizes the discount: seller receives full amount (minus platform fee, if any)
+            BigDecimal fee = order.getPlatformFee() != null ? order.getPlatformFee() : BigDecimal.ZERO;
+            order.setSellerNetAmount(total.subtract(fee));
+        }
 
         Order saved = orderRepository.save(order);
         orderRepository.flush();
@@ -141,6 +162,7 @@ public class CheckoutService {
         cartItemRepository.deleteAllInBatch(cartItems);
         orderRepository.flush();
         notificationService.notifySellersOfReservation(saved);
+        notificationService.notifyBuyerOrderPlaced(saved);
         return toResponse(saved);
     }
 
@@ -170,9 +192,7 @@ public class CheckoutService {
         if (product.getPrice() == null || product.getPrice().signum() < 0) {
             throw new CheckoutValidationException("price", "listing price is invalid");
         }
-        int onHand = product.getOnHand() == null ? 0 : product.getOnHand();
-        int reserved = product.getReserved() == null ? 0 : product.getReserved();
-        int available = Math.max(0, onHand - reserved);
+        int available = product.availableStock();
         if (quantityValue > available) {
             throw new CheckoutInsufficientStockException(listingId, available);
         }
@@ -202,6 +222,11 @@ public class CheckoutService {
             order.getOrderNumber(),
             order.getStatus(),
             order.getTotalAmount(),
+            order.getSubtotalAmount() != null ? order.getSubtotalAmount() : order.getTotalAmount(),
+            order.getDiscountAmount() != null ? order.getDiscountAmount() : BigDecimal.ZERO,
+            order.getPlatformFee() != null ? order.getPlatformFee() : BigDecimal.ZERO,
+            order.getSellerNetAmount() != null ? order.getSellerNetAmount() : order.getTotalAmount(),
+            order.getVoucherCodeSnapshot(),
             items,
             createdAtValue
         );

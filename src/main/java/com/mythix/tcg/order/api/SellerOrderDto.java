@@ -32,6 +32,9 @@ public class SellerOrderDto {
         Long id,
         String orderNumber,
         String status,
+        String trackingNumber,
+        String shippingCarrier,
+        String orderType,
         Long buyerId,
         String buyerName,
         String buyerEmail,
@@ -39,6 +42,8 @@ public class SellerOrderDto {
         String buyerContactLine,
         String buyerContactFacebook,
         BigDecimal sellerRevenue,
+        BigDecimal sellerPlatformFee,
+        BigDecimal sellerNetRevenue,
         BigDecimal sellerCost,
         BigDecimal sellerProfit,
         List<SellerOrderItemResponse> items,
@@ -49,18 +54,37 @@ public class SellerOrderDto {
 
     public record UpdateOrderStatusRequest(
         @NotBlank(message = "Status is required")
-        @Pattern(regexp = "(?i)PENDING|CONFIRMED|SENT|FULFILLED|CANCELLED", message = "Status must be PENDING, CONFIRMED, SENT, FULFILLED, or CANCELLED")
+        @Pattern(regexp = "(?i)PENDING|CONFIRMED|AWAITING_BUYER_CONTACT|PENDING_SELLER_ACTION|SENT|FULFILLED|CANCELLED", message = "Status is not supported")
         String status,
-        String note
+        String note,
+        String trackingNumber,
+        Boolean noBuyerContact
     ) {}
 
     public record SellerProfitSummaryResponse(
         BigDecimal totalRevenue,
+        BigDecimal totalPlatformFee,
         BigDecimal totalCost,
         BigDecimal netProfit,
         long totalOrders,
         long pendingOrders,
         long fulfilledOrders,
         long cancelledOrders
+    ) {}
+
+    public record SellerMonthlyPointResponse(
+        int year,
+        int month,
+        BigDecimal grossSales,
+        BigDecimal platformFee,
+        BigDecimal netRevenue,
+        BigDecimal totalCost,
+        BigDecimal netProfit,
+        long orderCount
+    ) {}
+
+    public record SellerMonthlyDashboardResponse(
+        SellerMonthlyPointResponse selectedMonth,
+        List<SellerMonthlyPointResponse> lastTwelveMonths
     ) {}
 }

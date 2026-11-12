@@ -28,7 +28,7 @@ class AdminDashboardControllerTest {
     @DisplayName("dashboard() - returns aggregated platform metrics from AdminSellerService")
     void dashboard_returnsPlatformMetrics() {
         AdminDashboardResponse mockMetrics = new AdminDashboardResponse(
-                100L, 2L, 80L, 5L, 15L, 2000L, 42L, 350L, new BigDecimal("125000.00")
+                100L, 2L, 80L, 5L, 15L, 2000L, 42L, 350L, new BigDecimal("125000.00"), new BigDecimal("6250.00")
         );
 
         when(adminSellerService.dashboard()).thenReturn(mockMetrics);
@@ -45,6 +45,7 @@ class AdminDashboardControllerTest {
         assertThat(response.listedCards()).isEqualTo(42L);
         assertThat(response.totalOrders()).isEqualTo(350L);
         assertThat(response.totalOrderAmount()).isEqualByComparingTo("125000.00");
+        assertThat(response.totalPlatformFee()).isEqualByComparingTo("6250.00");
 
         verify(adminSellerService).dashboard();
     }

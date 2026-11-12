@@ -1,6 +1,7 @@
 package com.mythix.tcg.order.api;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.mythix.tcg.cart.api.CartResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -67,12 +68,23 @@ public class BuyerOrderDto {
     public static class BuyerOrderResponse {
         private String id;
         private String orderNumber;
+        private String orderType;
         private String buyerId;
         private String sellerId;
         private String sellerName;
+        private String sellerEmail;
+        private String sellerPhone;
+        private String sellerLine;
+        private String sellerFacebook;
+        private String sellerOtherContact;
         private String status;
+        private String trackingNumber;
+        private String shippingCarrier;
         private BigDecimal totalAmount;
         private BigDecimal totalPrice;
+        private BigDecimal subtotalAmount;
+        private BigDecimal discountAmount;
+        private String voucherCode;
         private Integer itemCount;
         private List<BuyerOrderItemResponse> items;
         private List<OrderStatusLogResponse> logs;
@@ -87,5 +99,28 @@ public class BuyerOrderDto {
     public record UpdateBuyerOrderStatusRequest(
         String status,
         String note
+    ) {}
+
+    public record ReorderItemResponse(
+        String listingId,
+        String productName,
+        int requestedQuantity,
+        int addedQuantity,
+        int availableQuantity,
+        String outcome
+    ) {}
+
+    public record ReorderResponse(
+        CartResponse cart,
+        List<ReorderItemResponse> items,
+        int totalAddedItems,
+        boolean hasUnavailableItems
+    ) {}
+
+    public record OrderVerificationResponse(
+        String orderNumber,
+        String status,
+        String orderType,
+        String updatedAt
     ) {}
 }

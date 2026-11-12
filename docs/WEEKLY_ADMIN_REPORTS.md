@@ -4,7 +4,7 @@
 
 - Applies to platform administrators only. No seller KYC documents or buyer details are exported.
 - The Sunday 23:59 UTC job starts weekly processing. A reconciliation job runs every 60 seconds and finalizes after a one-minute grace period. UTC periods are **[previous Sunday 23:59, current Sunday 23:59)**, not calendar Monday–Sunday. The final minute belongs to the next period; no minute is dropped or counted twice.
-- Only full periods observed since V12 installation are generated. The first partial week is skipped. There are no invented historical stock figures. The next complete tracked week is generated even if there are no sales.
+- Only full periods observed since V31 installation are generated. The first partial week is skipped. There are no invented historical stock figures. The next complete tracked week is generated even if there are no sales.
 - The stock and transaction fact tables preserve historical values. After downtime, the scheduler reconstructs missed periods from these facts (up to 52 new reports per pass). Existing reports are never recalculated or overwritten.
 - Replicas serialize on `admin_report_state`. PostgreSQL fact-table locks wait for in-flight writes while generating a due report. Short-lived blocking is possible during report generation; failed transactions are retried on the next reconciliation.
 - Reports and facts are retained without automatic deletion. No report edit/delete or manual generation endpoint is exposed.
@@ -44,12 +44,12 @@ All paths require a valid Bearer token with ADMIN role. Shared security returns 
 
 ## Running and storage
 
-1. Apply normal PostgreSQL/Neon Flyway migrations through **V12** using the existing migration service/job before starting the new API version. This change does not apply migrations to an existing running database automatically.
+1. Apply normal PostgreSQL/Neon Flyway migrations through **V31** using the existing migration service/job before starting the new API version. This change does not apply migrations to an existing running database automatically.
 2. `WEEKLY_REPORTS_ENABLED=true` enables scheduling (default). Migration and test profiles disable scheduling. Set false to pause generation; saved reports remain readable.
 3. Open **Admin → Weekly reports** (`/admin/reports/weekly`). Select a saved period or page through history; use **Export CSV** to download it.
 4. The reporting extension uses PostgreSQL transactional triggers. The existing TiDB Revision 5 schema does not contain these extension tables/triggers and requires its own migration/capture design before enabling this feature there.
 
-Tables: `admin_report_state`, `admin_inventory_events`, `admin_order_events`, `admin_weekly_reports`. Facts intentionally have no foreign keys to mutable source records, so deleting a listing cannot erase historical reporting data. JSON snapshots use TEXT storage for explicit application serialization; numeric/date summary columns remain queryable. This is an implementation of the proposed report schema, not an alteration to old V1–V11 migrations.
+Tables: `admin_report_state`, `admin_inventory_events`, `admin_order_events`, `admin_weekly_reports`. Facts intentionally have no foreign keys to mutable source records, so deleting a listing cannot erase historical reporting data. JSON snapshots use TEXT storage for explicit application serialization; numeric/date summary columns remain queryable. The extension is introduced in V31 after the existing V30 stock-notifications migration; previously released migrations are unchanged.
 
 ## Verification
 
@@ -71,7 +71,7 @@ Frontend tests: `npm test -- src/features/admin/pages/AdminWeeklyReportsPage.tes
 | --- | --- |
 | Backend calculation / snapshot / CSV tests | 7 passed |
 | Backend signed-JWT HTTP contract and authorization tests | 5 passed |
-| PostgreSQL 16 fresh V1–V12 migrations, triggers, rollback, deletion, concurrent schedulers | 3 passed |
+| PostgreSQL 16 fresh V1–V31 migrations, triggers, rollback, deletion, concurrent schedulers | 3 passed |
 | Frontend report page, authenticated download client, admin navigation | 17 passed (single worker) |
 | Cypress smoke in Chrome headless against production preview, HTTP fixtures | 4 passed |
 | Frontend TypeScript / Vite production build | Passed; existing bundle-size/timing warnings |
@@ -81,6 +81,6 @@ Backend used Java 21.0.9 and a disposable PostgreSQL container, not the running 
 
 ## Migration compatibility with current main
 
-The canonical repository already uses V11 for seller actual photographs and grading. Weekly reporting therefore uses **V12** in this PR, preserving the existing V11 unchanged. Fresh and canonical V11 installations should run the normal migration gate through V12 before starting this API.
+The current canonical repository already uses V12 for auction listing management and V30 for stock notifications. Weekly reporting therefore uses **V31**, preserving every previously released migration unchanged. Existing PostgreSQL/Neon databases should run the regular migration job through V31 before starting this API.
 
-An earlier local prototype applied reporting under version V11 before the repository's seller-photo V11 was published. Such a prototype database requires a separate backed-up Flyway-history reconciliation before adopting this PR; do not point this branch at that database or edit applied migration checksums as a shortcut. Preparing this PR does not change the existing local runtime or its database.
+An earlier local prototype applied reporting under version V11 before the repository's seller-photo V11 was published. Such a prototype database requires a separately reviewed, backed-up Flyway-history reconciliation before adopting V31; do not point this release at that database or edit applied migration checksums as a shortcut.

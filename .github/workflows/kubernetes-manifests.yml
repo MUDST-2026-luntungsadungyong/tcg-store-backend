@@ -93,6 +93,9 @@ jobs:
       - name: Build local dependency validation target
         run: kubectl kustomize infra/kubernetes/local-dependencies > "$RUNNER_TEMP/local-dependencies.yaml"
 
+      - name: Build AKS API gateway validation target
+        run: kubectl kustomize infra/kubernetes/overlays/aks-demo/api-gateway > "$RUNNER_TEMP/aks-api-gateway.yaml"
+
       - name: Generate strict schemas from official Traefik v3.5 CRDs
         shell: bash
         run: |
@@ -121,4 +124,4 @@ jobs:
           kubeconform -strict -summary -kubernetes-version 1.34.1 \
             -schema-location default -schema-location "$schema_location" \
             "$render_dir/application.yaml" "$render_dir/migration.yaml" "$render_dir/prerequisites.yaml" \
-            "$RUNNER_TEMP/local-dependencies.yaml"
+            "$RUNNER_TEMP/local-dependencies.yaml" "$RUNNER_TEMP/aks-api-gateway.yaml"

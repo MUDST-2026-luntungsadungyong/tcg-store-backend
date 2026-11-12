@@ -14,7 +14,7 @@
         "label": "Prometheus",
         "type": "datasource",
         "query": "prometheus",
-        "current": {},
+        "current": { "selected": true, "text": "Managed_Prometheus_amw-tcg-store-aks-demo", "value": "amw-tcg-store-aks-demo" },
         "options": [],
         "refresh": 1,
         "hide": 0
@@ -23,12 +23,13 @@
         "name": "environment",
         "label": "Environment",
         "type": "custom",
-        "query": "staging,production",
-        "current": { "selected": false, "text": "staging", "value": "staging" },
+        "query": "aks-demo,staging,production",
+        "current": { "selected": true, "text": "aks-demo", "value": "aks-demo" },
         "multi": false,
         "includeAll": false,
         "options": [
-          { "selected": true, "text": "staging", "value": "staging" },
+          { "selected": true, "text": "aks-demo", "value": "aks-demo" },
+          { "selected": false, "text": "staging", "value": "staging" },
           { "selected": false, "text": "production", "value": "production" }
         ],
         "hide": 0

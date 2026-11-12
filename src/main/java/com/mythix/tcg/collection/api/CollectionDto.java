@@ -62,6 +62,10 @@ public class CollectionDto {
     @Builder
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class CollectionItemResponse {
+        private boolean auctionWon;
+        private String provenance;
+        private String gradingCompany;
+        private String grade;
         private String id;
         private String ownerId;
         private String cardId;
@@ -87,6 +91,25 @@ public class CollectionDto {
     public static class CollectionResponse {
         private List<CollectionItemResponse> items;
         private PageMetadata page;
+        private String privacy;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class CollectionPrivacyRequest {
+        @jakarta.validation.constraints.NotNull(message = "privacy is required")
+        @jakarta.validation.constraints.Pattern(regexp = "(?i)^(PUBLIC|PRIVATE)$", message = "privacy must be either PUBLIC or PRIVATE")
+        private String privacy;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class CollectionPrivacyResponse {
+        private String privacy;
     }
 
     @Data

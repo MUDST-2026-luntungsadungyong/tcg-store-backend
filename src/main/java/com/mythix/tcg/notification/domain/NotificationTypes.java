@@ -4,9 +4,30 @@ public final class NotificationTypes {
 
     public static final String ORDER_RESERVED = "ORDER_RESERVED";
     public static final String ORDER_STATUS_CHANGED = "ORDER_STATUS_CHANGED";
+    public static final String ORDER_PLACED_BUYER = "ORDER_PLACED_BUYER";
+    public static final String ORDER_CONFIRMED_BUYER = "ORDER_CONFIRMED_BUYER";
+    public static final String ORDER_CANCELLED_BUYER = "ORDER_CANCELLED_BUYER";
+    public static final String ORDER_CANCELLED_SELLER = "ORDER_CANCELLED_SELLER";
+    public static final String ORDER_FULFILLED_SELLER = "ORDER_FULFILLED_SELLER";
+    public static final String ORDER_SENT_BUYER = "ORDER_SENT_BUYER";
     public static final String SELLER_APPLICATION_SUBMITTED = "SELLER_APPLICATION_SUBMITTED";
     public static final String SELLER_APPLICATION_APPROVED = "SELLER_APPLICATION_APPROVED";
     public static final String SELLER_APPLICATION_REJECTED = "SELLER_APPLICATION_REJECTED";
+    public static final String AUCTION_CANCELLATION_SUBMITTED = "AUCTION_CANCELLATION_SUBMITTED";
+    public static final String AUCTION_CANCELLATION_DECIDED = "AUCTION_CANCELLATION_DECIDED";
+    public static final String AUCTION_OUTBID = "AUCTION_OUTBID";
+    public static final String AUCTION_WON = "AUCTION_WON";
+    public static final String AUCTION_ENDED_SELLER = "AUCTION_ENDED_SELLER";
+    public static final String AUCTION_WATCHLIST_ENDING = "AUCTION_WATCHLIST_ENDING";
+    public static final String AUCTION_SECOND_CHANCE = "AUCTION_SECOND_CHANCE";
+    public static final String AUCTION_DEFAULTED_WARNING = "AUCTION_DEFAULTED_WARNING";
+    public static final String AUCTION_DISPUTE_OPENED = "AUCTION_DISPUTE_OPENED";
+    public static final String AUCTION_DISPUTE_EVIDENCE_ADDED = "AUCTION_DISPUTE_EVIDENCE_ADDED";
+    public static final String AUCTION_DISPUTE_DECIDED = "AUCTION_DISPUTE_DECIDED";
+    public static final String STOCK_AVAILABLE = "STOCK_AVAILABLE";
+    public static final String SELLER_STOCK_LOW = "SELLER_STOCK_LOW";
+    public static final String SELLER_STOCK_CRITICAL = "SELLER_STOCK_CRITICAL";
+    public static final String SELLER_OUT_OF_STOCK = "SELLER_OUT_OF_STOCK";
 
     private NotificationTypes() {
     }

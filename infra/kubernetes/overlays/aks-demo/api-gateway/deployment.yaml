@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tcg-store-frontend
+  labels:
+    app.kubernetes.io/name: tcg-store-frontend
+    app.kubernetes.io/component: api-gateway
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tcg-store-frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tcg-store-frontend
+        app.kubernetes.io/component: api-gateway
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: web
+          image: caddy:2.10.2-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            tcpSocket:
+              port: https
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: https
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [NET_BIND_SERVICE]
+          volumeMounts:
+            - name: caddyfile
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+              readOnly: true
+            - name: caddy-data
+              mountPath: /data
+            - name: caddy-config
+              mountPath: /config
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: caddyfile
+          configMap:
+            name: tcg-store-api-gateway-caddy
+        - name: caddy-data
+          persistentVolumeClaim:
+            claimName: tcg-store-frontend-caddy-data
+        - name: caddy-config
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

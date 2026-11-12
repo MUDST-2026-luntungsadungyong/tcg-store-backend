@@ -26,6 +26,10 @@ public class User {
     @Column(nullable = false)
     private String password;
 
+    @Column(name = "auth_version", nullable = false)
+    @Builder.Default
+    private long authVersion = 0;
+
     @Column(name = "full_name", nullable = false, length = 255)
     private String fullName;
 
@@ -38,6 +42,9 @@ public class User {
     @Column(name = "contact_facebook", length = 255)
     private String contactFacebook;
 
+    @Column(name = "contact_other", length = 255)
+    private String contactOther;
+
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
 
@@ -49,11 +56,33 @@ public class User {
     @Builder.Default
     private String sellerStatus = "NONE";
 
+    @Column(name = "collection_privacy", nullable = false, length = 20)
+    @Builder.Default
+    private String collectionPrivacy = "PUBLIC";
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "auction_strikes", nullable = false)
+    @Builder.Default
+    private int auctionStrikes = 0;
+
+    @Column(name = "auction_banned_until")
+    private java.time.Instant auctionBannedUntil;
+
+    @Column(name = "auction_penalty_baseline_strikes")
+    private Integer auctionPenaltyBaselineStrikes;
+    @Column(name = "auction_penalty_baseline_ban")
+    private java.time.Instant auctionPenaltyBaselineBan;
+    @Column(name = "auction_penalty_applied_ban")
+    private java.time.Instant auctionPenaltyAppliedBan;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public boolean isAuctionBanned() {
+        return auctionBannedUntil != null && auctionBannedUntil.isAfter(java.time.Instant.now());
+    }
 }

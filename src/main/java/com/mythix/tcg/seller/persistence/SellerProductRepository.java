@@ -19,11 +19,18 @@ public interface SellerProductRepository extends JpaRepository<Product, Long> {
     List<Product> findAllBySeller_IdAndStatusNotOrderByUpdatedAtDescIdDesc(Long sellerId, String status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @EntityGraph(attributePaths = "card")
     @Query("select p from Product p where p.id = :productId")
     Optional<Product> findActiveByIdForUpdate(@Param("productId") Long productId);
 
     boolean existsByCustomImageUrlAndIdNot(String customImageUrl, Long productId);
+
+    @Query("select count(p) > 0 from Product p where p.card.id = :cardId and upper(p.status) = 'SHOW' "
+        + "and (coalesce(p.onHand, 0) - coalesce(p.reserved, 0) - p.auctionReserved) > 0")
+    boolean existsPurchasableByGlobalCardId(@Param("cardId") String cardId);
+
+    @Query("select distinct p.seller.id from Product p where upper(p.status) in ('SHOW', 'OUT_OF_STOCK') "
+        + "and upper(p.seller.sellerStatus) = 'APPROVED'")
+    List<Long> findSellerIdsWithVisibleListings();
 
     @Query("select count(distinct p.id) > 0 from Product p left join p.additionalImageUrls extra "
         + "where p.id <> :productId and (p.customImageUrl = :url or p.actualImageFrontUrl = :url "

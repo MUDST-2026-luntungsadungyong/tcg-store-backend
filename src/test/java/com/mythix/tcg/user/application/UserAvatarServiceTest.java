@@ -29,7 +29,7 @@ class UserAvatarServiceTest {
     @Test
     void storesAvatarForAuthenticatedUser() {
         var user = User.builder().id(1L).fullName("Collector").role("USER").build();
-        when(users.findById(1L)).thenReturn(Optional.of(user));
+        when(users.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(images.store(image)).thenReturn("https://images.example/products/photo.png");
         assertThat(service.upload(1L, image).avatarUrl()).isEqualTo("https://images.example/products/photo.png");
         assertThat(user.getAvatarUrl()).isEqualTo("https://images.example/products/photo.png");
@@ -37,7 +37,7 @@ class UserAvatarServiceTest {
 
     @Test
     void rejectsUnknownUserBeforeWritingStorage() {
-        when(users.findById(2L)).thenReturn(Optional.empty());
+        when(users.findByIdForUpdate(2L)).thenReturn(Optional.empty());
         assertThatThrownBy(() -> service.upload(2L, image)).isInstanceOf(InvalidCredentialsException.class);
         verifyNoInteractions(images);
     }
@@ -45,9 +45,28 @@ class UserAvatarServiceTest {
     @Test
     void storageFailurePreservesPreviousAvatar() {
         var user = User.builder().id(1L).avatarUrl("previous.png").build();
-        when(users.findById(1L)).thenReturn(Optional.of(user));
+        when(users.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
         when(images.store(image)).thenThrow(new IllegalStateException("storage unavailable"));
         assertThatThrownBy(() -> service.upload(1L, image)).isInstanceOf(IllegalStateException.class);
         assertThat(user.getAvatarUrl()).isEqualTo("previous.png");
+    }
+
+    @Test
+    void removeClearsAvatarWithoutDeletingPotentiallySharedObject() {
+        var user = User.builder().id(1L).avatarUrl("https://images.example/products/shared.png").build();
+        when(users.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
+        assertThat(service.remove(1L).avatarUrl()).isNull();
+        assertThat(user.getAvatarUrl()).isNull();
+        verifyNoInteractions(images);
+        assertThat(service.remove(1L).avatarUrl()).isNull();
+    }
+
+    @Test
+    void replacementRetainsPotentiallySharedOldObject() {
+        var user = User.builder().id(1L).avatarUrl("https://images.example/products/shared.png").build();
+        when(users.findByIdForUpdate(1L)).thenReturn(Optional.of(user));
+        when(images.store(image)).thenReturn("https://images.example/products/new.png");
+        service.upload(1L, image);
+        verify(images, never()).delete(anyString());
     }
 }

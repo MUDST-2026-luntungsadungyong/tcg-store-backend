@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: tcg-store-frontend
+  labels:
+    app.kubernetes.io/name: tcg-store-frontend
+    app.kubernetes.io/component: api-gateway
+  annotations:
+    service.beta.kubernetes.io/azure-dns-label-name: tcgstore-demo-2026-11
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: tcg-store-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: https
+      port: 443
+      targetPort: https

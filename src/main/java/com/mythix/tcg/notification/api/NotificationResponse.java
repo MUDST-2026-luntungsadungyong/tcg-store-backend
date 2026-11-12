@@ -11,6 +11,7 @@ public record NotificationResponse(
     String message,
     Long orderId,
     Long sellerApplicationId,
+    String actionPath,
     LocalDateTime readAt,
     LocalDateTime createdAt
 ) {
@@ -22,6 +23,7 @@ public record NotificationResponse(
             notification.getMessage(),
             notification.getOrder() == null ? null : notification.getOrder().getId(),
             notification.getSellerProfile() == null ? null : notification.getSellerProfile().getId(),
+            notification.getActionPath(),
             notification.getReadAt(),
             notification.getCreatedAt()
         );

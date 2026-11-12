@@ -2,6 +2,7 @@ package com.mythix.tcg.order.application;
 
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.order.api.SellerOrderDto.SellerOrderResponse;
+import com.mythix.tcg.order.api.SellerOrderDto.SellerMonthlyDashboardResponse;
 import com.mythix.tcg.order.api.SellerOrderDto.SellerProfitSummaryResponse;
 import com.mythix.tcg.order.domain.Order;
 import com.mythix.tcg.order.domain.OrderItem;
@@ -52,6 +53,9 @@ class SellerOrderServiceUnitTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private com.mythix.tcg.auction.application.AuctionSettlementService auctionSettlementService;
 
     @InjectMocks
     private SellerOrderService sellerOrderService;
@@ -170,7 +174,7 @@ class SellerOrderServiceUnitTest {
 
         // Act
         when(userRepository.getReferenceById(2L)).thenReturn(seller);
-        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Sent package");
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Sent package", "TRACK-100");
 
         // Assert
         assertThat(response).isNotNull();
@@ -259,9 +263,55 @@ class SellerOrderServiceUnitTest {
         assertThat(summary.netProfit()).isEqualByComparingTo("450.00");
         assertThat(summary.totalOrders()).isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("getMonthlyDashboard() - สรุปยอดขายรายเดือน หักค่าธรรมเนียม และคืนกราฟ 12 เดือน")
+    void getMonthlyDashboard_includesPlatformFeeAndTwelveMonthSeries() {
+        sampleOrder.setCreatedAt(LocalDateTime.of(2026, 10, 10, 12, 0));
+        sampleOrder.setSubtotalAmount(new BigDecimal("1250.00"));
+        sampleOrder.setPlatformFee(new BigDecimal("62.50"));
+        when(orderRepository.findAllOrdersBySellerId(2L)).thenReturn(List.of(sampleOrder));
+
+        SellerMonthlyDashboardResponse dashboard = sellerOrderService.getMonthlyDashboard(2L, 2026, 10);
+
+        assertThat(dashboard.lastTwelveMonths()).hasSize(12);
+        assertThat(dashboard.selectedMonth().grossSales()).isEqualByComparingTo("1250.00");
+        assertThat(dashboard.selectedMonth().platformFee()).isEqualByComparingTo("62.50");
+        assertThat(dashboard.selectedMonth().netRevenue()).isEqualByComparingTo("1187.50");
+        assertThat(dashboard.selectedMonth().netProfit()).isEqualByComparingTo("387.50");
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus() - จัดส่งพร้อมระบุ Tracking Number บันทึกลง Log ถูกต้อง")
+    void updateOrderStatus_sentWithTrackingNumber_success() {
+        // Arrange
+        sampleOrder.setStatus("CONFIRMED");
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+        when(orderRepository.save(any(Order.class))).thenReturn(sampleOrder);
+        when(productRepository.findByIdForUpdate(product.getId())).thenReturn(Optional.of(product));
+
+        // Act
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "Shipped via Flash", "FLASH77261902");
+
+        // Assert
+        assertThat(response).isNotNull();
+        assertThat(sampleOrder.getStatus()).isEqualTo("SENT");
+        verify(orderStatusLogRepository).save(argThat(log ->
+            log.getToStatus().equals("SENT") &&
+            log.getNote().equals("Shipped via Flash (Tracking: FLASH77261902)")
+        ));
+    }
+
+    @Test
+    @DisplayName("updateOrderStatus() - จัดส่งโดยไม่มีทั้ง Tracking Number และ Note เกิดข้อผิดพลาด")
+    void updateOrderStatus_sentWithoutTrackingOrNote_throwsException() {
+        // Arrange
+        sampleOrder.setStatus("CONFIRMED");
+        when(orderRepository.findOrderForSeller(2L, 100L)).thenReturn(Optional.of(sampleOrder));
+
+        // Act & Assert
+        assertThatThrownBy(() -> sellerOrderService.updateOrderStatus(2L, 100L, "SENT", "", ""))
+            .isInstanceOf(OrderStatusValidationException.class);
+    }
+
 }
-
-
-
-
-

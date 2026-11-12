@@ -39,8 +39,8 @@ public interface CollectionRepository extends JpaRepository<CollectionItem, Long
                    count(distinct ci.card.id) as distinctRareCardCount
             from CollectionItem ci
             join ci.card card
-            where lower(card.rarity) like '%rare%'
-               or lower(card.rarity) = 'promo'
+            where (lower(card.rarity) like '%rare%' or lower(card.rarity) = 'promo')
+              and ci.user.collectionPrivacy = 'PUBLIC'
             group by ci.user.id
             order by sum(ci.quantity) desc,
                      count(distinct ci.card.id) desc,
@@ -98,5 +98,26 @@ public interface CollectionRepository extends JpaRepository<CollectionItem, Long
         String getRarity();
 
         Integer getQuantity();
+    }
+
+    @Query("""
+            select ci.user.id as userId,
+                   sum(ci.quantity) as totalCardCount
+            from CollectionItem ci
+            where ci.user.id in :userIds
+            group by ci.user.id
+            """)
+    List<TotalCountAggregate> findTotalCardCounts(@Param("userIds") Collection<Long> userIds);
+
+    @Query("""
+            select distinct ci.user.id
+            from CollectionItem ci
+            where ci.user.collectionPrivacy = 'PUBLIC'
+            """)
+    List<Long> findPublicUserIdsWithCollection();
+
+    interface TotalCountAggregate {
+        Long getUserId();
+        Long getTotalCardCount();
     }
 }

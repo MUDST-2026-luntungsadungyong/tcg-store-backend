@@ -7,4 +7,9 @@ public record StoreProfileRequest(@NotBlank @Size(max = 255) String shopName,
                                   @Size(max = 5000) String shopDescription,
                                   @Size(max = 50) String phone,
                                   @Size(max = 100) String line,
-                                  @Size(max = 255) String facebook) {}
+                                  @Size(max = 255) String facebook,
+                                  @Size(max = 255) String otherContact) {
+    public StoreProfileRequest(String shopName, String shopDescription, String phone, String line, String facebook) {
+        this(shopName, shopDescription, phone, line, facebook, null);
+    }
+}

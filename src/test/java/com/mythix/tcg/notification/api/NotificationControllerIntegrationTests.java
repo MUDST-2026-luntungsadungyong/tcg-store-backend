@@ -33,7 +33,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+// Keep fixture cleanup independent of order suites sharing the test profile.
+@SpringBootTest(properties = "spring.datasource.url=jdbc:h2:mem:notification_integration_${random.uuid};MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class NotificationControllerIntegrationTests {

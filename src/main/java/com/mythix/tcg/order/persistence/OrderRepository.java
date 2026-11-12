@@ -4,6 +4,7 @@ import com.mythix.tcg.order.domain.Order;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,6 +17,10 @@ import java.math.BigDecimal;
 
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @EntityGraph(attributePaths = {"buyer", "items", "items.seller"})
+    @Query("select distinct o from Order o where o.id = :id")
+    Optional<Order> findForEmailSummary(@Param("id") Long id);
 
     Optional<Order> findByOrderNumber(String orderNumber);
 
@@ -48,6 +53,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("select coalesce(sum(o.totalAmount), 0) from Order o")
     BigDecimal totalOrderAmount();
     @Query("select coalesce(sum(o.totalAmount), 0) from Order o where o.status in ('PAID','FULFILLED')") BigDecimal paidOrFulfilledGmv();
+    @Query("select coalesce(sum(o.platformFee), 0) from Order o where o.status <> 'CANCELLED'") BigDecimal totalPlatformFee();
     @EntityGraph(attributePaths = "buyer")
     Page<Order> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
@@ -67,4 +73,13 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
         order by o.createdAt desc
         """)
     Page<Order> searchAdminOrderLogs(@Param("query") String query, @Param("searchBy") String searchBy, @Param("statuses") List<String> statuses, @Param("statusesEmpty") String statusesEmpty, @Param("fromDate") LocalDateTime fromDate, @Param("toDate") LocalDateTime toDate, Pageable pageable);
+
+    long countByVoucherId(Long voucherId);
+
+    @Query("SELECT o.voucher.id, COUNT(o) FROM Order o WHERE o.voucher IS NOT NULL GROUP BY o.voucher.id")
+    List<Object[]> countOrdersGroupedByVoucherId();
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE Order o SET o.voucher = null WHERE o.voucher.id = :voucherId")
+    int detachVoucherByVoucherId(@Param("voucherId") Long voucherId);
 }

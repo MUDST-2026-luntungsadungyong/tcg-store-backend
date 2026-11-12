@@ -61,8 +61,18 @@ public class PublicCollectionService {
 
     @Transactional(readOnly = true)
     public PublicCollectionDto.PublicCollectionResponse getPublicCollection(Long userId, Pageable pageable) {
+        return getPublicCollection(userId, null, pageable);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicCollectionDto.PublicCollectionResponse getPublicCollection(Long userId, Long currentUserId, Pageable pageable) {
         User owner = userRepository.findById(userId)
                 .orElseThrow(() -> new PublicCollectionUserNotFoundException(userId));
+
+        if ("PRIVATE".equalsIgnoreCase(owner.getCollectionPrivacy())
+                && (currentUserId == null || !currentUserId.equals(userId))) {
+            throw new PublicCollectionPrivateException(userId);
+        }
 
         Page<CollectionItemResponse> page = collectionRepository
                 .findByUserIdOrderByCreatedAtDesc(userId, pageable)
@@ -119,6 +129,9 @@ public class PublicCollectionService {
                 .userId(String.valueOf(user.getId()))
                 .displayName(publicDisplayName(user))
                 .avatarUrl(user.getAvatarUrl())
+                .role(user.getRole())
+                .sellerStatus(user.getSellerStatus())
+                .collectionPrivacy(user.getCollectionPrivacy() != null ? user.getCollectionPrivacy() : "PUBLIC")
                 .rareCardCount(aggregate == null ? 0 : nonNullCount(aggregate.getRareCardCount()))
                 .distinctRareCardCount(aggregate == null ? 0 : nonNullCount(aggregate.getDistinctRareCardCount()))
                 .build();
@@ -143,5 +156,95 @@ public class PublicCollectionService {
 
     private long nonNullCount(Long count) {
         return Optional.ofNullable(count).orElse(0L);
+    }
+
+    @Transactional(readOnly = true)
+    public PublicCollectionDto.PublicCollectionsPageResponse getPublicCollections(String search, Pageable pageable) {
+        List<Long> publicUserIds = collectionRepository.findPublicUserIdsWithCollection();
+        if (publicUserIds.isEmpty()) {
+            return PublicCollectionDto.PublicCollectionsPageResponse.builder()
+                    .items(List.of())
+                    .page(PageMetadata.builder()
+                            .page(pageable.getPageNumber())
+                            .size(pageable.getPageSize())
+                            .totalElements(0)
+                            .totalPages(0)
+                            .build())
+                    .build();
+        }
+
+        List<User> publicUsers = userRepository.findAllById(publicUserIds);
+        if (search != null && !search.isBlank()) {
+            String query = search.trim().toLowerCase();
+            publicUsers = publicUsers.stream()
+                    .filter(u -> publicDisplayName(u).toLowerCase().contains(query))
+                    .toList();
+        }
+
+        if (publicUsers.isEmpty()) {
+            return PublicCollectionDto.PublicCollectionsPageResponse.builder()
+                    .items(List.of())
+                    .page(PageMetadata.builder()
+                            .page(pageable.getPageNumber())
+                            .size(pageable.getPageSize())
+                            .totalElements(0)
+                            .totalPages(0)
+                            .build())
+                    .build();
+        }
+
+        List<Long> filteredIds = publicUsers.stream().map(User::getId).toList();
+        Map<Long, List<RareCollectionHighlight>> highlightRows = groupHighlights(
+                collectionRepository.findRareCollectionHighlights(filteredIds));
+
+        Map<Long, Long> totalCounts = new HashMap<>();
+        collectionRepository.findTotalCardCounts(filteredIds)
+                .forEach(tc -> totalCounts.put(tc.getUserId(), tc.getTotalCardCount()));
+
+        Map<Long, RareCollectionAggregate> rareAggregates = new HashMap<>();
+        for (Long uid : filteredIds) {
+            collectionRepository.findRareCollectionAggregate(uid)
+                    .ifPresent(agg -> rareAggregates.put(uid, agg));
+        }
+
+        List<PublicCollectionDto.PublicCollectionSummary> summaries = new ArrayList<>(publicUsers.size());
+        for (User user : publicUsers) {
+            RareCollectionAggregate aggregate = rareAggregates.get(user.getId());
+            boolean isSeller = "APPROVED".equalsIgnoreCase(user.getSellerStatus()) || "SELLER".equalsIgnoreCase(user.getRole());
+            summaries.add(PublicCollectionDto.PublicCollectionSummary.builder()
+                    .userId(String.valueOf(user.getId()))
+                    .displayName(publicDisplayName(user))
+                    .avatarUrl(user.getAvatarUrl())
+                    .role(user.getRole())
+                    .sellerStatus(user.getSellerStatus())
+                    .isSeller(isSeller)
+                    .totalCardsCount(totalCounts.getOrDefault(user.getId(), 0L))
+                    .rareCardCount(aggregate == null ? 0L : nonNullCount(aggregate.getRareCardCount()))
+                    .distinctRareCardCount(aggregate == null ? 0L : nonNullCount(aggregate.getDistinctRareCardCount()))
+                    .highlights(highlightRows.getOrDefault(user.getId(), List.of()).stream().map(this::toHighlight).toList())
+                    .build());
+        }
+
+        summaries.sort((a, b) -> {
+            int cmp = Long.compare(b.getRareCardCount(), a.getRareCardCount());
+            if (cmp != 0) return cmp;
+            return Long.compare(b.getTotalCardsCount(), a.getTotalCardsCount());
+        });
+
+        int totalElements = summaries.size();
+        int totalPages = (int) Math.ceil((double) totalElements / pageable.getPageSize());
+        int fromIndex = (int) Math.min(pageable.getOffset(), totalElements);
+        int toIndex = Math.min(fromIndex + pageable.getPageSize(), totalElements);
+        List<PublicCollectionDto.PublicCollectionSummary> paged = summaries.subList(fromIndex, toIndex);
+
+        return PublicCollectionDto.PublicCollectionsPageResponse.builder()
+                .items(paged)
+                .page(PageMetadata.builder()
+                        .page(pageable.getPageNumber())
+                        .size(pageable.getPageSize())
+                        .totalElements(totalElements)
+                        .totalPages(totalPages)
+                        .build())
+                .build();
     }
 }

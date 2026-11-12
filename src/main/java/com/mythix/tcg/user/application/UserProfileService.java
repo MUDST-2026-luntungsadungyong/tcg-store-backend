@@ -22,7 +22,7 @@ public class UserProfileService {
 
     @Transactional
     public ProfileResponse updateProfile(Long userId, ProfileRequest request) {
-        User user = findUser(userId);
+        User user = userRepository.findByIdForUpdate(userId).orElseThrow(InvalidCredentialsException::new);
         if (request.name() != null) user.setFullName(trimToNull(request.name()));
         if (request.phone() != null) user.setPhone(trimToNull(request.phone()));
         if (request.line() != null) user.setContactLine(trimToNull(request.line()));

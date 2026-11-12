@@ -35,13 +35,14 @@ public class ProductController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(defaultValue = "id") String sortBy,
-            @RequestParam(defaultValue = "asc") String sortDir) {
+            @RequestParam(defaultValue = "asc") String sortDir,
+            @RequestParam(defaultValue = "false") boolean fuzzy) {
 
         Sort sort = sortDir.equalsIgnoreCase("desc") ? Sort.by(sortBy).descending() : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
 
         ProductPageResponse response = productService.browseProducts(
-                search, rarity, stage, condition, language, cardId, sellerId, minPrice, maxPrice, pageable);
+                search, rarity, stage, condition, language, cardId, sellerId, minPrice, maxPrice, fuzzy, pageable);
         return ResponseEntity.ok(response);
     }
 

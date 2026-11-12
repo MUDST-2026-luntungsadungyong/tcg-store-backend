@@ -50,7 +50,8 @@ public class SellerOrderController {
             @PathVariable Long orderId,
             @Valid @RequestBody UpdateOrderStatusRequest request) {
 
-        SellerOrderResponse response = sellerOrderService.updateOrderStatus(user.userId(), orderId, request.status(), request.note());
+        SellerOrderResponse response = sellerOrderService.updateOrderStatus(
+                user.userId(), orderId, request.status(), request.note(), request.trackingNumber(), Boolean.TRUE.equals(request.noBuyerContact()));
         return ResponseEntity.ok(response);
     }
 
@@ -60,5 +61,13 @@ public class SellerOrderController {
 
         SellerProfitSummaryResponse response = sellerOrderService.getProfitSummary(user.userId());
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/dashboard/monthly")
+    public ResponseEntity<SellerMonthlyDashboardResponse> getMonthlyDashboard(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(required = false) Integer month) {
+        return ResponseEntity.ok(sellerOrderService.getMonthlyDashboard(user.userId(), year, month));
     }
 }

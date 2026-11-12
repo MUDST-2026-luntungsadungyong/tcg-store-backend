@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tcg-store-backend-config
+data:
+  APP_ENVIRONMENT: aks-demo
+  SPRING_PROFILES_ACTIVE: neon
+  SERVER_PORT: "8080"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+  FLYWAY_ENABLED: "false"
+  APP_PUBLIC_WEB_URL: https://tcgmythix.store
+  APP_CORS_ALLOWED_ORIGINS: https://tcg-store-frontend.pages.dev,https://tcgmythix.store,https://www.tcgmythix.store
+  OBJECT_STORAGE_ENDPOINT: https://br-fancy-star-b3y2jcnb.storage.c-4.ap-southeast-1.aws.neon.tech
+  OBJECT_STORAGE_REGION: ap-southeast-1
+  OBJECT_STORAGE_BUCKET: tcg-product-images
+  OBJECT_STORAGE_PUBLIC_BASE_URL: https://br-fancy-star-b3y2jcnb.storage.c-4.ap-southeast-1.aws.neon.tech/tcg-product-images
+  OBJECT_STORAGE_PATH_STYLE: "true"
+  APP_LOG_LEVEL: INFO
+  JPA_SHOW_SQL: "false"
+  APP_MAIL_ENABLED: "true"
+  APP_MAIL_FROM: notifications@tcgmythix.store
+  APP_BACK_IN_STOCK_NOTIFICATION_ENABLED: "true"
+  APP_SELLER_STOCK_ALERT_ENABLED: "true"
+  APP_SELLER_STOCK_ALERT_EMAIL_ENABLED: "true"
+  APP_PUBLIC_BASE_URL: https://tcgmythix.store
+  SMTP_HOST: smtp-relay.brevo.com
+  SMTP_PORT: "587"
+  SMTP_AUTH: "true"
+  SMTP_STARTTLS: "true"

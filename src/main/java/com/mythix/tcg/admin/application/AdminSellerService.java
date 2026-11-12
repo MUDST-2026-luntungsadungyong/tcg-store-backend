@@ -34,7 +34,7 @@ public class AdminSellerService {
     public AdminDashboardResponse dashboard() {
         return new AdminDashboardResponse(userRepository.count(), userRepository.countByRole("ADMIN"), userRepository.countByRoleAndSellerStatus("USER", "NONE"),
             userRepository.countBySellerStatus("PENDING"), userRepository.countBySellerStatus("APPROVED"),
-            cardRepository.count(), productRepository.countByStatus("SHOW"), orderRepository.count(), orderRepository.paidOrFulfilledGmv());
+            cardRepository.count(), productRepository.countByStatus("SHOW"), orderRepository.count(), orderRepository.paidOrFulfilledGmv(), orderRepository.totalPlatformFee());
     }
 
     @Transactional(readOnly = true)

@@ -179,10 +179,10 @@ try {
 
     $expectedMigrations = @(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot '../../src/main/resources/db/migration') -Filter 'V*__*.sql').Count
     $historyResult = [string](docker exec $postgres psql -U $dbUser -d $database -At -F '|' -v ON_ERROR_STOP=1 `
-        -c "SELECT count(*) FILTER (WHERE success), count(*) FILTER (WHERE version = '12' AND success) FROM flyway_schema_history;")
+        -c "SELECT count(*) FILTER (WHERE success), count(*) FILTER (WHERE version = '31' AND success) FROM flyway_schema_history;")
     if ($LASTEXITCODE -ne 0) { throw 'Could not query Flyway history after migration.' }
-    if ($historyResult.Trim() -ne "$expectedMigrations|1") { throw "Flyway history expected $expectedMigrations successful migrations including exactly one version 12; observed '$($historyResult.Trim())'." }
-    $results.Add("PASS: isolated PostgreSQL Flyway history records all $expectedMigrations successful migrations, including version 12.")
+    if ($historyResult.Trim() -ne "$expectedMigrations|1") { throw "Flyway history expected $expectedMigrations successful migrations including exactly one version 31; observed '$($historyResult.Trim())'." }
+    $results.Add("PASS: isolated PostgreSQL Flyway history records all $expectedMigrations successful migrations, including version 31.")
 
     $backendEnv = @(
         '--env', 'SPRING_PROFILES_ACTIVE=dev',

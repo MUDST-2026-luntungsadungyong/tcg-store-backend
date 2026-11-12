@@ -1,0 +1,49 @@
+name: Read-only AKS mail diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Connect to AKS
+        run: |
+          az aks get-credentials -g rg-tcg-store-aks-demo -n aks-tcg-store-demo --admin --file "$RUNNER_TEMP/kubeconfig"
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+      - name: Read runtime mail state without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          ns=tcg-store-aks-demo
+          kubectl get deployment tcg-store-backend -n "$ns" -o jsonpath='{.status.readyReplicas}{" ready replicas\n"}{.spec.template.spec.containers[0].image}{"\n"}'
+          kubectl exec -n "$ns" deployment/tcg-store-backend -- sh -c 'printf "mail_enabled=%s\n" "$APP_MAIL_ENABLED"'
+          kubectl logs -n "$ns" deployment/tcg-store-backend --since=30m --tail=3000 | python3 -c 'import sys; s=sys.stdin.read(); markers=["Email delivery failed", "MailAuthenticationException", "MailSendException", "525", "535", "Unauthorized IP", "Cannot decrypt", "Email delivery permanently failed"]; [print(m+"="+str(s.count(m))) for m in markers]'
+      - name: Read account and queue aggregates
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/probe.json" <<'JSON'
+          {"apiVersion":"v1","kind":"Pod","metadata":{"name":"mail-diagnostic-probe","namespace":"tcg-store-aks-demo"},"spec":{"restartPolicy":"Never","automountServiceAccountToken":false,"containers":[{"name":"probe","image":"postgres:17-alpine","env":[{"name":"DB_URL","valueFrom":{"secretKeyRef":{"name":"tcg-store-backend-secrets","key":"neon-jdbc-url"}}},{"name":"PGUSER","valueFrom":{"secretKeyRef":{"name":"tcg-store-backend-secrets","key":"neon-db-username"}}},{"name":"PGPASSWORD","valueFrom":{"secretKeyRef":{"name":"tcg-store-backend-secrets","key":"neon-db-password"}}}],"command":["sh","-c","sleep 300"],"resources":{"requests":{"cpu":"10m","memory":"32Mi"},"limits":{"cpu":"100m","memory":"64Mi"}}}]}}
+          JSON
+          trap 'kubectl delete pod mail-diagnostic-probe -n tcg-store-aks-demo --ignore-not-found --wait=false >/dev/null' EXIT
+          kubectl create -f "$RUNNER_TEMP/probe.json"
+          kubectl wait -n tcg-store-aks-demo --for=condition=Ready pod/mail-diagnostic-probe --timeout=120s
+          kubectl exec -i -n tcg-store-aks-demo mail-diagnostic-probe -- sh -c 'probe_url=$(printf %s "${DB_URL#jdbc:}" | sed "s/channelBinding=/channel_binding=/g"); psql "$probe_url" -X -v ON_ERROR_STOP=1 -At' <<'SQL'
+          BEGIN READ ONLY;
+          SET LOCAL statement_timeout='10s';
+          SELECT 'account_exists=' || EXISTS(SELECT 1 FROM users WHERE lower(email)='guidephoruang@gmail.com');
+          SELECT 'queue_' || CASE WHEN sent_at IS NOT NULL THEN 'sent' WHEN failed_at IS NOT NULL THEN 'failed' WHEN cancelled_at IS NOT NULL THEN 'cancelled' ELSE 'pending' END || '=' || count(*) FROM notification_email_outbox GROUP BY CASE WHEN sent_at IS NOT NULL THEN 'sent' WHEN failed_at IS NOT NULL THEN 'failed' WHEN cancelled_at IS NOT NULL THEN 'cancelled' ELSE 'pending' END;
+          SELECT 'recipient_queue_' || CASE WHEN sent_at IS NOT NULL THEN 'sent' WHEN failed_at IS NOT NULL THEN 'failed' WHEN cancelled_at IS NOT NULL THEN 'cancelled' ELSE 'pending' END || '=' || count(*) FROM notification_email_outbox WHERE lower(recipient_email)='guidephoruang@gmail.com' GROUP BY CASE WHEN sent_at IS NOT NULL THEN 'sent' WHEN failed_at IS NOT NULL THEN 'failed' WHEN cancelled_at IS NOT NULL THEN 'cancelled' ELSE 'pending' END;
+          SELECT 'smtp_525=' || count(*) FROM notification_email_outbox WHERE last_error LIKE '%525%';
+          SELECT 'smtp_535=' || count(*) FROM notification_email_outbox WHERE last_error LIKE '%535%';
+          SELECT 'decrypt_errors=' || count(*) FROM notification_email_outbox WHERE last_error LIKE '%Cannot decrypt%';
+          ROLLBACK;
+          SQL

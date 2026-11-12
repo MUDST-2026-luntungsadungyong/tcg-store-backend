@@ -127,6 +127,7 @@ jobs:
 
       - name: Verify reproducible amd64 OCI output
         env:
+          SOURCE_DATE_EPOCH: ${{ steps.source.outputs.epoch }}
           SOURCE_EPOCH: ${{ steps.source.outputs.epoch }}
           SOURCE_CREATED: ${{ steps.source.outputs.created }}
         run: |

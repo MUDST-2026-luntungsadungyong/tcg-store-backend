@@ -12,7 +12,8 @@
 | Login | `POST /auth/login` | Public | Implemented on `feat/scrum-9-auth-api` |
 | Current user | `GET /auth/me` | Bearer | Implemented on `feat/scrum-9-auth-api` |
 | Forgot/reset password | `POST /auth/forgot-password`, `POST /auth/reset-password` | Public/token | frontend มี client แต่ Jira backend ยังไม่กำหนด |
-| Update profile | `PUT /users/{userId}` | Bearer/owner | SCRUM-6; ก่อน implement ควรเปลี่ยนเป็น `/users/me` เพื่อลด IDOR risk |
+| Profile | `GET/PUT /users/profile` | Bearer | Current user's profile |
+| Profile photo | `GET/POST/DELETE /users/profile/avatar` | Bearer | Current user's photo |
 | Browse products | `GET /products`, `GET /products/{id}` | Public | Implemented on `feat/scrum-10-browse-products-api` |
 | Seller inventory | `GET/POST /seller/products` | Bearer/Seller | SCRUM-7 |
 | Seller listing | `PUT/DELETE /seller/products/{id}` | Bearer/owner | SCRUM-7 |
@@ -25,6 +26,12 @@
 | Personal collection | `GET/POST /collection`, `DELETE /collection/{id}` | Bearer | SCRUM-28 |
 
 `/admin/*` มี client placeholder ใน frontend แต่ไม่อยู่ใน Jira backend scope ชุดนี้ จึงยังไม่ถือเป็น committed contract
+
+## Profile photo
+
+All paths use the authenticated user, never a supplied user ID. `POST /users/profile/avatar` accepts multipart form field `image`; it validates and stores the image and returns the updated profile with `avatarUrl`. `GET /users/profile/avatar` returns the current managed image bytes with `Cache-Control: no-store`. `DELETE /users/profile/avatar` clears the saved URL and returns the updated profile with a null `avatarUrl`; it is idempotent. Login's `user` and `GET /auth/me` also include `avatarUrl` (null when absent).
+
+Replacement and deletion retain the previous object. Profile URLs can be set directly and may refer to images shared with other users or product listings, so a URL or storage prefix alone does not establish exclusive ownership. Safe garbage collection requires reference and ownership tracking across all writers. Upload storage removes a newly created object if the database transaction rolls back.
 
 ## Notifications (F-06)
 
@@ -153,6 +160,14 @@ Checkout errors use `CHECKOUT_NOT_ALLOWED` (403), `EMPTY_CART`, `LISTING_NOT_AVA
 
 Existing PostgreSQL Docker volumes are upgraded by the Flyway-based `migrations-local` service in `docker-compose.desktop.yml` before `backend-local` starts. Flyway records immutable versioned migrations in `flyway_schema_history`, validates checksums on later starts, and prevents the API from starting when migration or Hibernate schema validation fails.
 
+## Auction lots (SCRUM-82)
+
+- Seller draft create and update accept multipart fields `productId` for seller inventory or `cardId` for a direct Global Catalog lot. Direct lots accept `language` (`EN`, `JP` or `TH`, default `EN`). Inventory lots inherit the inventory item's language.
+- `quantity` is a positive integer and defaults to 1. Prices apply to the entire lot. Publishing an inventory lot reserves its full quantity. Multi-copy lots must be ungraded and both actual photos must show all copies.
+- Auction orders contain one line for the lot. Its `quantity` counts the copies and its purchase price is the whole-lot amount. Order totals and item totals preserve that amount. Direct checkout still prices items per unit.
+- The winning buyer submits a JPG, PNG or WebP of at most 5 MiB as multipart part `file` to `POST /api/orders/{orderId}/payment-proof` while the order is pending and before the payment deadline. The buyer portfolio reports `hasPaymentProof` for each won order.
+- Deploy with Flyway V16 already applied. On the shared Neon history, V14 is Collection Privacy and V15 is Auction Bidding, Settlement and Portfolio.
+
 ## Error shape
 
 Feature ใหม่ควรตอบรูปแบบเดียวกัน:
@@ -167,3 +182,28 @@ Feature ใหม่ควรตอบรูปแบบเดียวกัน
 ```
 
 ขั้นต่ำต้องแยก `400` validation, `401` unauthenticated, `403` forbidden, `404` missing resource และ `409` conflict/duplicate/active-order constraint
+
+
+### Auction buyer default review
+
+A seller cancelling an auction order while it awaits buyer contact with `noBuyerContact: true` and a nonblank `note` creates one pending case per auction order, including a later Second Chance order. This snapshots the auction, order, buyer, seller and seller's reason. It does not automatically impose a strike, and Second Chance remains available independently of the review. Existing defaults are not backfilled.
+
+- Authenticated `GET /api/auction-default-cases/me?page=0&size=20` returns a Spring Page of cases where the caller is buyer or seller.
+- Authenticated `GET /api/auction-default-cases/penalty` returns `{ "activeStrikes": 0, "bannedUntil": null }` for the caller.
+- Admin `GET /api/admin/auction-default-cases?page=0&size=20` returns all cases, newest first. Page size is capped at 100.
+- Admin `POST /api/admin/auction-default-cases/{id}/approve`, `/reject`, or `/reverse` takes `{ "reason": "..." }` (required, at most 2000 characters) and returns the case. Approve/reject applies to PENDING, reverse to APPROVED. Repeating the same decision is idempotent; conflicting transitions return 409.
+
+A case contains `id`, `auctionId`, `orderId`, `orderNumber`, `buyerId`, `sellerId`, `reportReason`, `status` (PENDING, APPROVED, REJECTED, REVERSED), `createdAt`, `decidedAt`, `decisionReason`, and `history`. Each history entry has `action`, `reason`, `adminId`, and `createdAt`. Timestamps are UTC ISO-8601.
+
+Confirmed strikes are cumulative: one is a warning, two impose seven days and three or more impose thirty days from approval. On reversal, remaining approved cases are recomputed in approval order using their original approval times; existing legacy strike and ban baseline is retained. Active bans also prohibit automatic proxy counters and accepting a Second Chance offer.
+
+### Auction administration and disputes
+
+`GET /api/admin/auctions` (also `/live-feed`) returns a Spring page ordered by update time and ID descending. `page` defaults to 0; `size` defaults to 20 and is capped at 100. Each entry includes the latest bid time, a high-risk flag (latest bidder has an active ban or a strike), and a price anomaly flag (two successive bids at least doubling within five minutes). These flags are review signals, not fraud decisions.
+
+`POST /api/admin/auctions/{id}/pause`, `/resume`, or `/cancel` accepts `{ "reason": "..." }`; `/force-cancel` aliases cancellation. Pause preserves remaining time and resume moves the end time by the pause duration. Cancellation releases held stock. These actions require an administrator and generate participant notifications.
+
+`POST /api/auctions/{id}/disputes` accepts multipart `reason` and one to four `evidence` image files. The winning buyer may open one case within 72 hours of the recorded fulfillment transition. `GET /api/admin/auction-disputes` (also `/api/admin/disputes`) returns a page ordered newest first. Evidence URLs are access controlled. `POST /api/admin/auction-disputes/{id}/decide` accepts `{ "decision": "FULL_REFUND|RETURN|DISMISS", "reason": "..." }`. Decisions record an outcome for off-platform handling; they do not transfer funds or alter ownership.
+
+Participants can reload cases with `GET /api/auction-disputes/me` or `GET /api/auction-disputes/{id}`. Either participant can read the case and evidence and add images to a pending case using multipart `POST /api/auction-disputes/{id}/evidence`, with an eight-image total limit. The 72-hour period uses the auction's persisted UTC receipt time set by buyer confirmation or admin verified delivery. Historical fulfilled auctions without this timestamp cannot open a case automatically.
+Evidence entries include `url`, `submittedBy`, and `createdAt`, ordered by evidence ID. Only the buyer, seller, or an administrator can access the corresponding evidence URL.
