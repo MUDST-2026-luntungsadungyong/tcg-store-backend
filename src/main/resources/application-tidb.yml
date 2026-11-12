@@ -25,3 +25,9 @@ spring:
 logging:
   level:
     org.hibernate.SQL: ${TIDB_SQL_LOG_LEVEL:WARN}
+
+# US-27-1's transactional reporting extensions are migrated on PostgreSQL/Neon.
+app:
+  reports:
+    weekly:
+      enabled: false

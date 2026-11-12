@@ -78,6 +78,12 @@ jobs:
       - name: Verify PostgreSQL concurrency
         run: ./mvnw --batch-mode -Dspring.profiles.active=postgres -Dtest=CheckoutConcurrencyPostgresTests verify
 
+      - name: Verify weekly report migrations, triggers and concurrent scheduling
+        run: >-
+          ./mvnw --batch-mode -Dtest=WeeklyReportPostgresTests
+          -Dweekly.postgres.url=jdbc:postgresql://localhost:5432/tcg_store_test
+          -Dweekly.postgres.password=postgres verify
+
       - name: Verify auction concurrency on the migrated schema
         env:
           POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

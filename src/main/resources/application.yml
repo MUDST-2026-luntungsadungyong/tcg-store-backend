@@ -96,6 +96,10 @@ management:
         http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
 
 app:
+  reports:
+    weekly:
+      enabled: ${WEEKLY_REPORTS_ENABLED:true}
+      reconcile-ms: 60000
   public-web-url: ${APP_PUBLIC_WEB_URL:http://localhost:5173}
   back-in-stock-notification:
     enabled: ${APP_BACK_IN_STOCK_NOTIFICATION_ENABLED:false}
