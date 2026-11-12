@@ -13,7 +13,8 @@ class DashboardContractsTests(unittest.TestCase):
     def test_environments_remain_selectable_when_all_scrapes_are_missing(self):
         environment = next(value for value in self.dashboard["templating"]["list"] if value["name"] == "environment")
         self.assertEqual("custom", environment["type"])
-        self.assertEqual({"staging", "production"}, {value["value"] for value in environment["options"]})
+        self.assertEqual({"aks-demo", "staging", "production"}, {value["value"] for value in environment["options"]})
+        self.assertEqual("aks-demo", environment["current"]["value"])
 
     def test_every_panel_has_an_explicit_unknown_no_value(self):
         for panel in self.dashboard["panels"]:
