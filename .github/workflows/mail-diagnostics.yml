@@ -36,7 +36,7 @@ jobs:
           trap 'kubectl delete pod mail-diagnostic-probe -n tcg-store-aks-demo --ignore-not-found --wait=false >/dev/null' EXIT
           kubectl create -f "$RUNNER_TEMP/probe.json"
           kubectl wait -n tcg-store-aks-demo --for=condition=Ready pod/mail-diagnostic-probe --timeout=120s
-          kubectl exec -i -n tcg-store-aks-demo mail-diagnostic-probe -- sh -c 'psql "${DB_URL#jdbc:}" -X -v ON_ERROR_STOP=1 -At' <<'SQL'
+          kubectl exec -i -n tcg-store-aks-demo mail-diagnostic-probe -- sh -c 'probe_url=$(printf %s "${DB_URL#jdbc:}" | sed "s/channelBinding=/channel_binding=/g"); psql "$probe_url" -X -v ON_ERROR_STOP=1 -At' <<'SQL'
           BEGIN READ ONLY;
           SET LOCAL statement_timeout='10s';
           SELECT 'account_exists=' || EXISTS(SELECT 1 FROM users WHERE lower(email)='guidephoruang@gmail.com');
