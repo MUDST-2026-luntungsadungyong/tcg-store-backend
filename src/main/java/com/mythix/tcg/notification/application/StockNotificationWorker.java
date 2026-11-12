@@ -4,6 +4,7 @@ import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.notification.domain.NotificationTypes;
 import com.mythix.tcg.notification.domain.StockSubscription;
 import com.mythix.tcg.notification.persistence.StockSubscriptionRepository;
+import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.seller.api.StockForecastResponse;
 import com.mythix.tcg.seller.application.StockForecastService;
 import com.mythix.tcg.seller.domain.SellerStockAlertState;
@@ -111,8 +112,15 @@ public class StockNotificationWorker {
                         type, title, message, path, sellerAlertEmailEnabled));
                     if (state == null) {
                         state = new SellerStockAlertState();
+                        Product product = products.findById(productId).orElse(null);
+                        if (product == null) continue;
+                        state.setProduct(product);
                         state.setProductId(productId);
-                        products.findById(productId).ifPresent(state::setProduct);
+                        state.setLastAlertLevel(item.urgencyStatus());
+                        state.setUpdatedAt(now);
+                        // @MapsId states must be persisted, not merged as detached entities.
+                        entityManager.persist(state);
+                        continue;
                     }
                     state.setLastAlertLevel(item.urgencyStatus());
                     state.setUpdatedAt(now);

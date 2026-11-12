@@ -42,6 +42,7 @@ class StockNotificationWorkerTest {
         Query lockQuery = mock(Query.class);
         when(entityManager.createNativeQuery(anyString())).thenReturn(lockQuery);
         when(lockQuery.getSingleResult()).thenReturn("MAIN");
+        doNothing().when(entityManager).persist(any(SellerStockAlertState.class));
         when(products.findSellerIdsWithVisibleListings()).thenReturn(List.of(9L));
         when(users.findById(9L)).thenReturn(Optional.of(User.builder().id(9L).build()));
         when(products.findById(12L)).thenReturn(Optional.of(Product.builder().id(12L).build()));
@@ -58,7 +59,8 @@ class StockNotificationWorkerTest {
 
         verify(notifications).sendStockNotification(any(User.class), eq(NotificationTypes.SELLER_STOCK_LOW),
             anyString(), anyString(), contains("stock-forecast?search="), eq(true));
-        verify(states).save(argThat(state -> state.getLastAlertLevel().equals("LOW") && state.getProductId().equals(12L)));
+        verify(entityManager).persist(argThat((SellerStockAlertState state) -> state.getLastAlertLevel().equals("LOW")
+            && state.getProductId().equals(12L) && state.getProduct() != null));
     }
 
     @Test
