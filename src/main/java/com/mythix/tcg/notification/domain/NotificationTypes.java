@@ -24,6 +24,10 @@ public final class NotificationTypes {
     public static final String AUCTION_DISPUTE_OPENED = "AUCTION_DISPUTE_OPENED";
     public static final String AUCTION_DISPUTE_EVIDENCE_ADDED = "AUCTION_DISPUTE_EVIDENCE_ADDED";
     public static final String AUCTION_DISPUTE_DECIDED = "AUCTION_DISPUTE_DECIDED";
+    public static final String STOCK_AVAILABLE = "STOCK_AVAILABLE";
+    public static final String SELLER_STOCK_LOW = "SELLER_STOCK_LOW";
+    public static final String SELLER_STOCK_CRITICAL = "SELLER_STOCK_CRITICAL";
+    public static final String SELLER_OUT_OF_STOCK = "SELLER_OUT_OF_STOCK";
 
     private NotificationTypes() {
     }
