@@ -2,6 +2,7 @@ package com.mythix.tcg.seller.api;
 
 import com.mythix.tcg.auth.security.AuthenticatedUser;
 import com.mythix.tcg.seller.application.SellerProductService;
+import com.mythix.tcg.seller.application.StockForecastService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,32 @@ import java.util.List;
 public class SellerProductController {
 
     private final SellerProductService service;
+    private final StockForecastService stockForecastService;
+
+    @GetMapping("/stock-forecast")
+    public StockForecastResponse getStockForecast(
+        @AuthenticationPrincipal AuthenticatedUser user,
+        @RequestParam(defaultValue = "30") int windowDays,
+        @RequestParam(defaultValue = "WEIGHTED") String method,
+        @RequestParam(defaultValue = "7") int leadTimeDays,
+        @RequestParam(defaultValue = "3") int safetyDays,
+        @RequestParam(defaultValue = "30") int targetCoverDays,
+        @RequestParam(defaultValue = "false") boolean includeHidden,
+        @RequestParam(required = false) String search,
+        @RequestParam(required = false) String urgency
+    ) {
+        return stockForecastService.getForecast(
+            user.userId(),
+            windowDays,
+            method,
+            leadTimeDays,
+            safetyDays,
+            targetCoverDays,
+            includeHidden,
+            search,
+            urgency
+        );
+    }
 
     @PostMapping(path = "/validate-listing-rules", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ListingRulesResponse validateListingRules(

@@ -2,6 +2,9 @@ package com.mythix.tcg.common.config;
 
 import com.mythix.tcg.catalog.domain.Card;
 import com.mythix.tcg.catalog.persistence.CardRepository;
+import com.mythix.tcg.order.domain.Order;
+import com.mythix.tcg.order.domain.OrderItem;
+import com.mythix.tcg.order.persistence.OrderRepository;
 import com.mythix.tcg.product.domain.Product;
 import com.mythix.tcg.product.persistence.ProductRepository;
 import com.mythix.tcg.seller.domain.SellerProfile;
@@ -30,6 +33,7 @@ public class LocalH2DataSeeder implements CommandLineRunner {
     private final SellerProfileRepository sellerProfileRepository;
     private final CardRepository cardRepository;
     private final ProductRepository productRepository;
+    private final OrderRepository orderRepository;
     private final VoucherRepository voucherRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -108,42 +112,192 @@ public class LocalH2DataSeeder implements CommandLineRunner {
             .active(true)
             .build());
 
+        Card blastoise = cardRepository.save(Card.builder()
+            .id("base1-2")
+            .name("Blastoise")
+            .supertype("Pokémon")
+            .setName("Base Set")
+            .cardNumber("2/102")
+            .imageSmall("https://images.pokemontcg.io/base1/2.png")
+            .imageLarge("https://images.pokemontcg.io/base1/2_hires.png")
+            .marketPrice(BigDecimal.valueOf(1100.00))
+            .active(true)
+            .build());
+
+        Card venusaur = cardRepository.save(Card.builder()
+            .id("base1-15")
+            .name("Venusaur")
+            .supertype("Pokémon")
+            .setName("Base Set")
+            .cardNumber("15/102")
+            .imageSmall("https://images.pokemontcg.io/base1/15.png")
+            .imageLarge("https://images.pokemontcg.io/base1/15_hires.png")
+            .marketPrice(BigDecimal.valueOf(980.00))
+            .active(true)
+            .build());
+
         // 4. Products / Listings
-        productRepository.save(Product.builder()
+        Product charizardListing = productRepository.save(Product.builder()
             .seller(seller)
             .card(charizard)
             .customImageUrl("https://images.pokemontcg.io/base1/4_hires.png")
             .condition("NM")
             .language("EN")
             .price(BigDecimal.valueOf(1200.00))
+            .cost(BigDecimal.valueOf(850.00))
             .onHand(5)
-            .reserved(0)
+            .reserved(1)
             .status("SHOW")
             .build());
 
-        productRepository.save(Product.builder()
+        Product pikachuListing = productRepository.save(Product.builder()
             .seller(seller)
             .card(pikachu)
             .customImageUrl("https://images.pokemontcg.io/base1/58_hires.png")
             .condition("LP")
             .language("EN")
             .price(BigDecimal.valueOf(400.00))
+            .cost(BigDecimal.valueOf(220.00))
             .onHand(10)
             .reserved(0)
             .status("SHOW")
             .build());
 
-        productRepository.save(Product.builder()
+        Product mewtwoListing = productRepository.save(Product.builder()
             .seller(seller)
             .card(mewtwo)
             .customImageUrl("https://images.pokemontcg.io/base1/10_hires.png")
             .condition("NM")
             .language("EN")
             .price(BigDecimal.valueOf(850.00))
+            .cost(BigDecimal.valueOf(600.00))
             .onHand(3)
             .reserved(0)
             .status("SHOW")
             .build());
+
+        Product blastoiseListing = productRepository.save(Product.builder()
+            .seller(seller)
+            .card(blastoise)
+            .customImageUrl("https://images.pokemontcg.io/base1/2_hires.png")
+            .condition("NM")
+            .language("EN")
+            .price(BigDecimal.valueOf(1050.00))
+            .cost(BigDecimal.valueOf(720.00))
+            .onHand(0)
+            .reserved(0)
+            .status("SHOW")
+            .build());
+
+        Product venusaurListing = productRepository.save(Product.builder()
+            .seller(seller)
+            .card(venusaur)
+            .customImageUrl("https://images.pokemontcg.io/base1/15_hires.png")
+            .condition("NM")
+            .language("EN")
+            .price(BigDecimal.valueOf(950.00))
+            .cost(BigDecimal.valueOf(650.00))
+            .onHand(3)
+            .reserved(0)
+            .status("SHOW")
+            .build());
+
+        // 4.5 Sample Orders for Stock Forecast testing
+        Order fulfilledOrder = Order.builder()
+            .orderNumber("ORD-DEMO-1001")
+            .buyer(buyer)
+            .status("FULFILLED")
+            .orderType("DIRECT")
+            .subtotalAmount(BigDecimal.valueOf(10250.00))
+            .totalAmount(BigDecimal.valueOf(10250.00))
+            .build();
+        fulfilledOrder.getItems().add(OrderItem.builder()
+            .order(fulfilledOrder)
+            .product(charizardListing)
+            .seller(seller)
+            .cardId(charizard.getId())
+            .productNameSnapshot(charizard.getName())
+            .shopNameSnapshot("Pewter City Card Vault")
+            .priceAtPurchase(charizardListing.getPrice())
+            .costAtPurchase(charizardListing.getCost())
+            .quantity(5)
+            .build());
+        fulfilledOrder.getItems().add(OrderItem.builder()
+            .order(fulfilledOrder)
+            .product(blastoiseListing)
+            .seller(seller)
+            .cardId(blastoise.getId())
+            .productNameSnapshot(blastoise.getName())
+            .shopNameSnapshot("Pewter City Card Vault")
+            .priceAtPurchase(blastoiseListing.getPrice())
+            .costAtPurchase(blastoiseListing.getCost())
+            .quantity(4)
+            .build());
+        orderRepository.save(fulfilledOrder);
+
+        Order activeOrder = Order.builder()
+            .orderNumber("ORD-DEMO-1002")
+            .buyer(buyer)
+            .status("CONFIRMED")
+            .orderType("DIRECT")
+            .subtotalAmount(BigDecimal.valueOf(4850.00))
+            .totalAmount(BigDecimal.valueOf(4850.00))
+            .build();
+        activeOrder.getItems().add(OrderItem.builder()
+            .order(activeOrder)
+            .product(charizardListing)
+            .seller(seller)
+            .cardId(charizard.getId())
+            .productNameSnapshot(charizard.getName())
+            .shopNameSnapshot("Pewter City Card Vault")
+            .priceAtPurchase(charizardListing.getPrice())
+            .costAtPurchase(charizardListing.getCost())
+            .quantity(1)
+            .build());
+        activeOrder.getItems().add(OrderItem.builder()
+            .order(activeOrder)
+            .product(pikachuListing)
+            .seller(seller)
+            .cardId(pikachu.getId())
+            .productNameSnapshot(pikachu.getName())
+            .shopNameSnapshot("Pewter City Card Vault")
+            .priceAtPurchase(pikachuListing.getPrice())
+            .costAtPurchase(pikachuListing.getCost())
+            .quantity(2)
+            .build());
+        activeOrder.getItems().add(OrderItem.builder()
+            .order(activeOrder)
+            .product(venusaurListing)
+            .seller(seller)
+            .cardId(venusaur.getId())
+            .productNameSnapshot(venusaur.getName())
+            .shopNameSnapshot("Pewter City Card Vault")
+            .priceAtPurchase(venusaurListing.getPrice())
+            .costAtPurchase(venusaurListing.getCost())
+            .quantity(3)
+            .build());
+        orderRepository.save(activeOrder);
+
+        Order cancelledOrder = Order.builder()
+            .orderNumber("ORD-DEMO-1003")
+            .buyer(buyer)
+            .status("CANCELLED")
+            .orderType("DIRECT")
+            .subtotalAmount(BigDecimal.valueOf(4250.00))
+            .totalAmount(BigDecimal.valueOf(4250.00))
+            .build();
+        cancelledOrder.getItems().add(OrderItem.builder()
+            .order(cancelledOrder)
+            .product(mewtwoListing)
+            .seller(seller)
+            .cardId(mewtwo.getId())
+            .productNameSnapshot(mewtwo.getName())
+            .shopNameSnapshot("Pewter City Card Vault")
+            .priceAtPurchase(mewtwoListing.getPrice())
+            .costAtPurchase(mewtwoListing.getCost())
+            .quantity(5)
+            .build());
+        orderRepository.save(cancelledOrder);
 
         // 5. Vouchers
         voucherRepository.save(Voucher.builder()
