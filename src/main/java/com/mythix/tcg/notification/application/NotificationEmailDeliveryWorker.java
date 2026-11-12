@@ -28,6 +28,7 @@ public class NotificationEmailDeliveryWorker {
     private final InvoicePdfService invoicePdfService;
     private final JavaMailSender mailSender;
     private final SensitiveMailCipher cipher;
+    private final BrandedEmailRenderer renderer;
 
     @Value("${app.mail.base-url:http://localhost:5173}")
     private String baseUrl = "http://localhost:5173";
@@ -41,7 +42,8 @@ public class NotificationEmailDeliveryWorker {
                 || !"SENT".equals(email.getAttachmentStatusSnapshot()))) {
             throw new NotificationEmailPermanentFailureException("Unsupported order summary attachment metadata");
         }
-        MimeMessageHelper helper = new MimeMessageHelper(message, attachPdf, StandardCharsets.UTF_8.name());
+        // Alternative text requires multipart mode even when the message has no attachment.
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, StandardCharsets.UTF_8.name());
         helper.setFrom(from);
         helper.setTo(email.getRecipientEmail());
         helper.setSubject(email.getSubject());
@@ -58,7 +60,7 @@ public class NotificationEmailDeliveryWorker {
             String filename = "mythix-order-" + safeOrderNumber(order.getOrderNumber()) + ".pdf";
             helper.addAttachment(filename, new ByteArrayResource(pdf.content()), email.getAttachmentType());
         }
-        helper.setText(body, false);
+        helper.setText(body, renderer.render(email.getSubject(), body));
         mailSender.send(message);
         outbox.markSent(email.getId(), LocalDateTime.now(ZoneOffset.UTC));
     }

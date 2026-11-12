@@ -104,6 +104,33 @@ class NotificationEmailServiceTest {
     }
 
     @Test
+    void allSelectedNotificationTypesAreQueued() {
+        List<String> types = List.of(
+            "ORDER_RESERVED", "ORDER_PLACED_BUYER", "ORDER_CANCELLED_BUYER", "ORDER_CANCELLED_SELLER",
+            "ORDER_SENT_BUYER", "SELLER_APPLICATION_APPROVED", "SELLER_APPLICATION_REJECTED",
+            "AUCTION_CANCELLATION_DECIDED", "AUCTION_OUTBID", "AUCTION_WON", "AUCTION_ENDED_SELLER",
+            "AUCTION_SECOND_CHANCE", "AUCTION_DEFAULTED_WARNING", "AUCTION_DISPUTE_OPENED", "AUCTION_DISPUTE_DECIDED"
+        );
+        for (int i = 0; i < types.size(); i++) {
+            String type = types.get(i);
+            String path = switch (type) {
+                case "AUCTION_ENDED_SELLER" -> "/workspace/auctions?orderId=71";
+                case "AUCTION_DISPUTE_OPENED", "AUCTION_DISPUTE_DECIDED" -> "/auction-disputes?disputeId=71";
+                default -> "/orders/71";
+            };
+            UserNotification notification = UserNotification.builder()
+                .recipient(User.builder().email("buyer@test.com").build())
+                .type(type).title("Update " + type).message("Message for " + type).actionPath(path).build();
+            notification.setId((long) i + 100);
+            service.enqueue(notification);
+        }
+        var captured = org.mockito.ArgumentCaptor.forClass(NotificationEmail.class);
+        verify(outbox, times(types.size())).save(captured.capture());
+        assertThat(captured.getAllValues()).extracting(NotificationEmail::getSubject)
+            .containsExactlyElementsOf(types.stream().map(type -> "Mythix: Update " + type).toList());
+    }
+
+    @Test
     void sensitiveEmailIsEncryptedAtRestAndDelegatedToWorker() throws Exception {
         service.enqueueSensitive("buyer@test.com", "Reset", "https://example.test/reset?token=secret", LocalDateTime.now().plusMinutes(5));
         var captured = org.mockito.ArgumentCaptor.forClass(NotificationEmail.class);

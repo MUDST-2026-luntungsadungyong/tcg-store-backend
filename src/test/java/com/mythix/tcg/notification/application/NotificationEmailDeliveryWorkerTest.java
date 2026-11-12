@@ -27,7 +27,7 @@ class NotificationEmailDeliveryWorkerTest {
     private final JavaMailSender sender = mock(JavaMailSender.class);
     private final SensitiveMailCipher cipher = new SensitiveMailCipher(new com.mythix.tcg.auth.security.JwtProperties("test-secret-with-at-least-32-bytes", 60));
     private final NotificationEmailDeliveryWorker worker = new NotificationEmailDeliveryWorker(
-        outbox, orders, new InvoicePdfService(), sender, cipher);
+        outbox, orders, new InvoicePdfService(), sender, cipher, new BrandedEmailRenderer());
 
     @Test
     void sensitiveRecoveryBodyIsDecryptedForMimeDelivery() throws Exception {
@@ -41,8 +41,39 @@ class NotificationEmailDeliveryWorkerTest {
         MimeMessage message = new MimeMessage(Session.getInstance(new Properties()));
         when(sender.createMimeMessage()).thenReturn(message);
         worker.deliver(91L, "orders@example.test");
-        assertThat(message.getContent().toString()).contains("token=secret");
+        message.saveChanges();
+        Multipart alternatives = findAlternatives((Multipart) message.getContent());
+        assertThat(alternatives.getCount()).isEqualTo(2);
+        assertThat(alternatives.getBodyPart(0).getContent().toString()).contains("token=secret");
+        assertThat(alternatives.getBodyPart(1).getContent().toString()).contains("Reset password", "token=secret");
         verify(outbox).markSent(eq(91L), any());
+    }
+
+    @Test
+    void bothSensitiveAuthenticationEmailsHavePlainAndBrandedHtmlAlternatives() throws Exception {
+        for (String[] sample : new String[][] {
+            {"Mythix: Reset your password", "Use this link to reset your password within 30 minutes:\n\nhttps://example.test/reset?token=secret\n\nIf you did not request this, you can ignore this email."},
+            {"Mythix: Your password was changed", "Your Mythix password was changed. If this was not you, contact support immediately."}
+        }) {
+            NotificationEmail email = new NotificationEmail();
+            email.setId(92L);
+            email.setRecipientEmail("buyer@example.test");
+            email.setSubject(sample[0]);
+            email.setSensitive(true);
+            email.setBody(cipher.encrypt(sample[1]));
+            when(outbox.findById(92L)).thenReturn(Optional.of(email));
+            MimeMessage message = new MimeMessage(Session.getInstance(new Properties()));
+            when(sender.createMimeMessage()).thenReturn(message);
+
+            worker.deliver(92L, "orders@example.test");
+
+            message.saveChanges();
+            Multipart alternatives = findAlternatives((Multipart) message.getContent());
+            assertThat(alternatives.getCount()).isEqualTo(2);
+            assertThat(alternatives.getBodyPart(0).getContent().toString()).contains("password");
+            assertThat(alternatives.getBodyPart(1).getContent().toString()).contains("MYTHIX", "password");
+            if (sample[0].contains("Reset")) assertThat(alternatives.getBodyPart(1).getContent().toString()).contains("href=\"https://example.test/reset?token=secret\"");
+        }
     }
 
     @Test
@@ -69,6 +100,10 @@ class NotificationEmailDeliveryWorkerTest {
         assertThat(message.getAllRecipients()[0].toString()).isEqualTo("buyer@example.test");
         Multipart parts = (Multipart) message.getContent();
         assertThat(parts.getCount()).isEqualTo(2);
+        Multipart alternatives = findAlternatives((Multipart) parts.getBodyPart(0).getContent());
+        assertThat(alternatives.getCount()).isEqualTo(2);
+        assertThat(alternatives.getBodyPart(0).getContent().toString()).contains("Tracking: EMS-123");
+        assertThat(alternatives.getBodyPart(1).getContent().toString()).contains("MYTHIX", "EMS-123");
         assertThat(parts.getBodyPart(1).getFileName()).isEqualTo("mythix-order-ORD-9.pdf");
         assertThat(parts.getBodyPart(1).getContentType()).contains("application/pdf");
         byte[] pdf = parts.getBodyPart(1).getInputStream().readAllBytes();
@@ -95,7 +130,7 @@ class NotificationEmailDeliveryWorkerTest {
         InvoicePdfService oversizedPdf = mock(InvoicePdfService.class);
         when(oversizedPdf.generate(any(), eq("SENT"), anyString()))
             .thenReturn(new InvoicePdfService.InvoiceFile(new byte[5 * 1024 * 1024 + 1], "oversize.pdf"));
-        NotificationEmailDeliveryWorker oversizeWorker = new NotificationEmailDeliveryWorker(outbox, orders, oversizedPdf, sender, cipher);
+        NotificationEmailDeliveryWorker oversizeWorker = new NotificationEmailDeliveryWorker(outbox, orders, oversizedPdf, sender, cipher, new BrandedEmailRenderer());
 
         org.junit.jupiter.api.Assertions.assertThrows(NotificationEmailAttachmentTooLargeException.class,
             () -> oversizeWorker.deliver(4L, "orders@mythix.test"));
@@ -138,7 +173,7 @@ class NotificationEmailDeliveryWorkerTest {
         InvoicePdfService pdf = mock(InvoicePdfService.class);
         when(pdf.generate(eq(order), eq("SENT"), anyString()))
             .thenReturn(new InvoicePdfService.InvoiceFile("%PDF".getBytes(), "summary.pdf"));
-        NotificationEmailDeliveryWorker configuredWorker = new NotificationEmailDeliveryWorker(outbox, orders, pdf, sender, cipher);
+        NotificationEmailDeliveryWorker configuredWorker = new NotificationEmailDeliveryWorker(outbox, orders, pdf, sender, cipher, new BrandedEmailRenderer());
         ReflectionTestUtils.setField(configuredWorker, "baseUrl", "https://tcgmythix.store/");
         when(sender.createMimeMessage()).thenReturn(new MimeMessage(Session.getInstance(new Properties())));
 
@@ -146,5 +181,34 @@ class NotificationEmailDeliveryWorkerTest {
 
         verify(pdf).generate(order, "SENT", "https://tcgmythix.store/orders/verify/ORD%209");
         verify(sender).send(any(MimeMessage.class));
+    }
+
+    @Test
+    void htmlRendererEscapesDynamicContentAndOnlyLinksSafeHttpUrls() {
+        BrandedEmailRenderer renderer = new BrandedEmailRenderer();
+        String html = renderer.render("Mythix: <Order>", "Hello <script>alert(1)</script>\n\nView details: javascript:alert(1)");
+
+        assertThat(html).contains("Mythix: &lt;Order&gt;", "&lt;script&gt;alert(1)&lt;/script&gt;", "IBM Plex Sans Thai")
+            .doesNotContain("<script>", "href=\"javascript:");
+        String resetHtml = renderer.render("Mythix: Reset your password", "Use this link:\n\nhttps://example.test/reset?token=secret");
+        assertThat(resetHtml).contains("Security", "href=\"https://example.test/reset?token=secret\"")
+            .doesNotContain(">https://example.test/reset?token=secret<", "Reset password link:");
+        assertThat(renderer.render("Mythix: Your order was cancelled", "Cancelled"))
+            .contains("Order update", "#FFA5A5");
+    }
+
+    private Multipart findAlternatives(Multipart multipart) throws Exception {
+        if (multipart.getContentType().toLowerCase().contains("multipart/alternative")) return multipart;
+        for (int i = 0; i < multipart.getCount(); i++) {
+            Object content = multipart.getBodyPart(i).getContent();
+            if (content instanceof Multipart nested) {
+                try {
+                    return findAlternatives(nested);
+                } catch (AssertionError ignored) {
+                    // Continue through related/mixed containers until the alternative body is found.
+                }
+            }
+        }
+        throw new AssertionError("No multipart/alternative body found");
     }
 }
