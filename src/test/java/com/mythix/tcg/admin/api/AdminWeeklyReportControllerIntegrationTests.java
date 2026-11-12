@@ -3,6 +3,7 @@ package com.mythix.tcg.admin.api;
 import com.mythix.tcg.admin.application.WeeklyReportService;
 import com.mythix.tcg.auth.security.JwtService;
 import com.mythix.tcg.user.domain.User;
+import com.mythix.tcg.user.persistence.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -25,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AdminWeeklyReportControllerIntegrationTests {
     @Autowired MockMvc mvc;
     @Autowired JwtService jwt;
+    @Autowired UserRepository users;
     @MockitoBean WeeklyReportService reports;
 
     @Test
@@ -82,6 +85,12 @@ class AdminWeeklyReportControllerIntegrationTests {
     }
 
     private String bearer(String role) {
-        return "Bearer " + jwt.generateToken(User.builder().id(99L).email("report-test@example.test").role(role).build());
+        User user = users.save(User.builder()
+            .email("weekly-report-" + UUID.randomUUID() + "@example.test")
+            .password("test-hash")
+            .fullName("Weekly report test user")
+            .role(role)
+            .build());
+        return "Bearer " + jwt.generateToken(user);
     }
 }
