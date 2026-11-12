@@ -28,7 +28,9 @@ public class NotificationEmailService {
         NotificationTypes.AUCTION_CANCELLATION_DECIDED, NotificationTypes.AUCTION_OUTBID,
         NotificationTypes.AUCTION_WON, NotificationTypes.AUCTION_ENDED_SELLER,
         NotificationTypes.AUCTION_SECOND_CHANCE, NotificationTypes.AUCTION_DEFAULTED_WARNING,
-        NotificationTypes.AUCTION_DISPUTE_OPENED, NotificationTypes.AUCTION_DISPUTE_DECIDED
+        NotificationTypes.AUCTION_DISPUTE_OPENED, NotificationTypes.AUCTION_DISPUTE_DECIDED,
+        NotificationTypes.STOCK_AVAILABLE, NotificationTypes.SELLER_STOCK_CRITICAL,
+        NotificationTypes.SELLER_OUT_OF_STOCK
     );
     private final NotificationEmailRepository outbox;
     private final SensitiveMailCipher cipher;
@@ -55,6 +57,12 @@ public class NotificationEmailService {
 
     @Transactional
     public void enqueue(UserNotification notification) {
+        enqueue(notification, true);
+    }
+
+    @Transactional
+    public void enqueue(UserNotification notification, boolean emailEnabled) {
+        if (!emailEnabled) return;
         if (!EMAIL_TYPES.contains(notification.getType()) || notification.getRecipient() == null
                 || notification.getRecipient().getEmail() == null || notification.getRecipient().getEmail().isBlank()) {
             return;
@@ -66,7 +74,7 @@ public class NotificationEmailService {
         NotificationEmail email = new NotificationEmail();
         email.setNotificationId(notification.getId());
         email.setRecipientEmail(notification.getRecipient().getEmail());
-        email.setSubject("Mythix: " + notification.getTitle());
+        email.setSubject(subject(notification));
         email.setBody(buildBody(notification));
         email.setNextAttemptAt(LocalDateTime.now(ZoneOffset.UTC));
         if (NotificationTypes.ORDER_SENT_BUYER.equals(notification.getType()) && notification.getOrder() != null) {
@@ -75,6 +83,15 @@ public class NotificationEmailService {
             email.setAttachmentStatusSnapshot("SENT");
         }
         outbox.save(email);
+    }
+
+    private String subject(UserNotification notification) {
+        return switch (notification.getType()) {
+            case NotificationTypes.STOCK_AVAILABLE -> "Mythix: Stock available";
+            case NotificationTypes.SELLER_STOCK_CRITICAL -> "Mythix: Critical stock alert";
+            case NotificationTypes.SELLER_OUT_OF_STOCK -> "Mythix: Listing out of stock";
+            default -> "Mythix: " + notification.getTitle();
+        };
     }
 
     private String buildBody(UserNotification notification) {

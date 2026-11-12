@@ -131,6 +131,45 @@ class NotificationEmailServiceTest {
     }
 
     @Test
+    void stockAlertEmailEligibilityIsSeverityAwareAndFeatureGateable() {
+        User buyer = User.builder().email("buyer@test.com").build();
+        User seller = User.builder().email("seller@test.com").build();
+        UserNotification available = UserNotification.builder().recipient(buyer)
+            .type("STOCK_AVAILABLE").title("Back in stock").message("Card is available")
+            .actionPath("/cards/card-1").build();
+        available.setId(51L);
+        service.enqueue(available);
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(51L)
+            && row.getSubject().equals("Mythix: Stock available")));
+
+        reset(outbox);
+        UserNotification low = UserNotification.builder().recipient(seller)
+            .type("SELLER_STOCK_LOW").title("Low stock").message("Stock is low").build();
+        low.setId(52L);
+        service.enqueue(low);
+        verifyNoInteractions(outbox);
+
+        UserNotification critical = UserNotification.builder().recipient(seller)
+            .type("SELLER_STOCK_CRITICAL").title("Critical stock").message("Restock")
+            .actionPath("/workspace/stock-forecast?search=Card").build();
+        critical.setId(53L);
+        service.enqueue(critical, false);
+        verifyNoInteractions(outbox);
+        service.enqueue(critical, true);
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(53L)
+            && row.getSubject().equals("Mythix: Critical stock alert")));
+
+        reset(outbox);
+        UserNotification outOfStock = UserNotification.builder().recipient(seller)
+            .type("SELLER_OUT_OF_STOCK").title("Listing unavailable").message("No stock remains")
+            .actionPath("/workspace/listings?search=Card").build();
+        outOfStock.setId(54L);
+        service.enqueue(outOfStock, true);
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(54L)
+            && row.getSubject().equals("Mythix: Listing out of stock")));
+    }
+
+    @Test
     void sensitiveEmailIsEncryptedAtRestAndDelegatedToWorker() throws Exception {
         service.enqueueSensitive("buyer@test.com", "Reset", "https://example.test/reset?token=secret", LocalDateTime.now().plusMinutes(5));
         var captured = org.mockito.ArgumentCaptor.forClass(NotificationEmail.class);

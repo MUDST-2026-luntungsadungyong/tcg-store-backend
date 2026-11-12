@@ -34,6 +34,7 @@ import com.mythix.tcg.order.application.EmptyCartException;
 import com.mythix.tcg.order.application.OrderStatusValidationException;
 import com.mythix.tcg.seller.application.SellerProductValidationException;
 import com.mythix.tcg.seller.application.SellerRequiredException;
+import com.mythix.tcg.notification.application.StockAlreadyAvailableException;
 import com.mythix.tcg.voucher.application.VoucherExceptions.*;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
@@ -52,6 +53,12 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(StockAlreadyAvailableException.class)
+    public ResponseEntity<ApiError> stockAlreadyAvailable(StockAlreadyAvailableException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(new ApiError("STOCK_ALREADY_AVAILABLE", exception.getMessage(), null));
+    }
 
     @ExceptionHandler(AuctionException.class)
     public ResponseEntity<ApiError> auction(AuctionException exception) {

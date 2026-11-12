@@ -4,6 +4,8 @@ In-app notifications are written with the business transaction. Selected notific
 
 The HTML renderer uses nested presentation tables, inline styles, and the Mythix dark palette. Its font stack starts with IBM Plex Sans Thai and falls back to local Arial/Helvetica sans-serif fonts; it does not fetch a web font. Dynamic content is HTML-escaped, and action links are emitted only for absolute HTTP(S) URLs without embedded credentials. Keep the outbox body as plain text; HTML is generated at delivery time so templates are shared and sensitive message bodies remain encrypted at rest. Every outgoing message must use both alternatives; preserve attachments as separate MIME parts.
 
+Stock emails use dedicated variants: buyer `STOCK_AVAILABLE` is a green “Stock update” with a “View card” action, seller `SELLER_STOCK_CRITICAL` is an amber “Inventory alert” with “View stock forecast,” and `SELLER_OUT_OF_STOCK` is a red “Inventory alert” with “Manage listing.” Seller `SELLER_STOCK_LOW` remains in-app only. Critical and out-of-stock mail also require the stock-alert email feature flag at enqueue time; all messages still require `APP_MAIL_ENABLED` and a configured sender for delivery.
+
 Apply Flyway migrations V24–V28 before starting the updated API. V27 adds the three dispute notification types while preserving existing types. V28 adds attachment snapshot and cancellation metadata, and suppresses every unsent pre-release outbox row in place. No rows are deleted. V28 only catches rows present at migration time, so after the updated API is running and before mail is enabled, choose a rollout cutoff timestamp and hold any remaining unsent rows queued before it:
 
 ```sql

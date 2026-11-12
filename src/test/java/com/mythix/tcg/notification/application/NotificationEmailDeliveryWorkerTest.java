@@ -197,6 +197,18 @@ class NotificationEmailDeliveryWorkerTest {
             .contains("Order update", "#FFA5A5");
     }
 
+    @Test
+    void stockEmailVariantsUseTheirSeverityAccentAndSpecificCta() {
+        BrandedEmailRenderer renderer = new BrandedEmailRenderer();
+        String available = renderer.render("Mythix: Stock available", "A card you follow is available.\n\nView details: https://mythix.test/cards/card-1");
+        String critical = renderer.render("Mythix: Critical stock alert", "A listing needs attention.\n\nView details: https://mythix.test/workspace/stock-forecast?search=Card");
+        String outOfStock = renderer.render("Mythix: Listing out of stock", "Your listing has no stock.\n\nView details: https://mythix.test/workspace/listings?search=Card");
+
+        assertThat(available).contains("Stock update", "#4CC987", "View card", "href=\"https://mythix.test/cards/card-1\"");
+        assertThat(critical).contains("Inventory alert", "#F2B84B", "View stock forecast", "href=\"https://mythix.test/workspace/stock-forecast?search=Card\"");
+        assertThat(outOfStock).contains("Inventory alert", "#FFA5A5", "Manage listing", "href=\"https://mythix.test/workspace/listings?search=Card\"");
+    }
+
     private Multipart findAlternatives(Multipart multipart) throws Exception {
         if (multipart.getContentType().toLowerCase().contains("multipart/alternative")) return multipart;
         for (int i = 0; i < multipart.getCount(); i++) {
