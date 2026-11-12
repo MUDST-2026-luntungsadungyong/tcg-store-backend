@@ -40,9 +40,9 @@ public class StockSubscriptionService {
         Card card = cards.findByIdForUpdate(cardId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Card not found"));
         // Serialize duplicate PUTs for the same card across pods before the unique-key insert.
-        if (products.existsPurchasableByGlobalCardId(cardId)) throw new StockAlreadyAvailableException();
         var existing = subscriptions.findByBuyer_IdAndCard_Id(buyerId, cardId);
         if (existing.isPresent()) return StockSubscriptionResponse.from(cardId, existing.get());
+        if (products.existsPurchasableByGlobalCardId(cardId)) throw new StockAlreadyAvailableException();
         User buyer = users.findById(buyerId).orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         StockSubscription subscription = new StockSubscription();
         subscription.setBuyer(buyer);

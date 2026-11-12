@@ -60,6 +60,21 @@ class StockSubscriptionServiceTest {
     }
 
     @Test
+    void repeatedPutRemainsIdempotentAfterStockBecomesAvailable() {
+        StockSubscription existing = new StockSubscription();
+        existing.setSubscribedAt(java.time.LocalDateTime.parse("2026-01-02T03:04:05"));
+        when(subscriptions.findByBuyer_IdAndCard_Id(7L, "card-1"))
+            .thenReturn(Optional.of(existing));
+
+        var result = service.subscribe(7L, "card-1");
+
+        assertTrue(result.subscribed());
+        assertEquals(existing.getSubscribedAt(), result.subscribedAt());
+        verify(products, never()).existsPurchasableByGlobalCardId("card-1");
+        verify(subscriptions, never()).saveAndFlush(any());
+    }
+
+    @Test
     void putRejectsACurrentlyPurchasableCard() {
         when(products.existsPurchasableByGlobalCardId("card-1")).thenReturn(true);
 
