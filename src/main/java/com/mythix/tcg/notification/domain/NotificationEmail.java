@@ -47,4 +47,25 @@ public class NotificationEmail {
 
     @Column(name = "last_error", length = 500)
     private String lastError;
+
+    @Column(name = "attachment_order_id")
+    private Long attachmentOrderId;
+
+    @Column(name = "attachment_type", length = 100)
+    private String attachmentType;
+
+    @Column(name = "attachment_status_snapshot", length = 40)
+    private String attachmentStatusSnapshot;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancel_reason", length = 255)
+    private String cancelReason;
+
+    @Column(name = "failed_at")
+    private LocalDateTime failedAt;
+
+    @Column(name = "failure_reason", length = 500)
+    private String failureReason;
 }

@@ -46,10 +46,14 @@ public class InvoicePdfService {
     public record InvoiceFile(byte[] content, String filename) {}
 
     public InvoiceFile generate(Order order, String verificationUrl) {
+        return generate(order, order.getStatus(), verificationUrl);
+    }
+
+    public InvoiceFile generate(Order order, String statusSnapshot, String verificationUrl) {
         try (PDDocument document = new PDDocument(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PdfCanvas canvas = new PdfCanvas(document);
             canvas.newPage();
-            drawHeader(canvas, order);
+            drawHeader(canvas, order, statusSnapshot);
             drawParties(canvas, order);
             drawItems(canvas, order.getItems());
             drawTotals(canvas, order);
@@ -62,7 +66,7 @@ public class InvoicePdfService {
         }
     }
 
-    private void drawHeader(PdfCanvas canvas, Order order) throws IOException {
+    private void drawHeader(PdfCanvas canvas, Order order, String statusSnapshot) throws IOException {
         float top = PAGE_SIZE.getHeight() - MARGIN;
         canvas.fillRect(MARGIN, top - 92, CONTENT_WIDTH, 92, NAVY);
         canvas.text("MYTHIX", MARGIN + 20, top - 34, BOLD, 22, WHITE);
@@ -72,7 +76,7 @@ public class InvoicePdfService {
         canvas.y = top - 116;
 
         canvas.text("ORDER STATUS", MARGIN, canvas.y, BOLD, 8, SLATE);
-        canvas.text(safe(order.getStatus()), MARGIN, canvas.y - 18, BOLD, 12, BLUE);
+        canvas.text(safe(statusSnapshot), MARGIN, canvas.y - 18, BOLD, 12, BLUE);
         canvas.text("ORDER DATE", MARGIN + 170, canvas.y, BOLD, 8, SLATE);
         canvas.text(order.getCreatedAt() == null ? "-" : DATE_TIME.format(order.getCreatedAt()), MARGIN + 170, canvas.y - 18, REGULAR, 10, NAVY);
         canvas.text("ORDER TYPE", MARGIN + 350, canvas.y, BOLD, 8, SLATE);

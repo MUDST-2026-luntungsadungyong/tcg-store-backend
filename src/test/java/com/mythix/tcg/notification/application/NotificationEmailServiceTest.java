@@ -4,13 +4,12 @@ import com.mythix.tcg.notification.domain.NotificationEmail;
 import com.mythix.tcg.notification.domain.UserNotification;
 import com.mythix.tcg.notification.persistence.NotificationEmailRepository;
 import com.mythix.tcg.order.domain.Order;
+import com.mythix.tcg.order.application.InvoicePdfService;
 import com.mythix.tcg.user.domain.User;
 import com.mythix.tcg.auth.security.JwtProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
@@ -22,9 +21,9 @@ import static org.mockito.Mockito.*;
 
 class NotificationEmailServiceTest {
     private final NotificationEmailRepository outbox = mock(NotificationEmailRepository.class);
-    private final JavaMailSender sender = mock(JavaMailSender.class);
-    private final NotificationEmailService service = new NotificationEmailService(outbox, sender,
-        new SensitiveMailCipher(new JwtProperties("test-secret-with-at-least-32-bytes", 60)));
+    private final NotificationEmailDeliveryWorker worker = mock(NotificationEmailDeliveryWorker.class);
+    private final SensitiveMailCipher cipher = new SensitiveMailCipher(new JwtProperties("test-secret-with-at-least-32-bytes", 60));
+    private final NotificationEmailService service = new NotificationEmailService(outbox, cipher, worker);
 
     @BeforeEach
     void setUp() {
@@ -36,7 +35,7 @@ class NotificationEmailServiceTest {
     @Test
     void sentOrderEmailContainsStructuredTrackingAndLink() {
         Order order = Order.builder().id(9L).orderNumber("ORD-9")
-            .trackingNumber("EMS123456").shippingCarrier("Thailand Post").build();
+            .status("SENT").trackingNumber("EMS123456").shippingCarrier("Thailand Post").build();
         UserNotification notification = UserNotification.builder().recipient(User.builder().email("buyer@test.com").build())
             .order(order).type("ORDER_SENT_BUYER").title("Your order has been sent")
             .message("The seller sent your order.").actionPath("/orders/9").build();
@@ -49,6 +48,9 @@ class NotificationEmailServiceTest {
         assertThat(captured.getValue().getRecipientEmail()).isEqualTo("buyer@test.com");
         assertThat(captured.getValue().getNotificationId()).isEqualTo(17L);
         assertThat(captured.getValue().getBody()).contains("EMS123456", "Thailand Post", "https://mythix.test/orders/9");
+        assertThat(captured.getValue().getAttachmentOrderId()).isEqualTo(9L);
+        assertThat(captured.getValue().getAttachmentType()).isEqualTo("application/pdf");
+        assertThat(captured.getValue().getAttachmentStatusSnapshot()).isEqualTo("SENT");
     }
 
     @Test
@@ -61,7 +63,7 @@ class NotificationEmailServiceTest {
     }
 
     @Test
-    void dueEmailIsClaimedBeforeSendingAndMarkedSent() {
+    void dueEmailIsClaimedBeforeSendingAndMarkedSent() throws Exception {
         NotificationEmail email = new NotificationEmail();
         email.setId(4L);
         email.setNotificationId(17L);
@@ -73,14 +75,36 @@ class NotificationEmailServiceTest {
 
         service.deliverDue();
 
-        var message = org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(sender).send(message.capture());
-        assertThat(message.getValue().getTo()).containsExactly("buyer@test.com");
-        verify(outbox).markSent(eq(4L), any(LocalDateTime.class));
+        verify(worker).deliver(4L, "orders@mythix.test");
     }
 
     @Test
-    void sensitiveEmailIsEncryptedAtRestAndDecryptedOnlyForSending() {
+    void disputeOpenedAndDecidedAreEligibleButEvidenceIsWebOnly() {
+        UserNotification opened = UserNotification.builder().recipient(User.builder().email("buyer@test.com").build())
+            .type("AUCTION_DISPUTE_OPENED").title("Dispute opened").message("Opened")
+            .actionPath("/auction-disputes?disputeId=41").build();
+        opened.setId(41L);
+        service.enqueue(opened);
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(41L)));
+
+        reset(outbox);
+        UserNotification evidence = UserNotification.builder().recipient(User.builder().email("buyer@test.com").build())
+            .type("AUCTION_DISPUTE_EVIDENCE_ADDED").title("Evidence").message("Added")
+            .actionPath("/auction-disputes?disputeId=41").build();
+        evidence.setId(42L);
+        service.enqueue(evidence);
+        verifyNoInteractions(outbox);
+
+        UserNotification decided = UserNotification.builder().recipient(User.builder().email("buyer@test.com").build())
+            .type("AUCTION_DISPUTE_DECIDED").title("Dispute decided").message("Decision: Dismissed")
+            .actionPath("/auction-disputes?disputeId=41").build();
+        decided.setId(43L);
+        service.enqueue(decided);
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(43L)));
+    }
+
+    @Test
+    void sensitiveEmailIsEncryptedAtRestAndDelegatedToWorker() throws Exception {
         service.enqueueSensitive("buyer@test.com", "Reset", "https://example.test/reset?token=secret", LocalDateTime.now().plusMinutes(5));
         var captured = org.mockito.ArgumentCaptor.forClass(NotificationEmail.class);
         verify(outbox).save(captured.capture());
@@ -90,10 +114,8 @@ class NotificationEmailServiceTest {
         when(outbox.findDue(any(), any())).thenReturn(List.of(email));
         when(outbox.claim(eq(10L), any(), any())).thenReturn(1);
         service.deliverDue();
-        var message = org.mockito.ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(sender).send(message.capture());
-        assertThat(message.getValue().getText()).contains("token=secret");
-        verify(outbox).markSent(eq(10L), any());
+        assertThat(cipher.decrypt(email.getBody())).contains("token=secret");
+        verify(worker).deliver(10L, "orders@mythix.test");
     }
 
     @Test
@@ -105,7 +127,7 @@ class NotificationEmailServiceTest {
         when(outbox.findDue(any(), any())).thenReturn(List.of(email));
         when(outbox.claim(eq(11L), any(), any())).thenReturn(1);
         service.deliverDue();
-        verifyNoInteractions(sender);
+        verifyNoInteractions(worker);
         verify(outbox).markSent(eq(11L), any());
     }
 }

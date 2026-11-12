@@ -1,6 +1,7 @@
 package com.mythix.tcg.order.api;
 
 import com.mythix.tcg.auth.security.AuthenticatedUser;
+import com.mythix.tcg.common.config.AppProperties;
 import com.mythix.tcg.order.api.BuyerOrderDto.BuyerOrderResponse;
 import com.mythix.tcg.order.api.BuyerOrderDto.OrderVerificationResponse;
 import com.mythix.tcg.order.api.BuyerOrderDto.ReorderResponse;
@@ -19,7 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.List;
 
@@ -30,6 +31,7 @@ import java.util.List;
 public class BuyerOrderController {
 
     private final BuyerOrderService buyerOrderService;
+    private final AppProperties appProperties;
 
     @GetMapping({"/me", "/my-orders"})
     public ResponseEntity<?> getBuyerOrders(
@@ -70,8 +72,8 @@ public class BuyerOrderController {
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable Long orderId) {
         BuyerOrderResponse order = buyerOrderService.getBuyerOrderById(user.userId(), orderId);
-        String verificationUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
-                .path("/api/orders/verify/{orderNumber}")
+        String verificationUrl = UriComponentsBuilder.fromUriString(appProperties.publicWebUrl())
+                .path("/orders/verify/{orderNumber}")
                 .buildAndExpand(order.getOrderNumber())
                 .encode()
                 .toUriString();

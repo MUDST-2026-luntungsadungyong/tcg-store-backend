@@ -1,14 +1,13 @@
 package com.mythix.tcg.notification.application;
 
 import com.mythix.tcg.notification.domain.NotificationEmail;
+import com.mythix.tcg.notification.domain.NotificationTypes;
 import com.mythix.tcg.notification.domain.UserNotification;
 import com.mythix.tcg.notification.persistence.NotificationEmailRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,16 +21,18 @@ import java.util.Set;
 @Slf4j
 public class NotificationEmailService {
     private static final Set<String> EMAIL_TYPES = Set.of(
-        "ORDER_RESERVED", "ORDER_PLACED_BUYER", "ORDER_CANCELLED_BUYER",
-        "ORDER_CANCELLED_SELLER", "ORDER_SENT_BUYER",
-        "SELLER_APPLICATION_APPROVED", "SELLER_APPLICATION_REJECTED",
-        "AUCTION_CANCELLATION_DECIDED", "AUCTION_OUTBID", "AUCTION_WON",
-        "AUCTION_ENDED_SELLER", "AUCTION_SECOND_CHANCE", "AUCTION_DEFAULTED_WARNING"
+        NotificationTypes.ORDER_RESERVED, NotificationTypes.ORDER_PLACED_BUYER,
+        NotificationTypes.ORDER_CANCELLED_BUYER, NotificationTypes.ORDER_CANCELLED_SELLER,
+        NotificationTypes.ORDER_SENT_BUYER,
+        NotificationTypes.SELLER_APPLICATION_APPROVED, NotificationTypes.SELLER_APPLICATION_REJECTED,
+        NotificationTypes.AUCTION_CANCELLATION_DECIDED, NotificationTypes.AUCTION_OUTBID,
+        NotificationTypes.AUCTION_WON, NotificationTypes.AUCTION_ENDED_SELLER,
+        NotificationTypes.AUCTION_SECOND_CHANCE, NotificationTypes.AUCTION_DEFAULTED_WARNING,
+        NotificationTypes.AUCTION_DISPUTE_OPENED, NotificationTypes.AUCTION_DISPUTE_DECIDED
     );
-
     private final NotificationEmailRepository outbox;
-    private final JavaMailSender mailSender;
     private final SensitiveMailCipher cipher;
+    private final NotificationEmailDeliveryWorker deliveryWorker;
 
     @Value("${app.mail.enabled:false}")
     private boolean enabled;
@@ -58,42 +59,45 @@ public class NotificationEmailService {
                 || notification.getRecipient().getEmail() == null || notification.getRecipient().getEmail().isBlank()) {
             return;
         }
-        if ("AUCTION_ENDED_SELLER".equals(notification.getType())
-                && (notification.getActionPath() == null || !notification.getActionPath().contains("orderId="))) {
-            return;
-        }
+        if (NotificationTypes.AUCTION_ENDED_SELLER.equals(notification.getType())
+                && (notification.getActionPath() == null || !notification.getActionPath().contains("orderId="))) return;
+        if (isDispute(notification.getType()) && !isDisputePath(notification.getActionPath())) return;
+
         NotificationEmail email = new NotificationEmail();
         email.setNotificationId(notification.getId());
         email.setRecipientEmail(notification.getRecipient().getEmail());
         email.setSubject("Mythix: " + notification.getTitle());
         email.setBody(buildBody(notification));
         email.setNextAttemptAt(LocalDateTime.now(ZoneOffset.UTC));
+        if (NotificationTypes.ORDER_SENT_BUYER.equals(notification.getType()) && notification.getOrder() != null) {
+            email.setAttachmentOrderId(notification.getOrder().getId());
+            email.setAttachmentType("application/pdf");
+            email.setAttachmentStatusSnapshot("SENT");
+        }
         outbox.save(email);
     }
 
     private String buildBody(UserNotification notification) {
-        StringBuilder body = new StringBuilder("ORDER_SENT_BUYER".equals(notification.getType())
+        StringBuilder body = new StringBuilder(NotificationTypes.ORDER_SENT_BUYER.equals(notification.getType())
             ? "The seller marked your order as sent." : notification.getMessage());
         if (notification.getOrder() != null) {
             body.append("\n\nOrder: ").append(notification.getOrder().getOrderNumber());
-            if ("ORDER_SENT_BUYER".equals(notification.getType())) {
+            if (NotificationTypes.ORDER_SENT_BUYER.equals(notification.getType())) {
                 body.append("\nTracking number: ").append(notification.getOrder().getTrackingNumber());
-                if (notification.getOrder().getShippingCarrier() != null) {
-                    body.append("\nCarrier: ").append(notification.getOrder().getShippingCarrier());
-                }
+                if (notification.getOrder().getShippingCarrier() != null) body.append("\nCarrier: ").append(notification.getOrder().getShippingCarrier());
             }
         }
         String path = notification.getActionPath();
         if (path == null && notification.getOrder() != null) {
             path = switch (notification.getType()) {
-                case "ORDER_RESERVED", "ORDER_CANCELLED_SELLER", "ORDER_FULFILLED_SELLER" -> "/workspace/orders";
+                case NotificationTypes.ORDER_RESERVED, NotificationTypes.ORDER_CANCELLED_SELLER, NotificationTypes.ORDER_FULFILLED_SELLER -> "/workspace/orders";
                 default -> "/orders/" + notification.getOrder().getId();
             };
         }
         if (path == null) {
             path = switch (notification.getType()) {
-                case "SELLER_APPLICATION_APPROVED", "SELLER_APPLICATION_REJECTED" -> "/profile";
-                case "AUCTION_CANCELLATION_DECIDED" -> "/workspace/auctions";
+                case NotificationTypes.SELLER_APPLICATION_APPROVED, NotificationTypes.SELLER_APPLICATION_REJECTED -> "/profile";
+                case NotificationTypes.AUCTION_CANCELLATION_DECIDED -> "/workspace/auctions";
                 default -> null;
             };
         }
@@ -102,6 +106,15 @@ public class NotificationEmailService {
         }
         body.append("\n\nMythix TCG");
         return body.toString();
+    }
+
+    private boolean isDispute(String type) {
+        return NotificationTypes.AUCTION_DISPUTE_OPENED.equals(type)
+            || NotificationTypes.AUCTION_DISPUTE_DECIDED.equals(type);
+    }
+
+    private boolean isDisputePath(String path) {
+        return path != null && path.matches("/auction-disputes\\?disputeId=[1-9][0-9]*");
     }
 
     @Scheduled(fixedDelayString = "${app.mail.poll-ms:30000}")
@@ -116,14 +129,14 @@ public class NotificationEmailService {
                     outbox.markSent(email.getId(), claimedAt);
                     continue;
                 }
-                SimpleMailMessage message = new SimpleMailMessage();
-                message.setFrom(from);
-                message.setTo(email.getRecipientEmail());
-                message.setSubject(email.getSubject());
-                message.setText(email.isSensitive() ? cipher.decrypt(email.getBody()) : email.getBody());
-                mailSender.send(message);
-                outbox.markSent(email.getId(), LocalDateTime.now(ZoneOffset.UTC));
+                deliveryWorker.deliver(email.getId(), from);
             } catch (Exception error) {
+                if (error instanceof NotificationEmailPermanentFailureException) {
+                    String detail = error.getMessage();
+                    outbox.markFailed(email.getId(), LocalDateTime.now(ZoneOffset.UTC), detail.substring(0, Math.min(500, detail.length())));
+                    log.error("Email delivery permanently failed for notification {}: {}", email.getNotificationId(), detail);
+                    continue;
+                }
                 int minutes = Math.min(60, 1 << Math.min(email.getAttempts(), 5));
                 String detail = error.getClass().getSimpleName() + ": " + error.getMessage();
                 outbox.reschedule(email.getId(), LocalDateTime.now(ZoneOffset.UTC).plusMinutes(minutes),

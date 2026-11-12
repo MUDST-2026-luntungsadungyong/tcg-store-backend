@@ -282,8 +282,13 @@ class AuctionConcurrencyPostgresTests {
         assertThat(results).extracting(AuctionConcurrencyPostgresTests::statusOf).containsExactly(200, 200);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_logs WHERE action = 'AUCTION_DISPUTE_DECISION' AND target_id = ?",
             Integer.class, Long.toString(disputeId))).isEqualTo(1);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM notifications WHERE title = 'Auction dispute' AND message = ?",
-            Integer.class, "A decision was recorded for auction #" + auctionId + ".")).isEqualTo(2);
+        assertThat(jdbc.queryForObject("""
+            SELECT count(*) FROM notifications
+            WHERE notification_type = 'AUCTION_DISPUTE_DECIDED'
+              AND title = 'Auction dispute decided'
+              AND message = 'Decision: Dismissed. Reason: Reviewed'
+              AND action_path = ?
+            """, Integer.class, "/auction-disputes?disputeId=" + disputeId)).isEqualTo(2);
     }
 
     @Test

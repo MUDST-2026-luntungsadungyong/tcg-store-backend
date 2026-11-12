@@ -96,6 +96,7 @@ management:
         http.server.requests: 50ms,100ms,250ms,500ms,1s,2s,5s
 
 app:
+  public-web-url: ${APP_PUBLIC_WEB_URL:http://localhost:5173}
   mail:
     enabled: ${APP_MAIL_ENABLED:false}
     from: ${APP_MAIL_FROM:}

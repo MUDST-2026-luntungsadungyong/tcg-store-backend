@@ -52,7 +52,7 @@ class InvoicePdfServiceTest {
 
         InvoicePdfService.InvoiceFile invoice = new InvoicePdfService().generate(
                 order,
-                "https://api.mythix.example/api/orders/verify/ORD-US25-001");
+                "https://tcgmythix.store/orders/verify/ORD-US25-001");
 
         assertThat(invoice.filename()).isEqualTo("mythix-order-ORD-US25-001.pdf");
         assertThat(invoice.content()).startsWith("%PDF".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
