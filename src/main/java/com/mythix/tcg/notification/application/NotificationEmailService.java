@@ -74,7 +74,7 @@ public class NotificationEmailService {
         NotificationEmail email = new NotificationEmail();
         email.setNotificationId(notification.getId());
         email.setRecipientEmail(notification.getRecipient().getEmail());
-        email.setSubject("Mythix: " + notification.getTitle());
+        email.setSubject(subject(notification));
         email.setBody(buildBody(notification));
         email.setNextAttemptAt(LocalDateTime.now(ZoneOffset.UTC));
         if (NotificationTypes.ORDER_SENT_BUYER.equals(notification.getType()) && notification.getOrder() != null) {
@@ -83,6 +83,15 @@ public class NotificationEmailService {
             email.setAttachmentStatusSnapshot("SENT");
         }
         outbox.save(email);
+    }
+
+    private String subject(UserNotification notification) {
+        return switch (notification.getType()) {
+            case NotificationTypes.STOCK_AVAILABLE -> "Mythix: Stock available";
+            case NotificationTypes.SELLER_STOCK_CRITICAL -> "Mythix: Critical stock alert";
+            case NotificationTypes.SELLER_OUT_OF_STOCK -> "Mythix: Listing out of stock";
+            default -> "Mythix: " + notification.getTitle();
+        };
     }
 
     private String buildBody(UserNotification notification) {

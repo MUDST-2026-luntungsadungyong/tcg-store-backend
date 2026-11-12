@@ -104,6 +104,33 @@ class NotificationEmailServiceTest {
     }
 
     @Test
+    void allSelectedNotificationTypesAreQueued() {
+        List<String> types = List.of(
+            "ORDER_RESERVED", "ORDER_PLACED_BUYER", "ORDER_CANCELLED_BUYER", "ORDER_CANCELLED_SELLER",
+            "ORDER_SENT_BUYER", "SELLER_APPLICATION_APPROVED", "SELLER_APPLICATION_REJECTED",
+            "AUCTION_CANCELLATION_DECIDED", "AUCTION_OUTBID", "AUCTION_WON", "AUCTION_ENDED_SELLER",
+            "AUCTION_SECOND_CHANCE", "AUCTION_DEFAULTED_WARNING", "AUCTION_DISPUTE_OPENED", "AUCTION_DISPUTE_DECIDED"
+        );
+        for (int i = 0; i < types.size(); i++) {
+            String type = types.get(i);
+            String path = switch (type) {
+                case "AUCTION_ENDED_SELLER" -> "/workspace/auctions?orderId=71";
+                case "AUCTION_DISPUTE_OPENED", "AUCTION_DISPUTE_DECIDED" -> "/auction-disputes?disputeId=71";
+                default -> "/orders/71";
+            };
+            UserNotification notification = UserNotification.builder()
+                .recipient(User.builder().email("buyer@test.com").build())
+                .type(type).title("Update " + type).message("Message for " + type).actionPath(path).build();
+            notification.setId((long) i + 100);
+            service.enqueue(notification);
+        }
+        var captured = org.mockito.ArgumentCaptor.forClass(NotificationEmail.class);
+        verify(outbox, times(types.size())).save(captured.capture());
+        assertThat(captured.getAllValues()).extracting(NotificationEmail::getSubject)
+            .containsExactlyElementsOf(types.stream().map(type -> "Mythix: Update " + type).toList());
+    }
+
+    @Test
     void stockAlertEmailEligibilityIsSeverityAwareAndFeatureGateable() {
         User buyer = User.builder().email("buyer@test.com").build();
         User seller = User.builder().email("seller@test.com").build();
@@ -112,7 +139,8 @@ class NotificationEmailServiceTest {
             .actionPath("/cards/card-1").build();
         available.setId(51L);
         service.enqueue(available);
-        verify(outbox).save(argThat(row -> row.getNotificationId().equals(51L)));
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(51L)
+            && row.getSubject().equals("Mythix: Stock available")));
 
         reset(outbox);
         UserNotification low = UserNotification.builder().recipient(seller)
@@ -128,7 +156,17 @@ class NotificationEmailServiceTest {
         service.enqueue(critical, false);
         verifyNoInteractions(outbox);
         service.enqueue(critical, true);
-        verify(outbox).save(argThat(row -> row.getNotificationId().equals(53L)));
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(53L)
+            && row.getSubject().equals("Mythix: Critical stock alert")));
+
+        reset(outbox);
+        UserNotification outOfStock = UserNotification.builder().recipient(seller)
+            .type("SELLER_OUT_OF_STOCK").title("Listing unavailable").message("No stock remains")
+            .actionPath("/workspace/listings?search=Card").build();
+        outOfStock.setId(54L);
+        service.enqueue(outOfStock, true);
+        verify(outbox).save(argThat(row -> row.getNotificationId().equals(54L)
+            && row.getSubject().equals("Mythix: Listing out of stock")));
     }
 
     @Test
