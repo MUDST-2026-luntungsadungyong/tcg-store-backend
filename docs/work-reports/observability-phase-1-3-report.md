@@ -58,7 +58,7 @@
 
 - Backend Service เป็น `ClusterIP`
 - Public Ingress route เฉพาะ `/api` จึงไม่เผย `/actuator/prometheus` สู่ public ingress
-- ปรับ NetworkPolicy สำหรับ Azure collector จาก namespace `kube-system` ไปยัง TCP 8080 แล้ว
+- ปรับ NetworkPolicy สำหรับ Azure collector จาก namespace `kube-system` และ pod label `rsName=ama-metrics` ไปยัง TCP 8080 แล้ว
 - AKS demo ปัจจุบันตั้ง Network policy engine เป็น `None`; NetworkPolicy จะยังไม่ถูกบังคับใช้จนกว่าจะเปิด network-policy engine
 
 ## การตรวจสอบ

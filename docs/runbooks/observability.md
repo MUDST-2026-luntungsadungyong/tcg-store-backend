@@ -6,7 +6,7 @@ The configuration under `infra/observability` is a standalone, private monitorin
 
 The AKS demo overlay includes `infra/kubernetes/components/observability`. It creates an Azure Managed Prometheus `ServiceMonitor` for the in-cluster `tcg-store-backend` Service. The monitor uses the Azure-specific API group `azmonitoring.coreos.com/v1`, the Service's named `http` port, `/actuator/prometheus`, and a 30-second interval. Every target receives `environment=aks-demo`.
 
-The normal GitHub Actions AKS demo deployment validates and applies this component after the change is merged into `main`; do not bypass the release workflow with a local `kubectl apply`. The Service remains `ClusterIP`, and the public Ingress only routes `/api`, so the metrics endpoint is not published through public ingress. If NetworkPolicy enforcement is enabled for this cluster later, retain the `kube-system` monitoring rule in `tcg-store-backend-monitoring-ingress` so the Azure `ama-metrics` collector can reach TCP 8080.
+The normal GitHub Actions AKS demo deployment validates and applies this component after the change is merged into `main`; do not bypass the release workflow with a local `kubectl apply`. The Service remains `ClusterIP`, and the public Ingress only routes `/api`, so the metrics endpoint is not published through public ingress. If NetworkPolicy enforcement is enabled for this cluster later, retain the `kube-system` monitoring rule with the `rsName=ama-metrics` pod selector in `tcg-store-backend-monitoring-ingress` so only the Azure `ama-metrics` collector can reach TCP 8080 through this rule.
 
 ## Platform prerequisites
 
