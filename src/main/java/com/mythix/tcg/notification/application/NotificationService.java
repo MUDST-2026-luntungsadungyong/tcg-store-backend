@@ -194,6 +194,18 @@ public class NotificationService {
             .build());
     }
 
+    @Transactional
+    public void sendStockNotification(User recipient, String type, String title, String message, String actionPath, boolean emailEnabled) {
+        UserNotification notification = notificationRepository.save(UserNotification.builder()
+            .recipient(recipient)
+            .type(type)
+            .title(title)
+            .message(message)
+            .actionPath(actionPath)
+            .build());
+        notificationEmailService.enqueue(notification, emailEnabled);
+    }
+
     private UserNotification sellerApplicationNotification(
             User recipient, SellerProfile profile, String type, String title, String message) {
         return UserNotification.builder()

@@ -97,6 +97,13 @@ management:
 
 app:
   public-web-url: ${APP_PUBLIC_WEB_URL:http://localhost:5173}
+  back-in-stock-notification:
+    enabled: ${APP_BACK_IN_STOCK_NOTIFICATION_ENABLED:false}
+  seller-stock-alert:
+    enabled: ${APP_SELLER_STOCK_ALERT_ENABLED:false}
+    email-enabled: ${APP_SELLER_STOCK_ALERT_EMAIL_ENABLED:false}
+  stock-notification:
+    poll-ms: ${APP_STOCK_NOTIFICATION_POLL_MS:60000}
   mail:
     enabled: ${APP_MAIL_ENABLED:false}
     from: ${APP_MAIL_FROM:}
