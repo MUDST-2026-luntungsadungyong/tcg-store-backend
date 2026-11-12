@@ -20,3 +20,12 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+    # Azure Managed Prometheus runs its collector in kube-system. Keep the
+    # scrape path inside the cluster; the backend Service remains ClusterIP.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: TCP
+          port: 8080

@@ -1,0 +1,25 @@
+apiVersion: azmonitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tcg-store-backend
+  labels:
+    app.kubernetes.io/name: tcg-store-backend
+    app.kubernetes.io/component: observability
+spec:
+  # Azure Managed Prometheus rejects scrape targets that exceed these limits.
+  labelLimit: 63
+  labelNameLengthLimit: 511
+  labelValueLengthLimit: 1023
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tcg-store-backend
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+      # Add a stable label to every target discovered by this ServiceMonitor.
+      relabelings:
+        - sourceLabels:
+            - __address__
+          targetLabel: environment
+          replacement: aks-demo
