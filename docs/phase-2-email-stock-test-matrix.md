@@ -7,7 +7,7 @@ This matrix records the source inventory and commands actually run for the phase
 | Suite | Source inventory after this phase | Observed run |
 | --- | --- | --- |
 | Frontend Vitest | 86 test files | `npm test -- --reporter=dot`: 86 files passed, 450 tests passed |
-| Frontend Cypress | 45 spec files under `cypress/e2e`; full Cypress runner enumerated 206 cases, including 3 pending | Full run: 178 passed, 25 failed, 3 pending, 0 skipped |
+| Frontend Cypress | 45 spec files under `cypress/e2e`; full Cypress runner enumerated 206 cases, including 3 pending | CI-equivalent full run: 203 passed, 0 failed, 3 pending, 0 skipped |
 | Backend Java tests | 67 Java test source files | `mvnw verify`: 449 tests, 0 failures, 0 errors, 19 skipped |
 | Email SMTP boundary | `NotificationEmailDeliverySmtpIntegrationTest` plus the existing worker and service test classes | Focused worker/service/SMTP run: 19 passed, 0 failures/errors/skips |
 
@@ -26,9 +26,9 @@ The CI business-test server enables `VITE_ENABLE_MOCK_API=true`, so these pages 
 
 Focused mock-mode run: `npx cypress run --spec cypress/e2e/20_seller_stock_notification_cta.cy.ts` — 2 passed, 0 failed, 0 pending, 0 skipped. The earlier full local Cypress run also passed both cases.
 
-The entire full Cypress run was attempted with `npm run test:e2e:full`: 45 specs, 206 cases, 178 passed, 25 failed, 3 pending, 0 skipped. Failures were limited to existing specs not changed in this phase:
+The earlier `npm run test:e2e:full` command was only an alias for raw `cypress run`. It incorrectly ran the business browser-mock specs and the design HTTP-fixture specs against one default HTTP-mode server. That invalid environment produced 25 misleading failures:
 
-| Existing failing spec | Failed cases | Observed issue |
+| Historically failing spec | Failed cases | Observed issue in the invalid single-server run |
 | --- | ---: | --- |
 | `03_cart_and_checkout_flow.cy.ts` | 1 | Cart stock-limit journey assertion failed |
 | `10_collection_and_leaderboard.cy.ts` | 1 | Public collector showcase assertion failed |
@@ -38,7 +38,9 @@ The entire full Cypress run was attempted with `npm run test:e2e:full`: 45 specs
 | `19_voucher_admin_buyer_sync.cy.ts` | 1 | Existing order discount snapshot after voucher deletion assertion failed |
 | `admin/04_seller_update_product.cy.ts` | 2 | Save control remained disabled in update-product journeys |
 
-The affected specs and their production feature sources were unchanged from the supplied frontend starting commit (`22e81668`). The new seller journeys pass, but the 25 failures have not been reproduced against the base lockfile, so this report does not classify their root cause. They remain open full-suite gaps; no assertions were weakened.
+The failures were reproduced from latest `main` with its base lockfile and then rerun using the same two partitions as CI: business specs on port 3000 with `VITE_ENABLE_MOCK_API=true`, followed by design specs on port 3001 with the mock API disabled. All seven historically failing specs passed in their matching mode. The corrected full runner completed 38 business specs with 182 passed and 3 opt-in live tests pending, then 7 design specs with 21 passed: 45 specs, 206 cases, 203 passed, 0 failed, 3 pending, 0 skipped. This classifies the historical failures as test-environment mismatch rather than product regressions.
+
+The frontend `npm run test:e2e:full` command now owns both Vite servers, waits for readiness, runs those two partitions, and cleans up the child processes. The GitHub Actions E2E job calls the same command, so local and CI full-regression orchestration share one implementation.
 
 ## Backend email and SMTP coverage
 
@@ -64,6 +66,5 @@ Frontend production build command `npm run build` passed. Vite emitted a large-c
 
 ## Remaining gaps
 
-- The 25 failures across the 7 existing Cypress specs listed above need base-branch reproduction and separate investigation; the focused seller notification journeys pass.
 - SMTP testing uses an embedded local server and mocked outbox/order repositories. Provider-specific behavior, database-backed outbox retries/expiry, and production-provider delivery are not covered.
 - Coverage is an initial reporting baseline. No project-wide thresholds or high-coverage gates were introduced.
