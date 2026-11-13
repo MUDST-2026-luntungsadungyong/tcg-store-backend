@@ -13,14 +13,15 @@ public final class WeeklyReportDto {
     public record StagnantListing(long productId, long sellerId, String cardId, String name,
                                   long onHand, BigDecimal inventoryValue, LocalDateTime listedAt) {}
     public record Report(LocalDate weekEndDate, LocalDateTime periodStart, LocalDateTime periodEnd,
-                         LocalDateTime generatedAt, long stockAdded, long stockRemoved, long unitsSold,
-                         long inventoryUnits, BigDecimal totalInventoryValue, BigDecimal inventoryCost,
+                         LocalDateTime generatedAt, Long stockAdded, Long stockRemoved, long unitsSold,
+                         Long inventoryUnits, BigDecimal totalInventoryValue, BigDecimal inventoryCost,
                          BigDecimal revenue, BigDecimal grossProfit, BigDecimal totalFeesCollected,
                          List<CardPerformance> topByRevenue, List<CardPerformance> topByProfit,
-                         long stagnantListings, long stagnantUnits, BigDecimal stagnantValue,
-                         List<StagnantListing> stagnantInventory) {}
+                         Long stagnantListings, Long stagnantUnits, BigDecimal stagnantValue,
+                         List<StagnantListing> stagnantInventory, String reportType) {}
     public record HistoryItem(LocalDate weekEndDate, LocalDateTime generatedAt,
-                              BigDecimal totalInventoryValue, BigDecimal totalFeesCollected) {}
+                              BigDecimal totalInventoryValue, BigDecimal totalFeesCollected,
+                              String reportType) {}
     public record History(List<HistoryItem> content, int number, int size, long totalElements,
                           int totalPages, LocalDateTime trackingSince) {}
 }

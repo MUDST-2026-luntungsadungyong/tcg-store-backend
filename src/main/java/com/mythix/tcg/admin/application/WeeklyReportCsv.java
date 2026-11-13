@@ -14,6 +14,10 @@ public final class WeeklyReportCsv {
         row(csv, "period", "start_utc", "", report.periodStart(), "", "", "", "", "");
         row(csv, "period", "end_utc_exclusive", "", report.periodEnd(), "", "", "", "", "");
         row(csv, "period", "generated_at_utc", "", report.generatedAt(), "", "", "", "", "");
+        row(csv, "period", "report_type", "", report.reportType(), "", "", "", "", "");
+        if ("RECONSTRUCTED_SALES_ONLY".equals(report.reportType())) {
+            row(csv, "stock", "availability", "", "not_recorded_for_historical_period", "", "", "", "", "");
+        }
         row(csv, "stock", "added", "", "", "", "", report.stockAdded(), "", "");
         row(csv, "stock", "removed_including_adjustments", "", "", "", "", report.stockRemoved(), "", "");
         row(csv, "stock", "fulfilled_units", "", "", "", "", report.unitsSold(), "", "");
