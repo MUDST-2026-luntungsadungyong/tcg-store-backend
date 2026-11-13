@@ -8,6 +8,101 @@ The AKS demo overlay includes `infra/kubernetes/components/observability`. It cr
 
 The normal GitHub Actions AKS demo deployment validates and applies this component after the change is merged into `main`; do not bypass the release workflow with a local `kubectl apply`. The Service remains `ClusterIP`, and the public Ingress only routes `/api`, so the metrics endpoint is not published through public ingress. If NetworkPolicy enforcement is enabled for this cluster later, retain the `kube-system` monitoring rule with the `rsName=ama-metrics` pod selector in `tcg-store-backend-monitoring-ingress` so only the Azure `ama-metrics` collector can reach TCP 8080 through this rule.
 
+## AKS demo: Container Insights and backend logs
+
+`aks-tcg-store-demo` sends container `stdout` and `stderr` to the Log Analytics workspace `law-tcg-store-aks-demo` through Azure Container Insights. Query logs from **Log Analytics workspace → Logs**; use the `ContainerLogV2` table. Do not export application logs to a public endpoint.
+
+The backend writes structured JSON to standard output. The JSON fields supplied by the application are:
+
+| Field | Source |
+| --- | --- |
+| `@timestamp`, `level`, `message`, `exception` | Spring Boot structured console logging |
+| `application` | `spring.application.name` (`tcg-store-backend`) |
+| `environment` | `APP_ENVIRONMENT` (`aks-demo` in the AKS demo overlay) |
+| `requestId` | `X-Request-ID` request header or a server-generated UUID |
+| `route`, `method`, `status`, `durationMs` | Safe access-log fields from `RequestCorrelationFilter` |
+| pod, namespace, container | Azure Container Insights enrichment (`PodName`, `PodNamespace`, `ContainerName`) |
+
+The access event is named `http_access`; it deliberately records no request body, query string, Authorization header, Cookie header, or raw URL. Kubernetes metadata is attached by the collector rather than placed in a metric label or client-supplied log field.
+
+### Queries for first-line investigation
+
+Set the portal time picker to the intended incident window before running a query. These examples use the AKS demo values and only return the backend container.
+
+**Backend errors from the latest hour**
+
+```kusto
+ContainerLogV2
+| where TimeGenerated > ago(1h)
+| where PodNamespace == "tcg-store-aks-demo" and ContainerName == "backend"
+| where LogMessage has '"level":"ERROR"' or LogMessage has "ERROR" or LogSource =~ "stderr"
+| project TimeGenerated, PodName, LogSource, LogMessage
+| order by TimeGenerated desc
+```
+
+**Checkout/order exceptions**
+
+```kusto
+ContainerLogV2
+| where TimeGenerated > ago(24h)
+| where PodNamespace == "tcg-store-aks-demo" and ContainerName == "backend"
+| where LogMessage has_any ("checkout", "order", "Exception", "ERROR")
+| project TimeGenerated, PodName, LogMessage
+| order by TimeGenerated desc
+```
+
+**Trace a request by request ID**
+
+Replace `REQUEST_ID` with a value returned in the HTTP `X-Request-ID` response header.
+
+```kusto
+ContainerLogV2
+| where TimeGenerated > ago(24h)
+| where PodNamespace == "tcg-store-aks-demo" and ContainerName == "backend"
+| where LogMessage has "REQUEST_ID"
+| project TimeGenerated, PodName, LogSource, LogMessage
+| order by TimeGenerated asc
+```
+
+**Logs before and after a pod restart**
+
+```kusto
+let pod = "POD_NAME";
+ContainerLogV2
+| where TimeGenerated between (ago(2h) .. now())
+| where PodNamespace == "tcg-store-aks-demo" and PodName == pod and ContainerName == "backend"
+| project TimeGenerated, LogSource, LogMessage
+| order by TimeGenerated asc
+```
+
+For the restart time, use Container Insights **Containers** or the `KubePodInventory`/Azure Managed Prometheus restart signal. Do not infer a restart only from an absence of application logs.
+
+**Errors grouped by application environment**
+
+```kusto
+ContainerLogV2
+| where TimeGenerated > ago(24h)
+| where ContainerName == "backend"
+| where LogMessage has '"level":"ERROR"' or LogMessage has "ERROR" or LogSource =~ "stderr"
+| extend environment = extract('"environment":"([^"]+)"', 1, LogMessage)
+| summarize errors=count(), pods=dcount(PodName) by environment
+| order by errors desc
+```
+
+If a workspace uses the legacy `ContainerLog` table instead, migrate the query using its equivalent `LogEntry`, `Name`, and pod metadata fields. Do not enable both table schemas solely to make an old query work.
+
+### Log-data safety contract
+
+Never intentionally log passwords, JWT/access tokens, API keys, payment details, email addresses, phone numbers, LINE IDs, or other unnecessary personal data. In particular:
+
+- Keep `JPA_SHOW_SQL=false` in shared AKS overlays.
+- Do not add request body, query string, `Authorization`, `Cookie`, or raw URL to a log statement.
+- Use route templates such as `/api/orders/{id}`, not user-supplied URL values.
+- Do not put `requestId`, user IDs, order IDs, email, or object identifiers in metric labels.
+- Treat a stack trace as potentially sensitive: capture it only for server-side failures and review any new exception logger before deployment.
+
+`StructuredLoggingTests` verifies that access logging is valid JSON and does not emit test sentinel values from query strings, tokens, cookies, bodies, JDBC URLs, or Spring's generated password warning. `RequestCorrelationFilterTests` verifies request-ID acceptance/generation, MDC cleanup, error handling, and async completion behavior.
+
 ### AKS demo alert routing
 
 Deploy `infra/observability/azure/aks-demo-alert-action-group.bicep` and then re-deploy `aks-demo-prometheus-rules.bicep` with its Action Group resource ID. The supported workflow is scripted so that rule routing cannot be forgotten after the Action Group is created:
