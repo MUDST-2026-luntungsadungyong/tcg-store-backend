@@ -1,5 +1,7 @@
 package com.mythix.tcg.collection.api;
 
+import com.mythix.tcg.auth.security.AuthenticatedUser;
+import com.mythix.tcg.collection.api.PublicCollectionDto.CollectionComparisonResponse;
 import com.mythix.tcg.collection.api.PublicCollectionDto.LeaderboardResponse;
 import com.mythix.tcg.collection.api.PublicCollectionDto.PublicCollectionResponse;
 import com.mythix.tcg.collection.application.PublicCollectionService;
@@ -9,7 +11,6 @@ import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
-import com.mythix.tcg.auth.security.AuthenticatedUser;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/collections")
+@RequestMapping({"/api/collections", "/api/public/collections"})
 @RequiredArgsConstructor
 @Validated
 public class PublicCollectionController {
@@ -40,6 +41,14 @@ public class PublicCollectionController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         Long currentUserId = user != null ? user.userId() : null;
         return ResponseEntity.ok(publicCollectionService.getPublicCollection(userId, currentUserId, PageRequest.of(page, size)));
+    }
+
+    @GetMapping("/{userId}/compare")
+    public ResponseEntity<CollectionComparisonResponse> comparePublicCollection(
+            @PathVariable @Positive Long userId,
+            @AuthenticationPrincipal AuthenticatedUser user) {
+        Long currentUserId = user != null ? user.userId() : null;
+        return ResponseEntity.ok(publicCollectionService.compareCollection(userId, currentUserId));
     }
 
     @GetMapping

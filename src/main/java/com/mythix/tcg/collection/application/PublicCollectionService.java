@@ -3,6 +3,8 @@ package com.mythix.tcg.collection.application;
 import com.mythix.tcg.collection.api.CollectionDto.CollectionItemResponse;
 import com.mythix.tcg.collection.api.CollectionDto.PageMetadata;
 import com.mythix.tcg.collection.api.PublicCollectionDto;
+import com.mythix.tcg.collection.api.PublicCollectionDto.CardComparisonEntry;
+import com.mythix.tcg.collection.api.PublicCollectionDto.CollectionComparisonResponse;
 import com.mythix.tcg.collection.api.PublicCollectionDto.LeaderboardEntry;
 import com.mythix.tcg.collection.api.PublicCollectionDto.RareCardHighlight;
 import com.mythix.tcg.collection.domain.CollectionItem;
@@ -22,6 +24,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -74,20 +77,111 @@ public class PublicCollectionService {
             throw new PublicCollectionPrivateException(userId);
         }
 
+        List<CollectionItem> allOwnerItems = collectionRepository.findByUserIdOrderByCreatedAtDesc(userId);
         Page<CollectionItemResponse> page = collectionRepository
                 .findByUserIdOrderByCreatedAtDesc(userId, pageable)
                 .map(collectionService::mapToResponse);
         RareCollectionAggregate aggregate = collectionRepository.findRareCollectionAggregate(userId).orElse(null);
 
+        CollectionComparisonResponse comparison = null;
+        List<CollectionItemResponse> items = page.getContent();
+        if (currentUserId != null) {
+            comparison = buildComparison(owner, allOwnerItems, currentUserId);
+            Map<String, Integer> ownedQuantities = comparison.getOwnedQuantities();
+            items = items.stream().map(item -> {
+                String cardId = item.getCardId();
+                int visitorQty = cardId != null ? ownedQuantities.getOrDefault(cardId, 0) : 0;
+                item.setVisitorOwnedQuantity(visitorQty);
+                return item;
+            }).toList();
+        }
+
         return PublicCollectionDto.PublicCollectionResponse.builder()
-                .owner(toPublicCollector(owner, aggregate))
-                .items(page.getContent())
+                .owner(toPublicCollector(owner, aggregate, allOwnerItems))
+                .items(items)
                 .page(PageMetadata.builder()
                         .page(page.getNumber())
                         .size(page.getSize())
                         .totalElements(page.getTotalElements())
                         .totalPages(page.getTotalPages())
                         .build())
+                .comparison(comparison)
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public CollectionComparisonResponse compareCollection(Long targetUserId, Long visitorUserId) {
+        User owner = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new PublicCollectionUserNotFoundException(targetUserId));
+
+        if ("PRIVATE".equalsIgnoreCase(owner.getCollectionPrivacy())
+                && (visitorUserId == null || !visitorUserId.equals(targetUserId))) {
+            throw new PublicCollectionPrivateException(targetUserId);
+        }
+
+        List<CollectionItem> targetItems = collectionRepository.findByUserIdOrderByCreatedAtDesc(targetUserId);
+        return buildComparison(owner, targetItems, visitorUserId);
+    }
+
+    private CollectionComparisonResponse buildComparison(
+            User targetOwner,
+            List<CollectionItem> targetItems,
+            Long visitorUserId) {
+        Map<String, Integer> visitorOwnedByCardId = new LinkedHashMap<>();
+        if (visitorUserId != null) {
+            List<CollectionItem> visitorItems = collectionRepository.findByUserIdOrderByCreatedAtDesc(visitorUserId);
+            for (CollectionItem item : visitorItems) {
+                if (item.getCard() != null && item.getCard().getId() != null) {
+                    String cardId = item.getCard().getId();
+                    int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+                    visitorOwnedByCardId.merge(cardId, qty, Integer::sum);
+                }
+            }
+        }
+
+        Map<String, Integer> targetQtyByCardId = new LinkedHashMap<>();
+        Map<String, String> cardNameByCardId = new LinkedHashMap<>();
+        for (CollectionItem item : targetItems) {
+            if (item.getCard() != null && item.getCard().getId() != null) {
+                String cardId = item.getCard().getId();
+                int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+                targetQtyByCardId.merge(cardId, qty, Integer::sum);
+                cardNameByCardId.putIfAbsent(cardId, item.getCard().getName() != null ? item.getCard().getName() : cardId);
+            }
+        }
+
+        List<CardComparisonEntry> entries = new ArrayList<>(targetQtyByCardId.size());
+        Map<String, Integer> ownedQuantitiesForTarget = new LinkedHashMap<>();
+        int sharedDistinctCards = 0;
+        for (Map.Entry<String, Integer> targetEntry : targetQtyByCardId.entrySet()) {
+            String cardId = targetEntry.getKey();
+            int targetQuantity = targetEntry.getValue();
+            int visitorQuantity = visitorOwnedByCardId.getOrDefault(cardId, 0);
+            boolean owned = visitorQuantity > 0;
+            if (owned) {
+                sharedDistinctCards++;
+            }
+            ownedQuantitiesForTarget.put(cardId, visitorQuantity);
+            entries.add(CardComparisonEntry.builder()
+                    .cardId(cardId)
+                    .cardName(cardNameByCardId.getOrDefault(cardId, cardId))
+                    .targetQuantity(targetQuantity)
+                    .visitorQuantity(visitorQuantity)
+                    .owned(owned)
+                    .build());
+        }
+
+        int totalTargetDistinctCards = targetQtyByCardId.size();
+        int missingDistinctCards = Math.max(0, totalTargetDistinctCards - sharedDistinctCards);
+
+        return CollectionComparisonResponse.builder()
+                .targetUserId(String.valueOf(targetOwner.getId()))
+                .visitorUserId(visitorUserId != null ? String.valueOf(visitorUserId) : null)
+                .totalTargetDistinctCards(totalTargetDistinctCards)
+                .sharedDistinctCards(sharedDistinctCards)
+                .missingDistinctCards(missingDistinctCards)
+                .ownedQuantities(ownedQuantitiesForTarget)
+                .items(entries)
                 .build();
     }
 
@@ -124,7 +218,38 @@ public class PublicCollectionService {
                 .build();
     }
 
-    private PublicCollectionDto.PublicCollector toPublicCollector(User user, RareCollectionAggregate aggregate) {
+    private PublicCollectionDto.PublicCollector toPublicCollector(
+            User user,
+            RareCollectionAggregate aggregate,
+            List<CollectionItem> allOwnerItems) {
+        long rareCardCount = aggregate == null ? 0 : nonNullCount(aggregate.getRareCardCount());
+        long distinctRareCardCount = aggregate == null ? 0 : nonNullCount(aggregate.getDistinctRareCardCount());
+        long totalCardsCount = 0;
+        long secretRareCount = 0;
+        for (CollectionItem item : allOwnerItems) {
+            int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+            totalCardsCount += qty;
+            String rarity = item.getCard() != null && item.getCard().getRarity() != null
+                    ? item.getCard().getRarity().toLowerCase(Locale.ROOT)
+                    : "";
+            if (rarity.contains("secret") || rarity.equals("sar") || rarity.equals("sr") || rarity.contains("alt")) {
+                secretRareCount += qty;
+            }
+        }
+
+        List<String> badges = new ArrayList<>();
+        if ("APPROVED".equalsIgnoreCase(user.getSellerStatus()) || "SELLER".equalsIgnoreCase(user.getRole())) {
+            badges.add("Verified Seller");
+        }
+        if (secretRareCount > 0) {
+            badges.add("Secret Rare Hunter");
+        }
+        if (rareCardCount >= 10) {
+            badges.add("Master Collector");
+        } else if (totalCardsCount >= 5) {
+            badges.add("Active Collector");
+        }
+
         return PublicCollectionDto.PublicCollector.builder()
                 .userId(String.valueOf(user.getId()))
                 .displayName(publicDisplayName(user))
@@ -132,8 +257,11 @@ public class PublicCollectionService {
                 .role(user.getRole())
                 .sellerStatus(user.getSellerStatus())
                 .collectionPrivacy(user.getCollectionPrivacy() != null ? user.getCollectionPrivacy() : "PUBLIC")
-                .rareCardCount(aggregate == null ? 0 : nonNullCount(aggregate.getRareCardCount()))
-                .distinctRareCardCount(aggregate == null ? 0 : nonNullCount(aggregate.getDistinctRareCardCount()))
+                .totalCardsCount(totalCardsCount)
+                .rareCardCount(rareCardCount)
+                .distinctRareCardCount(distinctRareCardCount)
+                .secretRareCount(secretRareCount)
+                .badges(badges)
                 .build();
     }
 

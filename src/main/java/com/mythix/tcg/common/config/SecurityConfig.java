@@ -61,7 +61,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                 .requestMatchers("/api/health", "/actuator/health", "/actuator/health/**", "/api/cards/**", "/api/products/**", "/api/stores/**", "/api/auth/register", "/api/auth/login", "/api/auth/forgot-password", "/api/auth/reset-password", "/error").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/collections/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/collections/**", "/api/public/collections/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/vouchers", "/api/vouchers/live").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/vouchers/validate").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/auctions", "/api/auctions/**").permitAll()

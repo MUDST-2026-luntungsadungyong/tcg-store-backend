@@ -78,6 +78,7 @@ public class CollectionDto {
         private String condition;
         private String language;
         private Integer quantity;
+        private Integer visitorOwnedQuantity;
         private String createdAt;
         private String acquiredAt;
         private CardListingDto listing;

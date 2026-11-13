@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/collection")
+@RequestMapping({"/api/collection", "/api/user/collection"})
 @RequiredArgsConstructor
 @Validated
 public class CollectionController {
@@ -74,7 +74,7 @@ public class CollectionController {
         return ResponseEntity.ok(CollectionPrivacyResponse.builder().privacy(privacy).build());
     }
 
-    @PutMapping("/privacy")
+    @RequestMapping(value = "/privacy", method = {RequestMethod.PUT, RequestMethod.PATCH})
     public ResponseEntity<CollectionPrivacyResponse> updateCollectionPrivacy(
             @AuthenticationPrincipal AuthenticatedUser user,
             @Valid @RequestBody CollectionPrivacyRequest request) {
