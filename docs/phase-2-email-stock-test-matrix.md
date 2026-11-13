@@ -19,10 +19,12 @@ The full Cypress source tree includes the new `20_seller_stock_notification_cta.
 
 | Notification | Destination asserted | Guarded page evidence |
 | --- | --- | --- |
-| `SELLER_STOCK_CRITICAL` | `/workspace/stock-forecast?search=Charizard` | `Stockout Forecast` heading, retained search query, and successful seller forecast API response |
-| `SELLER_OUT_OF_STOCK` | `/workspace/listings?search=Charizard` | `Listing Management` heading, retained search query, and successful seller listings API response |
+| `SELLER_STOCK_CRITICAL` | `/workspace/stock-forecast?search=Charizard` | `Stockout Forecast` heading, retained search query, alert copy, and rendered urgency summary |
+| `SELLER_OUT_OF_STOCK` | `/workspace/listings?search=Charizard` | `Listing Management` heading and retained search query |
 
-Focused run: `npx cypress run --spec cypress/e2e/20_seller_stock_notification_cta.cy.ts` — 2 passed, 0 failed, 0 pending, 0 skipped. The full Cypress run also passed both cases.
+The CI business-test server enables `VITE_ENABLE_MOCK_API=true`, so these pages resolve listing and forecast data from the in-browser mock database without issuing seller HTTP requests. This E2E spec therefore verifies the user-visible CTA, guarded navigation, query propagation, and rendered destination state rather than the API transport boundary. The listing and forecast adapters have separate unit coverage.
+
+Focused mock-mode run: `npx cypress run --spec cypress/e2e/20_seller_stock_notification_cta.cy.ts` — 2 passed, 0 failed, 0 pending, 0 skipped. The earlier full local Cypress run also passed both cases.
 
 The entire full Cypress run was attempted with `npm run test:e2e:full`: 45 specs, 206 cases, 178 passed, 25 failed, 3 pending, 0 skipped. Failures were limited to existing specs not changed in this phase:
 
