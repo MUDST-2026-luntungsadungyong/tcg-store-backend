@@ -103,6 +103,36 @@ Never intentionally log passwords, JWT/access tokens, API keys, payment details,
 
 `StructuredLoggingTests` verifies that access logging is valid JSON and does not emit test sentinel values from query strings, tokens, cookies, bodies, JDBC URLs, or Spring's generated password warning. `RequestCorrelationFilterTests` verifies request-ID acceptance/generation, MDC cleanup, error handling, and async completion behavior.
 
+## Phase 7 validation procedure
+
+Use only read-only endpoints for routine metric checks. The AKS demo public
+gateway must allow `/api/health` but reject `/actuator/prometheus` with `404`.
+
+```powershell
+curl.exe -sS -i https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/api/health
+curl.exe -sS -i https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/actuator/prometheus
+```
+
+For a bounded request/latency signal, issue at most 30 sequential calls to
+`/api/cards?size=1`, then wait at least 30 seconds for Azure Managed Prometheus
+to scrape the application. Inspect Grafana's **Request rate** and **Read
+latency** panels with environment `aks-demo`.
+
+To test a backend 5xx without a write, use a deliberately invalid sort property:
+
+```powershell
+curl.exe -sS -i "https://tcgstore-demo-2026-11.malaysiawest.cloudapp.azure.com/api/products?size=1&sortBy=__phase7_invalid_sort__"
+```
+
+Record the returned `X-Request-Id`, then use the request-ID KQL query above.
+Do not use this endpoint as a production diagnostic outside an approved test
+window.
+
+Restarting a pod and alert delivery are operator actions. Run them only from an
+authenticated Azure Cloud Shell or approved operator machine, wait for the
+deployment rollout to finish, and do not fire notification alerts until a
+reviewed Azure Monitor Action Group is attached to the Prometheus rule groups.
+
 ## Platform prerequisites
 
 - Install a Prometheus-compatible server and Grafana in a private monitoring environment. Keep both behind platform access control; this repository defines no public dashboard ingress.
