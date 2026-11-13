@@ -16,6 +16,15 @@ jobs:
       contents: write
     steps:
       - name: Enable Auto-Merge
-        run: gh pr merge ${{ github.event.pull_request.number }} --repo MUDST-2026-luntungsadungyong/tcg-store-backend --auto --merge
+        run: |
+          set +e
+          output="$(gh pr merge ${{ github.event.pull_request.number }} --repo MUDST-2026-luntungsadungyong/tcg-store-backend --auto --merge 2>&1)"
+          status=$?
+          set -e
+
+          printf '%s\n' "$output"
+          if [ "$status" -ne 0 ] && ! grep -Eq 'Auto merge is already enabled|already in the merge queue' <<< "$output"; then
+            exit "$status"
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
