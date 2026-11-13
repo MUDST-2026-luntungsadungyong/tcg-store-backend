@@ -74,7 +74,7 @@ class AdminWeeklyReportControllerIntegrationTests {
         var zero = java.math.BigDecimal.ZERO;
         var time = date.atTime(23, 59);
         when(reports.get(date)).thenReturn(new WeeklyReportDto.Report(date, time.minusWeeks(1), time, time.plusMinutes(1),
-            0, 0, 0, 0, zero, zero, zero, zero, zero, List.of(), List.of(), 0, 0, zero, List.of()));
+            0L, 0L, 0, 0L, zero, zero, zero, zero, zero, List.of(), List.of(), 0L, 0L, zero, List.of(), "TRACKED"));
         mvc.perform(get("/api/admin/reports/weekly-summary").header("Authorization", bearer("ADMIN")).param("weekEnd", date.toString()))
             .andExpect(status().isOk()).andExpect(jsonPath("$.weekEndDate").value(date.toString()));
         mvc.perform(get("/api/admin/reports/weekly-summary/export").header("Authorization", bearer("ADMIN")).param("weekEnd", date.toString()))

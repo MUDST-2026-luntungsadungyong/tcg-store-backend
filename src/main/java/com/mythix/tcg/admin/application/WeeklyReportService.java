@@ -20,6 +20,8 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class WeeklyReportService {
+    private static final String TRACKED = "TRACKED";
+    private static final String RECONSTRUCTED_SALES_ONLY = "RECONSTRUCTED_SALES_ONLY";
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
 
@@ -41,10 +43,10 @@ public class WeeklyReportService {
         }
         long count = jdbc.queryForObject("SELECT COUNT(*) FROM admin_weekly_reports", Long.class);
         var items = jdbc.query("""
-            SELECT week_end_date, generated_at, total_inventory_value, total_fees_collected
+            SELECT week_end_date, generated_at, total_inventory_value, total_fees_collected, report_type
             FROM admin_weekly_reports ORDER BY week_end_date DESC LIMIT ? OFFSET ?
             """, (r, n) -> new HistoryItem(r.getDate(1).toLocalDate(), r.getTimestamp(2).toLocalDateTime(),
-                r.getBigDecimal(3), r.getBigDecimal(4)), size, page * size);
+                r.getBigDecimal(3), r.getBigDecimal(4), r.getString(5)), size, page * size);
         return new History(items, page, size, count, (int) ((count + size - 1) / size), trackingSince());
     }
 
@@ -70,6 +72,7 @@ public class WeeklyReportService {
     public int generateDue(LocalDateTime utcNow) {
         jdbc.queryForObject("SELECT id FROM admin_report_state WHERE id = 1 FOR UPDATE", Integer.class);
         LocalDateTime since = trackingSince();
+        int reconstructed = generateReconstructedSalesReports(since, utcNow);
         LocalDateTime end = latestCutoff(since).plusWeeks(1);
         if (end.minusWeeks(1).isBefore(since)) end = end.plusWeeks(1);
         LocalDateTime latest = latestCutoff(utcNow.minusMinutes(1)); // allow boundary transactions to finish
@@ -91,14 +94,73 @@ public class WeeklyReportService {
             jdbc.update("""
                 INSERT INTO admin_weekly_reports(week_start_date, week_end_date, period_start, period_end,
                     total_inventory_value, total_fees_collected, top_performing_cards,
-                    stagnant_inventory_summary, payload, generated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    stagnant_inventory_summary, payload, generated_at, report_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, report.periodStart().toLocalDate(), report.weekEndDate(), report.periodStart(), end,
                 report.totalInventoryValue(), report.totalFeesCollected(), json.writeValueAsString(report.topByRevenue()),
-                json.writeValueAsString(report.stagnantInventory()), json.writeValueAsString(report), utcNow);
+                json.writeValueAsString(report.stagnantInventory()), json.writeValueAsString(report), utcNow, TRACKED);
+            generated++;
+        }
+        return reconstructed + generated;
+    }
+
+    /** Rebuilds only historical sales facts. Old inventory snapshots were never recorded. */
+    private int generateReconstructedSalesReports(LocalDateTime since, LocalDateTime generatedAt) {
+        LocalDateTime firstFulfilled = jdbc.queryForObject(
+            "SELECT MIN(occurred_at) FROM admin_order_events WHERE phase = 'FULFILLED'",
+            (r, n) -> r.getTimestamp(1) == null ? null : r.getTimestamp(1).toLocalDateTime());
+        if (firstFulfilled == null) return 0;
+
+        LocalDateTime end = latestCutoff(firstFulfilled).plusWeeks(1);
+        LocalDateTime lastHistoricalEnd = latestCutoff(since);
+        int generated = 0;
+        for (; !end.isAfter(lastHistoricalEnd) && generated < 52; end = end.plusWeeks(1)) {
+            if (jdbc.queryForObject("SELECT COUNT(*) FROM admin_weekly_reports WHERE week_end_date = ?",
+                Long.class, end.toLocalDate()) > 0) continue;
+            Report report = calculateHistoricalSales(end.minusWeeks(1), end, generatedAt);
+            jdbc.update("""
+                INSERT INTO admin_weekly_reports(week_start_date, week_end_date, period_start, period_end,
+                    total_inventory_value, total_fees_collected, top_performing_cards,
+                    stagnant_inventory_summary, payload, generated_at, report_type)
+                VALUES (?, ?, ?, ?, NULL, ?, ?, '[]', ?, ?, ?)
+                """, report.periodStart().toLocalDate(), report.weekEndDate(), report.periodStart(), end,
+                report.totalFeesCollected(), json.writeValueAsString(report.topByRevenue()),
+                json.writeValueAsString(report), generatedAt, RECONSTRUCTED_SALES_ONLY);
             generated++;
         }
         return generated;
+    }
+
+    private Report calculateHistoricalSales(LocalDateTime start, LocalDateTime end, LocalDateTime generatedAt) {
+        Map<String, CardPerformance> cards = new HashMap<>();
+        BigDecimal fees = BigDecimal.ZERO;
+        var events = jdbc.queryForList("""
+            SELECT platform_fee, items_json FROM admin_order_events
+            WHERE phase = 'FULFILLED' AND occurred_at >= ? AND occurred_at < ? ORDER BY occurred_at, id
+            """, start, end);
+        for (var event : events) {
+            fees = fees.add((BigDecimal) event.get("platform_fee"));
+            List<SaleItem> items = json.readValue((String) event.get("items_json"), new TypeReference<List<SaleItem>>() {});
+            for (SaleItem item : items) {
+                BigDecimal quantity = BigDecimal.valueOf(item.quantity());
+                BigDecimal revenue = item.unitPrice().multiply(quantity);
+                BigDecimal profit = item.unitPrice().subtract(item.unitCost()).multiply(quantity);
+                CardPerformance previous = cards.getOrDefault(item.cardId(),
+                    new CardPerformance(item.cardId(), item.name(), 0, BigDecimal.ZERO, BigDecimal.ZERO));
+                cards.put(item.cardId(), new CardPerformance(item.cardId(), item.name(),
+                    previous.unitsSold() + item.quantity(), previous.revenue().add(revenue),
+                    previous.grossProfit().add(profit)));
+            }
+        }
+        var byRevenue = cards.values().stream().sorted(Comparator.comparing(CardPerformance::revenue).reversed()
+            .thenComparing(CardPerformance::cardId)).limit(10).toList();
+        var byProfit = cards.values().stream().sorted(Comparator.comparing(CardPerformance::grossProfit).reversed()
+            .thenComparing(CardPerformance::cardId)).limit(10).toList();
+        return new Report(end.toLocalDate(), start, end, generatedAt, null, null,
+            cards.values().stream().mapToLong(CardPerformance::unitsSold).sum(), null, null, null,
+            cards.values().stream().map(CardPerformance::revenue).reduce(BigDecimal.ZERO, BigDecimal::add),
+            cards.values().stream().map(CardPerformance::grossProfit).reduce(BigDecimal.ZERO, BigDecimal::add),
+            fees, byRevenue, byProfit, null, null, null, List.of(), RECONSTRUCTED_SALES_ONLY);
     }
 
     private Report calculate(LocalDateTime start, LocalDateTime end, LocalDateTime generatedAt) {
@@ -156,7 +218,7 @@ public class WeeklyReportService {
             stocks.stream().map(s -> s.cost().multiply(BigDecimal.valueOf(s.units()))).reduce(BigDecimal.ZERO, BigDecimal::add),
             cards.values().stream().map(CardPerformance::revenue).reduce(BigDecimal.ZERO, BigDecimal::add),
             cards.values().stream().map(CardPerformance::grossProfit).reduce(BigDecimal.ZERO, BigDecimal::add), fees,
-            byRevenue, byProfit, stagnant.size(), stagnant.stream().mapToLong(StagnantListing::onHand).sum(),
-            stagnant.stream().map(StagnantListing::inventoryValue).reduce(BigDecimal.ZERO, BigDecimal::add), stagnant);
+            byRevenue, byProfit, (long) stagnant.size(), stagnant.stream().mapToLong(StagnantListing::onHand).sum(),
+            stagnant.stream().map(StagnantListing::inventoryValue).reduce(BigDecimal.ZERO, BigDecimal::add), stagnant, TRACKED);
     }
 }

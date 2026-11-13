@@ -30,6 +30,8 @@ class WeeklyReportServiceTests {
         String ddl = new ClassPathResource("db/migration/V31__admin_weekly_reports.sql").getContentAsString(StandardCharsets.UTF_8);
         var tables = Pattern.compile("(?s)CREATE TABLE \\w+.*?;").matcher(ddl);
         while (tables.find()) jdbc.execute(tables.group());
+        jdbc.execute("ALTER TABLE admin_weekly_reports ADD COLUMN report_type VARCHAR(32) NOT NULL DEFAULT 'TRACKED'");
+        jdbc.execute("ALTER TABLE admin_weekly_reports ALTER COLUMN total_inventory_value DROP NOT NULL");
         jdbc.update("INSERT INTO admin_report_state VALUES (1, ?)", start);
         service = new WeeklyReportService(jdbc, JsonMapper.builder().build());
     }
