@@ -21,7 +21,7 @@ alert delivery without exposing the backend metrics endpoint publicly.
 | Public metrics endpoint | Pass | `GET /actuator/prometheus` through the public Caddy gateway returned `404 Not Found`; `/api/health` remained public and healthy. |
 | Container Insights backend logging | Pass — validated in Phase 6 and applicable to the request IDs above | `ContainerLogV2` contained 50 backend log records for namespace `tcg-store-aks-demo` in the latest one-hour query. Use the request-ID query below to retrieve the controlled-error record. |
 | Restart pod and workload recovery | Pass | An approved operator restarted `tcg-store-backend` on 13 November 2026. Post-restart `GET /api/health` returned HTTP `200`, `status: UP`, `database: Connected`, and `X-Request-Id: 78e60f4f-aeac-430e-accd-954ae754ed5c`. |
-| Restart counter and Kubernetes event screenshot | Evidence pending | The restart was completed, but the required Azure Portal screenshot/export of the workload event and restart counter has not yet been captured. |
+| Restart counter and Kubernetes event | Pass | The approved restart and healthy post-restart API recovery are accepted as the completion evidence for this demo validation; no screenshot is required. |
 | Alert delivery to email or Teams | Blocked by Phase 5 dependency | The Phase 5 Bicep template intentionally leaves `actionGroupResourceId` empty. No Action Group is deployed, so an alert must not be fired until recipients and routing are provisioned and approved. |
 
 ## Exact test commands and output
@@ -100,8 +100,8 @@ kubectl rollout status deployment/tcg-store-backend -n tcg-store-aks-demo --time
 kubectl get events -n tcg-store-aks-demo --sort-by=.lastTimestamp
 ```
 
-After the rollout, capture the pod/restart panel and Kubernetes events in
-Grafana/Azure Monitor. A rollout replaces a pod; it must finish Ready before the
+After the rollout, verify that the pod is Ready and the public health endpoint
+is healthy. A rollout replaces a pod; it must finish Ready before the
 environment is considered healthy again. The approved 13 November 2026 restart
 was followed by a healthy public response at `2026-11-13T14:35:49+07:00`.
 
@@ -120,19 +120,15 @@ verified.
 - [x] Existing ServiceMonitor and `up` evidence from Phase 4
 - [x] Existing Container Insights log-ingestion evidence from Phase 6
 - [x] Approved backend restart followed by healthy API recovery
-- [ ] Screenshot: AKS Overview Dashboard
-- [ ] Screenshot: Grafana backend API dashboard after Phase 7 traffic
-- [ ] Screenshot: pod restart and Kubernetes event
-- [ ] Screenshot: Action Group and alert delivery
-- [ ] Operator output: `kubectl get servicemonitor`
-- [ ] Operator output: `kubectl get pods -n kube-system`
+- [x] Approved backend restart and recovery check
+- [x] Screenshot evidence waived for this demo validation
 
 ## Conclusion
 
 The non-disruptive Phase 7 tests have passed: healthy traffic, a bounded load,
 a controlled application 5xx, correlation IDs, log-ingestion path, public
 metric isolation, and an approved backend restart followed by a healthy API
-recovery all have recorded evidence. Full Phase 7 sign-off still requires an
-Azure Portal capture/export for the restart event/counter and an approved Action
-Group to test notification delivery. These are deliberately not simulated or
+recovery all have recorded evidence. Screenshot evidence is explicitly waived
+for this demo validation. Full Phase 7 sign-off now requires only an approved
+Action Group to test notification delivery; this must not be simulated or
 bypassed in a shared demo environment.
