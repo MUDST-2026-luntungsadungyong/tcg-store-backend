@@ -8,6 +8,18 @@ The AKS demo overlay includes `infra/kubernetes/components/observability`. It cr
 
 The normal GitHub Actions AKS demo deployment validates and applies this component after the change is merged into `main`; do not bypass the release workflow with a local `kubectl apply`. The Service remains `ClusterIP`, and the public Ingress only routes `/api`, so the metrics endpoint is not published through public ingress. If NetworkPolicy enforcement is enabled for this cluster later, retain the `kube-system` monitoring rule with the `rsName=ama-metrics` pod selector in `tcg-store-backend-monitoring-ingress` so only the Azure `ama-metrics` collector can reach TCP 8080 through this rule.
 
+### AKS demo alert routing
+
+Deploy `infra/observability/azure/aks-demo-alert-action-group.bicep` and then re-deploy `aks-demo-prometheus-rules.bicep` with its Action Group resource ID. The supported workflow is scripted so that rule routing cannot be forgotten after the Action Group is created:
+
+```powershell
+pwsh -NoProfile -File scripts/reliability/deploy-aks-demo-alert-routing.ps1 `
+  -AlertEmailAddress 'owner-1@example.edu','owner-2@example.edu','owner-3@example.edu' `
+  -SendTestNotification
+```
+
+The email addresses are supplied only at deployment time and are written to a temporary deployment-parameters file that the script removes afterward. Azure still stores the configured receiver details and deployment history according to subscription policy. Test notifications use Azure Monitor's `metricstaticthreshold` sample; a successful command proves that Azure accepted the request, while each receiver must verify the email delivery. Do not use a production customer address without the service owner's approval.
+
 ## Platform prerequisites
 
 - Install a Prometheus-compatible server and Grafana in a private monitoring environment. Keep both behind platform access control; this repository defines no public dashboard ingress.
