@@ -9,9 +9,35 @@ import java.util.Locale;
 
 /** Builds a compact, email-client-safe Mythix HTML alternative from the outbox's plain-text content. */
 @Component
-public class BrandedEmailRenderer {
+public class BrandedEmailRenderer implements EmailContentRenderer {
     private static final String FONT = "'IBM Plex Sans Thai', Arial, Helvetica, sans-serif";
 
+    private enum Template {
+        STOCK_AVAILABLE("Mythix: Stock available", "Stock update", "#4CC987", "View card"),
+        SELLER_STOCK_CRITICAL("Mythix: Critical stock alert", "Inventory alert", "#F2B84B", "View stock forecast"),
+        SELLER_OUT_OF_STOCK("Mythix: Listing out of stock", "Inventory alert", "#FFA5A5", "Manage listing");
+
+        private final String subject;
+        private final String category;
+        private final String accent;
+        private final String actionLabel;
+
+        Template(String subject, String category, String accent, String actionLabel) {
+            this.subject = subject;
+            this.category = category;
+            this.accent = accent;
+            this.actionLabel = actionLabel;
+        }
+
+        private static Template forSubject(String subject) {
+            for (Template template : values()) {
+                if (template.subject.equals(subject)) return template;
+            }
+            return null;
+        }
+    }
+
+    @Override
     public String render(String subject, String plainText) {
         String safeSubject = escape(subject == null ? "Mythix update" : subject);
         List<String> lines = (plainText == null ? "" : plainText).lines().toList();
@@ -53,8 +79,9 @@ public class BrandedEmailRenderer {
         flush(paragraph, paragraphs);
 
         String intro = paragraphs.isEmpty() ? "You have a new update from Mythix TCG." : paragraphs.get(0);
-        String category = category(subject);
-        String accent = accent(subject);
+        Template template = Template.forSubject(subject);
+        String category = template == null ? category(subject) : template.category;
+        String accent = template == null ? accent(subject) : template.accent;
         StringBuilder html = new StringBuilder(2048);
         html.append("<!doctype html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
             .append("<title>").append(safeSubject).append("</title></head>")
@@ -84,7 +111,7 @@ public class BrandedEmailRenderer {
         if (ctaUrl != null) {
             html.append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin-top:26px;\"><tr><td bgcolor=\"#72A8FF\" style=\"border-radius:7px;\">")
                 .append("<a href=\"").append(escapeAttribute(ctaUrl)).append("\" style=\"display:inline-block;padding:13px 20px;color:#0B141F;text-decoration:none;font-size:14px;line-height:20px;font-weight:700;\">")
-                .append(escape(actionLabel(subject) == null ? (ctaLabel == null ? "View details" : ctaLabel) : actionLabel(subject))).append("</a></td></tr></table>");
+                .append(escape(template == null ? (ctaLabel == null ? "View details" : ctaLabel) : template.actionLabel)).append("</a></td></tr></table>");
         }
         html.append("</td></tr><tr><td style=\"padding:20px 4px 0;color:#9CA3AF;font-size:12px;line-height:19px;\">Mythix TCG<br>You're receiving this message because of activity on your Mythix account.</td></tr>")
             .append("</table></td></tr></table></body></html>");
@@ -130,8 +157,6 @@ public class BrandedEmailRenderer {
 
     private static String category(String subject) {
         String value = subject == null ? "" : subject.toLowerCase(Locale.ROOT);
-        if (value.contains("stock available")) return "Stock update";
-        if (value.contains("critical stock") || value.contains("out of stock") || value.contains("stock alert")) return "Inventory alert";
         if (value.contains("password") || value.contains("security")) return "Security";
         if (value.contains("order")) return "Order update";
         if (value.contains("seller application")) return "Seller application";
@@ -141,20 +166,9 @@ public class BrandedEmailRenderer {
 
     private static String accent(String subject) {
         String value = subject == null ? "" : subject.toLowerCase(Locale.ROOT);
-        if (value.contains("stock available")) return "#4CC987";
-        if (value.contains("critical stock") || value.contains("stock alert")) return "#F2B84B";
-        if (value.contains("out of stock")) return "#FFA5A5";
         if (value.contains("approved") || value.contains("won") || value.contains("sent")) return "#4CC987";
         if (value.contains("cancelled") || value.contains("rejected") || value.contains("warning") || value.contains("defaulted")) return "#FFA5A5";
         return "#72A8FF";
-    }
-
-    private static String actionLabel(String subject) {
-        String value = subject == null ? "" : subject.toLowerCase(Locale.ROOT);
-        if (value.contains("stock available")) return "View card";
-        if (value.contains("critical stock") || value.contains("stock alert")) return "View stock forecast";
-        if (value.contains("out of stock")) return "Manage listing";
-        return null;
     }
 
     private record Detail(String label, String value) { }
