@@ -103,6 +103,18 @@ Never intentionally log passwords, JWT/access tokens, API keys, payment details,
 
 `StructuredLoggingTests` verifies that access logging is valid JSON and does not emit test sentinel values from query strings, tokens, cookies, bodies, JDBC URLs, or Spring's generated password warning. `RequestCorrelationFilterTests` verifies request-ID acceptance/generation, MDC cleanup, error handling, and async completion behavior.
 
+### AKS demo alert routing
+
+Deploy `infra/observability/azure/aks-demo-alert-action-group.bicep` and then re-deploy `aks-demo-prometheus-rules.bicep` with its Action Group resource ID. The supported workflow is scripted so that rule routing cannot be forgotten after the Action Group is created:
+
+```powershell
+pwsh -NoProfile -File scripts/reliability/deploy-aks-demo-alert-routing.ps1 `
+  -AlertEmailAddress 'owner-1@example.edu','owner-2@example.edu','owner-3@example.edu' `
+  -SendTestNotification
+```
+
+The email addresses are supplied only at deployment time and are written to a temporary deployment-parameters file that the script removes afterward. Azure still stores the configured receiver details and deployment history according to subscription policy. Test notifications use Azure Monitor's `metricstaticthreshold` sample; a successful command proves that Azure accepted the request, while each receiver must verify the email delivery. Do not use a production customer address without the service owner's approval.
+
 ## Platform prerequisites
 
 - Install a Prometheus-compatible server and Grafana in a private monitoring environment. Keep both behind platform access control; this repository defines no public dashboard ingress.

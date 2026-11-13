@@ -33,12 +33,12 @@ All paths require a valid Bearer token with ADMIN role. Shared security returns 
 | --- | --- | --- |
 | GET `/api/admin/reports/weekly-summary/history` | `page=0`, `size=20` (1–100; page 0–100000) | `{content:[{weekEndDate,generatedAt,totalInventoryValue,totalFeesCollected,reportType}],number,size,totalElements,totalPages,trackingSince}`; newest first. A null inventory value means historical stock was not recorded. |
 | GET `/api/admin/reports/weekly-summary` | optional `weekEnd=YYYY-MM-DD`, must be Sunday | Saved report, latest if omitted. Includes `reportType`, UTC `periodStart`, `periodEnd`, `generatedAt`, financial totals, and rankings. Tracked reports include all stock metrics; reconstructed sales-only reports return null for unavailable stock fields. |
-| GET `/api/admin/reports/weekly-summary/export` | same `weekEnd` | Authenticated UTF-8 CSV with BOM and attachment filename. It includes report type and leaves unavailable historical stock cells blank. |
+| GET `/api/admin/reports/weekly-summary/export` | same `weekEnd` | Authenticated UTF-8 CSV with BOM and attachment filename. It includes `availability` and `availability_note` columns. Historical stock metrics use `NOT_AVAILABLE` (not `0`) and explain that stock was not recorded; recorded zero-sales values remain numeric zero. |
 
 - 400 `INVALID_REPORT_REQUEST`: invalid Sunday/date or pagination (malformed parameter types also receive HTTP 400).
 - 404 `WEEKLY_REPORT_NOT_FOUND`: the selected/latest report has not been generated. A missing report is not a zero-sales report.
 - 5xx: database/API failure; frontend shows a retry state and does not substitute mock data.
-- CSV quotes every cell, doubles embedded quotes and neutralizes user-controlled spreadsheet formulas. Numeric negative profits remain numeric.
+- CSV quotes every cell, doubles embedded quotes and neutralizes user-controlled spreadsheet formulas. Numeric negative profits remain numeric. The final `availability` and `availability_note` columns distinguish recorded values from missing historical data; unavailable stock numeric fields contain `NOT_AVAILABLE` so spreadsheet readers do not mistake them for zero.
 - `CardPerformance`: `{cardId,name,unitsSold,revenue,grossProfit}`.
 - `StagnantListing`: `{productId,sellerId,cardId,name,onHand,inventoryValue,listedAt}`. Listing rows are paginated in the UI at 20 per page; export contains all rows in the saved report.
 

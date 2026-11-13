@@ -209,6 +209,38 @@ class NotificationEmailDeliveryWorkerTest {
         assertThat(outOfStock).contains("Inventory alert", "#FFA5A5", "Manage listing", "href=\"https://mythix.test/workspace/listings?search=Card\"");
     }
 
+    @Test
+    void stockTemplatesRequireAnExactKnownSubject() {
+        String html = new BrandedEmailRenderer().render("Mythix: Your stock available reminder", "Card update\n\nView details: https://mythix.test/cards/card-1");
+
+        assertThat(html).contains("Mythix update", "#72A8FF", "View details")
+            .doesNotContain("Stock update", "#4CC987", "View card");
+    }
+
+    @Test
+    void deliveryUsesTheRenderingInterfaceForHtmlAlternative() throws Exception {
+        EmailContentRenderer renderer = mock(EmailContentRenderer.class);
+        NotificationEmailDeliveryWorker interfaceWorker = new NotificationEmailDeliveryWorker(
+            outbox, orders, new InvoicePdfService(), sender, cipher, renderer);
+        NotificationEmail email = new NotificationEmail();
+        email.setId(93L);
+        email.setRecipientEmail("buyer@example.test");
+        email.setSubject("Stock");
+        email.setBody("Plain stock update");
+        when(outbox.findById(93L)).thenReturn(Optional.of(email));
+        MimeMessage message = new MimeMessage(Session.getInstance(new Properties()));
+        when(sender.createMimeMessage()).thenReturn(message);
+        when(renderer.render("Stock", "Plain stock update")).thenReturn("<html>rendered alternative</html>");
+
+        interfaceWorker.deliver(93L, "orders@example.test");
+
+        message.saveChanges();
+        Multipart alternatives = findAlternatives((Multipart) message.getContent());
+        verify(renderer).render("Stock", "Plain stock update");
+        assertThat(alternatives.getBodyPart(1).getContent().toString()).contains("rendered alternative");
+        verify(sender).send(any(MimeMessage.class));
+    }
+
     private Multipart findAlternatives(Multipart multipart) throws Exception {
         if (multipart.getContentType().toLowerCase().contains("multipart/alternative")) return multipart;
         for (int i = 0; i < multipart.getCount(); i++) {

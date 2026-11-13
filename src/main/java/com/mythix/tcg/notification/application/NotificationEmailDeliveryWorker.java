@@ -28,7 +28,7 @@ public class NotificationEmailDeliveryWorker {
     private final InvoicePdfService invoicePdfService;
     private final JavaMailSender mailSender;
     private final SensitiveMailCipher cipher;
-    private final BrandedEmailRenderer renderer;
+    private final EmailContentRenderer renderer;
 
     @Value("${app.mail.base-url:http://localhost:5173}")
     private String baseUrl = "http://localhost:5173";
